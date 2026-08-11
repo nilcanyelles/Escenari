@@ -1,12 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
 
-export const runtime = "nodejs";
-
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const path = request.nextUrl.pathname;
   const isPublic = path === "/login";
-  const authed = verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+  const authed = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
 
   if (!authed && !isPublic) {
     const url = request.nextUrl.clone();
