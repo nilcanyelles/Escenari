@@ -73,6 +73,12 @@ export async function saveConcertAction(data: SaveConcertInput) {
   revalidateAll();
 }
 
+export async function saveRouteSheetAction(concertId: string, routeSheet: unknown) {
+  const pool = db();
+  await pool.query("update concerts set route_sheet = $1 where id = $2", [JSON.stringify(routeSheet), concertId]);
+  revalidateAll();
+}
+
 export async function deleteConcertAction(id: string) {
   const pool = db();
   await pool.query("delete from invoices where concert_id=$1", [id]);

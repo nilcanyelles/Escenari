@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Band, Concert, Person } from "@/lib/types";
 import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateLong, statusColors, today } from "@/lib/format";
 import { saveConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
+import { rsIsComplete } from "@/lib/route-sheet";
 
 type Cf = {
   bandId: string;
@@ -25,12 +26,14 @@ function personLabel(m: Person): string {
 }
 
 export default function ConcertModal({
-  mode, concert, bands, onClose,
+  mode, concert, bands, onClose, onOpenRouteSheet, onOpenRouteSheetPreview,
 }: {
   mode: "new" | "edit";
   concert: Concert | null;
   bands: Band[];
   onClose: () => void;
+  onOpenRouteSheet?: () => void;
+  onOpenRouteSheetPreview?: () => void;
 }) {
   const router = useRouter();
   const [cf, setCf] = useState<Cf>(() => {
@@ -252,6 +255,26 @@ export default function ConcertModal({
                 }}>{cf.status}</button>
             </div>
           </div>
+          {mode === "edit" && concert && (() => {
+            const complete = rsIsComplete(concert);
+            const badgeColors = complete
+              ? { bg: "oklch(0.72 0.15 155 / 0.16)", color: "oklch(0.78 0.15 155)" }
+              : { bg: "oklch(0.78 0.15 80 / 0.16)", color: "oklch(0.82 0.15 80)" };
+            return (
+              <div>
+                <label className="form-label">Full de ruta</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 4 }}>
+                  <span className="badge sm" style={{ background: badgeColors.bg, color: badgeColors.color }}>{complete ? "Acabat" : "Inacabat"}</span>
+                  <button type="button" className="row-rs-btn" title="Editar" aria-label="Editar" onClick={onOpenRouteSheet}>
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                  </button>
+                  <button type="button" className={"row-rs-btn" + (complete ? " rs-complete" : "")} title="Visualitzar" aria-label="Visualitzar" onClick={onOpenRouteSheetPreview}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
           {(hasMusics || hasCrew) && (
             <div>
               <div className="modal-title" style={{ margin: "4px 0 12px" }}>Assistència</div>

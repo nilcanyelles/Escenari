@@ -10,6 +10,8 @@ import { deleteConcertAction } from "@/app/(app)/concerts/actions";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import ConcertModal from "@/components/ConcertModal";
 import InvoicePreview from "@/components/InvoicePreview";
+import RouteSheetModal from "@/components/RouteSheetModal";
+import RouteSheetPreview from "@/components/RouteSheetPreview";
 
 export function DeleteConcertBtn({ id }: { id: string }) {
   const router = useRouter();
@@ -32,15 +34,15 @@ export function DeleteConcertBtn({ id }: { id: string }) {
   );
 }
 
-function RouteSheetBtns({ c }: { c: Concert }) {
+function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => void; onPreview: () => void }) {
   return (
     <>
-      <button className="row-rs-btn" title="Edita el full de ruta" aria-label="Edita el full de ruta" onClick={(e) => e.stopPropagation()}>
+      <button className="row-rs-btn" title="Edita el full de ruta" aria-label="Edita el full de ruta" onClick={(e) => { e.stopPropagation(); onEdit(); }}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
         </svg>
       </button>
-      <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(e) => e.stopPropagation()}>
+      <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(e) => { e.stopPropagation(); onPreview(); }}>
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
         </svg>
@@ -57,6 +59,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const [modal, setModal] = useState<{ mode: "new" | "edit"; concertId: string | null } | null>(null);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
+  const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
+  const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
 
   const searchL = search.toLowerCase();
   const list = concerts.filter((c) =>
@@ -114,7 +118,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
         <div className="t-dim">{c.venue}</div>
         <div className="t-dim"></div>
         <div><span className="badge" style={{ background: sc.bg, color: sc.color }}>{c.status}</span></div>
-        <div className="rs-btn-group"><RouteSheetBtns c={c} /></div>
+        <div className="rs-btn-group"><RouteSheetBtns c={c} onEdit={() => setRsModalConcertId(c.id)} onPreview={() => setRsPreviewConcertId(c.id)} /></div>
         <div style={{ textAlign: "center" }}>{invoiceCell}</div>
         <div onClick={(e) => e.stopPropagation()}><DeleteConcertBtn id={c.id} /></div>
       </div>
@@ -124,6 +128,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const editingConcert = modal?.mode === "edit" ? concerts.find((c) => c.id === modal.concertId) || null : null;
   const previewInvoice = previewInvoiceId ? invoices.find((i) => i.id === previewInvoiceId) || null : null;
   const previewConcert = previewInvoice ? concerts.find((c) => c.id === previewInvoice.concertId) || null : null;
+  const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
+  const rsPreviewConcert = rsPreviewConcertId ? concerts.find((c) => c.id === rsPreviewConcertId) || null : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -168,11 +174,29 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           concert={editingConcert}
           bands={bands}
           onClose={() => setModal(null)}
+          onOpenRouteSheet={editingConcert ? () => { setModal(null); setRsModalConcertId(editingConcert.id); } : undefined}
+          onOpenRouteSheetPreview={editingConcert ? () => { setModal(null); setRsPreviewConcertId(editingConcert.id); } : undefined}
         />
       )}
 
       {previewInvoice && (
         <InvoicePreview invoice={previewInvoice} concert={previewConcert} companyInfo={companyInfo} onClose={() => setPreviewInvoiceId(null)} />
+      )}
+
+      {rsModalConcert && (
+        <RouteSheetModal
+          key={rsModalConcert.id}
+          concert={rsModalConcert}
+          onClose={() => setRsModalConcertId(null)}
+          onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(rsModalConcert.id); }}
+        />
+      )}
+      {rsPreviewConcert && (
+        <RouteSheetPreview
+          concert={rsPreviewConcert}
+          onClose={() => setRsPreviewConcertId(null)}
+          onEdit={() => { setRsPreviewConcertId(null); setRsModalConcertId(rsPreviewConcert.id); }}
+        />
       )}
     </div>
   );

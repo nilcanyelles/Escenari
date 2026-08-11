@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { Band, Concert } from "@/lib/types";
 import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, statusColors } from "@/lib/format";
 import { rsIsComplete } from "@/lib/route-sheet";
+import RouteSheetModal from "@/components/RouteSheetModal";
+import RouteSheetPreview from "@/components/RouteSheetPreview";
 
 function groupByDate(list: Concert[]) {
   const byDate: Record<string, Concert[]> = {};
@@ -20,6 +22,8 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
   const [calBandFilter, setCalBandFilter] = useState<string[]>([]);
   const [calBandFilterOpen, setCalBandFilterOpen] = useState(false);
+  const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
+  const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
 
   const base = new Date(2026, calMonthIndex, 1);
   const y = base.getFullYear(), mIdx = base.getMonth();
@@ -77,12 +81,12 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
                 <div className="upcoming-concert-top">
                   <span className="upcoming-concert-band">{c.bandName}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                    <button className="row-rs-btn" title="Edita el full de ruta" aria-label="Edita el full de ruta">
+                    <button className="row-rs-btn" title="Edita el full de ruta" aria-label="Edita el full de ruta" onClick={() => setRsModalConcertId(c.id)}>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                       </svg>
                     </button>
-                    <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta">
+                    <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={() => setRsPreviewConcertId(c.id)}>
                       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
                       </svg>
@@ -208,6 +212,30 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
           {sideContent}
         </div>
       </div>
+
+      {rsModalConcertId && (() => {
+        const c = concerts.find((x) => x.id === rsModalConcertId);
+        if (!c) return null;
+        return (
+          <RouteSheetModal
+            key={c.id}
+            concert={c}
+            onClose={() => setRsModalConcertId(null)}
+            onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(c.id); }}
+          />
+        );
+      })()}
+      {rsPreviewConcertId && (() => {
+        const c = concerts.find((x) => x.id === rsPreviewConcertId);
+        if (!c) return null;
+        return (
+          <RouteSheetPreview
+            concert={c}
+            onClose={() => setRsPreviewConcertId(null)}
+            onEdit={() => { setRsPreviewConcertId(null); setRsModalConcertId(c.id); }}
+          />
+        );
+      })()}
     </div>
   );
 }
