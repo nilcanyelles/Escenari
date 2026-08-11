@@ -1,1 +1,7 @@
 .DS_Store
+.env.local
+.next/
+node_modules/
+tsconfig.tsbuildinfo
+.vercel
+next-env.d.ts
