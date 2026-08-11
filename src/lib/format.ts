@@ -1,6 +1,7 @@
 export const MONTH_ABBR = ["gen", "feb", "mar", "abr", "mai", "jun", "jul", "ago", "set", "oct", "nov", "des"];
 export const MONTH_FULL = ["gener", "febrer", "març", "abril", "maig", "juny", "juliol", "agost", "setembre", "octubre", "novembre", "desembre"];
 export const WEEKDAY_FULL = ["Diumenge", "Dilluns", "Dimarts", "Dimecres", "Dijous", "Divendres", "Dissabte"];
+export const WEEKDAY_SHORT = ["dl", "dt", "dc", "dj", "dv", "ds", "dg"];
 
 export function pad2(n: number): string {
   return String(n).padStart(2, "0");
