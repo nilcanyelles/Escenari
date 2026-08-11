@@ -1,5 +1,5 @@
 import { db } from "./db";
-import type { Band, Concert, Invoice, CompanyInfo } from "./types";
+import type { Band, Concert, Invoice, CompanyInfo, ClientDetails } from "./types";
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
@@ -39,6 +39,13 @@ export async function getConcerts(): Promise<Concert[]> {
     noSubstitute: r.no_substitute,
     routeSheet: r.route_sheet,
   }));
+}
+
+export async function getClientDetails(): Promise<Record<string, ClientDetails>> {
+  const { rows } = await db().query("select client_name, cif, nom, address from client_details");
+  const map: Record<string, ClientDetails> = {};
+  rows.forEach((r) => { map[r.client_name] = { clientName: r.client_name, cif: r.cif, nom: r.nom, address: r.address }; });
+  return map;
 }
 
 export async function getCompanyInfo(): Promise<CompanyInfo> {
