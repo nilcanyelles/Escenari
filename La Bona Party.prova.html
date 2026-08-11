@@ -1,0 +1,977 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap">
+<style>
+  body{margin:0;background:oklch(0.17 0.02 258);}
+  *{box-sizing:border-box;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:oklch(1 0 0 / 0.14);border-radius:4px;}
+  a{color:oklch(0.82 0.14 290);}
+  a:hover{color:oklch(0.88 0.13 290);}
+  input::placeholder{color:oklch(0.5 0.015 258);}
+</style>
+</helmet>
+
+<sc-if value="{{ loggedOut }}" hint-placeholder-val="{{ true }}">
+  <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:oklch(0.135 0.02 258);position:relative;overflow:hidden;font-family:Inter,system-ui,sans-serif;">
+    <div style="position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(circle,oklch(0.68 0.19 290 / 0.22),transparent 70%);top:-380px;left:50%;transform:translateX(-50%);pointer-events:none;"></div>
+    <div style="position:relative;width:380px;max-width:90vw;padding:40px 36px;background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:16px;box-shadow:0 30px 80px -20px rgba(0,0,0,0.6);">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-bottom:32px;">
+        <div style="width:52px;height:52px;border-radius:12px;background:oklch(0.68 0.19 290);display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;color:oklch(0.13 0.02 258);">LB</div>
+        <div style="text-align:center;">
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:20px;letter-spacing:0.01em;color:oklch(0.97 0.004 258);">LA BONA PARTY</div>
+          <div style="font-size:12.5px;color:oklch(0.6 0.015 258);margin-top:3px;">Gestió d'actuacions en directe</div>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label style="font-size:12px;color:oklch(0.7 0.015 258);font-weight:500;">Usuari</label>
+          <input type="text" value="{{ username }}" onChange="{{ onUsernameChange }}" placeholder="admin@labonaparty.cat" style="background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:11px 12px;color:oklch(0.97 0.004 258);font-size:14px;outline:none;font-family:Inter,sans-serif;"/>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;">
+          <label style="font-size:12px;color:oklch(0.7 0.015 258);font-weight:500;">Contrasenya</label>
+          <input type="password" value="{{ password }}" onChange="{{ onPasswordChange }}" placeholder="••••••••" style="background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:11px 12px;color:oklch(0.97 0.004 258);font-size:14px;outline:none;font-family:Inter,sans-serif;"/>
+        </div>
+        <button onClick="{{ onLogin }}" style="margin-top:6px;background:oklch(0.68 0.19 290);color:oklch(0.13 0.02 258);border:none;border-radius:8px;padding:12px;font-size:14.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;" style-hover="background:oklch(0.74 0.18 290);">Entrar</button>
+        <div style="text-align:center;font-size:12.5px;color:oklch(0.5 0.015 258);margin-top:2px;">Has oblidat la contrasenya? <a href="#" onClick="{{ preventDefault }}">Recupera-la</a></div>
+      </div>
+    </div>
+    <div style="position:absolute;bottom:22px;font-size:11.5px;color:oklch(0.42 0.015 258);">© 2026 La Bona Party — Accés d'administració</div>
+  </div>
+</sc-if>
+
+<sc-if value="{{ loggedIn }}" hint-placeholder-val="{{ false }}">
+<div style="display:flex;min-height:100vh;background:oklch(0.17 0.02 258);font-family:Inter,system-ui,sans-serif;color:oklch(0.97 0.004 258);">
+
+  <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+  <div style="width:230px;flex:none;background:oklch(0.145 0.02 258);border-right:1px solid oklch(1 0 0 / 0.08);display:flex;flex-direction:column;padding:22px 14px;position:sticky;top:0;height:100vh;">
+    <div style="display:flex;align-items:center;gap:10px;padding:0 8px 24px;">
+      <div style="width:34px;height:34px;border-radius:9px;background:oklch(0.68 0.19 290);display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14px;color:oklch(0.13 0.02 258);flex:none;">LB</div>
+      <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:14.5px;letter-spacing:0.01em;line-height:1.2;">LA BONA<br/>PARTY</div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:2px;">
+      <sc-for list="{{ navItems }}" as="item" hint-placeholder-count="6">
+        <button onClick="{{ item.onClick }}" style="display:flex;align-items:center;gap:10px;text-align:left;background:transparent;border:none;border-radius:8px;padding:10px 12px;cursor:pointer;font-family:Inter,sans-serif;font-size:13.5px;font-weight:500;color:oklch(0.7 0.015 258);" style-hover="background:oklch(1 0 0 / 0.05);color:oklch(0.97 0.004 258);">
+          <span style="width:6px;height:6px;border-radius:50%;background:{{ item.dotColor }};flex:none;"></span>
+          <span>{{ item.label }}</span>
+        </button>
+      </sc-for>
+    </div>
+    <div style="flex:1;"></div>
+    <div style="border-top:1px solid oklch(1 0 0 / 0.08);padding-top:14px;display:flex;align-items:center;gap:10px;padding-left:8px;">
+      <div style="width:30px;height:30px;border-radius:50%;background:oklch(0.3 0.02 258);flex:none;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">JM</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:12.5px;font-weight:600;">Judit Marín</div>
+        <div style="font-size:11px;color:oklch(0.5 0.015 258);">Gestora</div>
+      </div>
+      <button onClick="{{ onLogout }}" style="background:transparent;border:none;color:oklch(0.5 0.015 258);font-size:11.5px;cursor:pointer;font-family:Inter,sans-serif;" style-hover="color:oklch(0.97 0.004 258);">Surt</button>
+    </div>
+  </div>
+  </sc-if>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column;">
+
+    <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+      <div style="position:sticky;top:0;z-index:10;background:oklch(0.145 0.02 258 / 0.95);backdrop-filter:blur(8px);border-bottom:1px solid oklch(1 0 0 / 0.08);padding:14px 18px;display:flex;align-items:center;gap:10px;">
+        <div style="width:28px;height:28px;border-radius:8px;background:oklch(0.68 0.19 290);display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:12px;color:oklch(0.13 0.02 258);flex:none;">LB</div>
+        <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:15px;">{{ currentPageLabel }}</div>
+      </div>
+    </sc-if>
+
+    <main style="flex:1;padding:{{ contentPadding }};padding-bottom:{{ contentBottomPadding }};overflow-x:hidden;">
+
+      <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:26px;">
+          <div style="font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:22px;">{{ currentPageLabel }}</div>
+          <div style="font-size:12.5px;color:oklch(0.5 0.015 258);">Dijous, 7 d'agost de 2026</div>
+        </div>
+      </sc-if>
+
+      <!-- RESUM -->
+      <sc-if value="{{ page.resum }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:22px;">
+
+          <div style="display:flex;align-items:center;gap:8px;">
+            <sc-for list="{{ resum.rangeOptions }}" as="opt" hint-placeholder-count="3">
+              <button onClick="{{ opt.onClick }}" style="padding:7px 14px;border-radius:20px;border:1px solid {{ opt.borderColor }};background:{{ opt.bg }};color:{{ opt.textColor }};font-size:12.5px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">{{ opt.label }}</button>
+            </sc-for>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Concerts aquest mes</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:600;margin-top:6px;">{{ resum.kpis.totalConcerts }}</div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Ingressos del mes</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:600;margin-top:6px;">{{ resum.kpis.revenue }}</div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Mitjana per actuació</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:600;margin-top:6px;">{{ resum.kpis.avg }}</div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Vs. mes anterior</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:600;margin-top:6px;color:{{ resum.kpis.deltaColor }};">{{ resum.kpis.deltaLabel }}</div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:{{ chartGridCols }};gap:14px;">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:20px;">
+              <div style="font-size:13px;font-weight:600;margin-bottom:16px;">Concerts per mes</div>
+              <div style="display:flex;align-items:flex-end;gap:10px;height:150px;">
+                <sc-for list="{{ resum.monthBars }}" as="m" hint-placeholder-count="6">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;">
+                    <div style="font-size:11px;color:oklch(0.7 0.015 258);">{{ m.count }}</div>
+                    <div style="width:100%;max-width:34px;height:{{ m.heightPct }}%;background:oklch(0.68 0.19 290);border-radius:4px 4px 0 0;min-height:3px;"></div>
+                    <div style="font-size:11px;color:oklch(0.5 0.015 258);">{{ m.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:20px;">
+              <div style="font-size:13px;font-weight:600;margin-bottom:16px;">Facturació mensual</div>
+              <div style="display:flex;align-items:flex-end;gap:10px;height:150px;">
+                <sc-for list="{{ resum.revenueBars }}" as="m" hint-placeholder-count="6">
+                  <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end;">
+                    <div style="font-size:10.5px;color:oklch(0.7 0.015 258);">{{ m.revenueLabel }}</div>
+                    <div style="width:100%;max-width:34px;height:{{ m.heightPct }}%;background:oklch(0.72 0.15 155);border-radius:4px 4px 0 0;min-height:3px;"></div>
+                    <div style="font-size:11px;color:oklch(0.5 0.015 258);">{{ m.label }}</div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:grid;grid-template-columns:{{ resumLowerCols }};gap:14px;">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:20px;">
+              <div style="font-size:13px;font-weight:600;margin-bottom:16px;">Distribució per gènere</div>
+              <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+                <div style="width:130px;height:130px;border-radius:50%;background:{{ resum.genrePieGradient }};flex:none;"></div>
+                <div style="display:flex;flex-direction:column;gap:8px;flex:1;min-width:160px;">
+                  <sc-for list="{{ resum.genreLegend }}" as="g" hint-placeholder-count="5">
+                    <div style="display:flex;align-items:center;gap:8px;font-size:12.5px;">
+                      <span style="width:9px;height:9px;border-radius:50%;background:{{ g.color }};flex:none;"></span>
+                      <span style="flex:1;color:oklch(0.85 0.01 258);">{{ g.genre }}</span>
+                      <span style="color:oklch(0.55 0.015 258);">{{ g.pct }}%</span>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:20px;">
+              <div style="font-size:13px;font-weight:600;margin-bottom:14px;">Properes actuacions</div>
+              <div style="display:flex;flex-direction:column;gap:2px;">
+                <sc-for list="{{ resum.upcoming }}" as="u" hint-placeholder-count="4">
+                  <div style="display:flex;align-items:center;gap:12px;padding:10px 4px;border-bottom:1px solid oklch(1 0 0 / 0.06);">
+                    <div style="width:44px;flex:none;text-align:center;">
+                      <div style="font-size:16px;font-weight:700;font-family:'Space Grotesk',sans-serif;">{{ u.day }}</div>
+                      <div style="font-size:10px;color:oklch(0.55 0.015 258);text-transform:uppercase;">{{ u.month }}</div>
+                    </div>
+                    <div style="flex:1;min-width:0;">
+                      <div style="font-size:13px;font-weight:600;">{{ u.bandName }}</div>
+                      <div style="font-size:11.5px;color:oklch(0.55 0.015 258);">{{ u.venue }}</div>
+                    </div>
+                    <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:20px;background:{{ u.statusBg }};color:{{ u.statusColor }};flex:none;">{{ u.status }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CALENDARI -->
+      <sc-if value="{{ page.calendari }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <button onClick="{{ cal.onPrev }}" style="width:32px;height:32px;border-radius:8px;border:1px solid oklch(1 0 0 / 0.1);background:oklch(0.22 0.018 258);color:oklch(0.97 0.004 258);cursor:pointer;font-size:15px;">‹</button>
+            <div style="font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:600;min-width:150px;">{{ cal.monthLabel }}</div>
+            <button onClick="{{ cal.onNext }}" style="width:32px;height:32px;border-radius:8px;border:1px solid oklch(1 0 0 / 0.1);background:oklch(0.22 0.018 258);color:oklch(0.97 0.004 258);cursor:pointer;font-size:15px;">›</button>
+            <div style="flex:1;"></div>
+            <div style="display:flex;gap:14px;font-size:11.5px;color:oklch(0.6 0.015 258);">
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:oklch(0.72 0.15 155);margin-right:5px;"></span>Confirmat</span>
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:oklch(0.78 0.15 80);margin-right:5px;"></span>Pendent</span>
+              <span><span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:oklch(0.68 0.18 25);margin-right:5px;"></span>Cancel·lat</span>
+            </div>
+          </div>
+
+          <div style="display:{{ calGridDisplay }};gap:20px;align-items:flex-start;">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:16px;flex:1;min-width:0;">
+              <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:6px;">
+                <sc-for list="{{ weekdayLabels }}" as="wd" hint-placeholder-count="7">
+                  <div style="text-align:center;font-size:11px;color:oklch(0.5 0.015 258);font-weight:600;padding:4px 0;">{{ wd }}</div>
+                </sc-for>
+              </div>
+              <sc-for list="{{ cal.weeks }}" as="week" hint-placeholder-count="5">
+                <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px;">
+                  <sc-for list="{{ week.days }}" as="day" hint-placeholder-count="7">
+                    <button onClick="{{ day.onClick }}" style="aspect-ratio:1;border-radius:8px;border:1px solid {{ day.borderColor }};background:{{ day.bg }};color:{{ day.textColor }};cursor:pointer;font-family:Inter,sans-serif;font-size:12.5px;padding:6px 4px;display:flex;flex-direction:column;align-items:center;gap:3px;position:relative;">
+                      <span>{{ day.num }}</span>
+                      <div style="display:flex;gap:2px;">
+                        <sc-for list="{{ day.dots }}" as="dot" hint-placeholder-count="0">
+                          <span style="width:5px;height:5px;border-radius:50%;background:{{ dot.color }};"></span>
+                        </sc-for>
+                      </div>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-for>
+            </div>
+
+            <sc-if value="{{ cal.hasSelection }}" hint-placeholder-val="{{ false }}">
+              <div style="width:280px;flex:none;background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px;">
+                <div style="font-size:13px;font-weight:600;margin-bottom:12px;">{{ cal.selectedLabel }}</div>
+                <sc-if value="{{ cal.hasEvents }}" hint-placeholder-val="{{ false }}">
+                  <div style="display:flex;flex-direction:column;gap:10px;">
+                    <sc-for list="{{ cal.selectedEvents }}" as="ev" hint-placeholder-count="2">
+                      <div style="background:oklch(0.135 0.02 258);border-radius:8px;padding:12px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                          <span style="font-size:12.5px;font-weight:600;">{{ ev.bandName }}</span>
+                          <span style="font-size:10.5px;font-weight:600;padding:2px 7px;border-radius:20px;background:{{ ev.statusBg }};color:{{ ev.statusColor }};">{{ ev.status }}</span>
+                        </div>
+                        <div style="font-size:11.5px;color:oklch(0.6 0.015 258);">{{ ev.venue }}, {{ ev.city }}</div>
+                        <div style="font-size:11.5px;color:oklch(0.6 0.015 258);">{{ ev.time }} · {{ ev.amountLabel }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ cal.noEvents }}" hint-placeholder-val="{{ false }}">
+                  <div style="font-size:12.5px;color:oklch(0.5 0.015 258);text-align:center;padding:20px 0;">Sense actuacions aquest dia.</div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- CONCERTS -->
+      <sc-if value="{{ page.concerts }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
+            <input type="text" value="{{ concertsUi.search }}" onChange="{{ concertsUi.onSearch }}" placeholder="Cercar grup, sala, ciutat…" style="flex:1;min-width:180px;background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 12px;color:oklch(0.97 0.004 258);font-size:13px;outline:none;font-family:Inter,sans-serif;"/>
+            <select value="{{ concertsUi.statusFilter }}" onChange="{{ concertsUi.onStatusFilter }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+              <option value="tots">Tots els estats</option>
+              <option value="confirmat">Confirmat</option>
+              <option value="pendent">Pendent</option>
+              <option value="cancel·lat">Cancel·lat</option>
+            </select>
+            <select value="{{ concertsUi.genreFilter }}" onChange="{{ concertsUi.onGenreFilter }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+              <option value="tots">Tots els gèneres</option>
+              <sc-for list="{{ genreOptions }}" as="g" hint-placeholder-count="8">
+                <option value="{{ g }}">{{ g }}</option>
+              </sc-for>
+            </select>
+            <button onClick="{{ concertsUi.onNew }}" style="background:oklch(0.68 0.19 290);color:oklch(0.13 0.02 258);border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">+ Nou concert</button>
+          </div>
+
+          <sc-if value="{{ concertsUi.isEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="text-align:center;padding:60px 20px;color:oklch(0.5 0.015 258);font-size:13.5px;">Cap concert coincideix amb els filtres.</div>
+          </sc-if>
+
+          <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;overflow:hidden;">
+              <div style="display:grid;grid-template-columns:100px 1.4fr 1fr 0.9fr 0.9fr;padding:12px 18px;font-size:11.5px;font-weight:600;color:oklch(0.55 0.015 258);text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid oklch(1 0 0 / 0.08);">
+                <div>Data</div><div>Grup</div><div>Lloc</div><div>Estat</div><div>Import</div>
+              </div>
+              <sc-for list="{{ concertsUi.list }}" as="c" hint-placeholder-count="6">
+                <div onClick="{{ c.onClick }}" style="display:grid;grid-template-columns:100px 1.4fr 1fr 0.9fr 0.9fr;padding:14px 18px;font-size:13px;border-bottom:1px solid oklch(1 0 0 / 0.06);cursor:pointer;align-items:center;" style-hover="background:oklch(0.26 0.02 258);">
+                  <div style="color:oklch(0.7 0.015 258);">{{ c.dateLabel }}</div>
+                  <div style="font-weight:600;">{{ c.bandName }}</div>
+                  <div style="color:oklch(0.7 0.015 258);">{{ c.venue }}</div>
+                  <div><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:{{ c.statusBg }};color:{{ c.statusColor }};">{{ c.status }}</span></div>
+                  <div>{{ c.amountLabel }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <sc-for list="{{ concertsUi.list }}" as="c" hint-placeholder-count="6">
+                <div onClick="{{ c.onClick }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:14px 16px;cursor:pointer;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:600;font-size:14px;">{{ c.bandName }}</span>
+                    <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:{{ c.statusBg }};color:{{ c.statusColor }};">{{ c.status }}</span>
+                  </div>
+                  <div style="font-size:12.5px;color:oklch(0.65 0.015 258);">{{ c.dateLabel }} · {{ c.venue }}, {{ c.city }}</div>
+                  <div style="font-size:13px;font-weight:600;margin-top:6px;">{{ c.amountLabel }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- GRUPS -->
+      <sc-if value="{{ page.grups }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;gap:10px;flex-wrap:wrap;">
+            <input type="text" value="{{ grupsUi.search }}" onChange="{{ grupsUi.onSearch }}" placeholder="Cercar grup…" style="flex:1;min-width:180px;background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 12px;color:oklch(0.97 0.004 258);font-size:13px;outline:none;font-family:Inter,sans-serif;"/>
+            <select value="{{ grupsUi.genreFilter }}" onChange="{{ grupsUi.onGenreFilter }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+              <option value="tots">Tots els gèneres</option>
+              <sc-for list="{{ genreOptions }}" as="g" hint-placeholder-count="8">
+                <option value="{{ g }}">{{ g }}</option>
+              </sc-for>
+            </select>
+          </div>
+          <div style="display:grid;grid-template-columns:{{ bandGridCols }};gap:14px;">
+            <sc-for list="{{ grupsUi.list }}" as="band" hint-placeholder-count="6">
+              <div onClick="{{ band.onClick }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px;cursor:pointer;" style-hover="border-color:oklch(0.68 0.19 290 / 0.5);">
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px;">
+                  <div style="font-family:'Space Grotesk',sans-serif;font-size:15.5px;font-weight:600;">{{ band.name }}</div>
+                  <span style="font-size:10.5px;font-weight:600;padding:3px 8px;border-radius:20px;background:{{ band.genreBg }};color:{{ band.genreColor }};white-space:nowrap;">{{ band.genre }}</span>
+                </div>
+                <div style="font-size:12px;color:oklch(0.6 0.015 258);margin-bottom:10px;">{{ band.city }} · {{ band.membersCount }} integrants</div>
+                <div style="display:flex;justify-content:space-between;align-items:center;font-size:12.5px;border-top:1px solid oklch(1 0 0 / 0.06);padding-top:10px;">
+                  <span style="color:oklch(0.6 0.015 258);">{{ band.history }} actuacions</span>
+                  <span style="font-weight:600;">{{ band.rateLabel }}</span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- FACTURACIO -->
+      <sc-if value="{{ page.facturacio }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px;">
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Facturat (2026)</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;margin-top:6px;">{{ fact.kpis.totalBilled }}</div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Pendent de cobrament</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;margin-top:6px;color:oklch(0.78 0.15 80);">{{ fact.kpis.pending }}</div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Vençut</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;margin-top:6px;color:oklch(0.68 0.18 25);">{{ fact.kpis.overdue }}</div>
+            </div>
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:18px 20px;">
+              <div style="font-size:12px;color:oklch(0.6 0.015 258);font-weight:500;">Aquest mes</div>
+              <div style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;margin-top:6px;">{{ fact.kpis.thisMonth }}</div>
+            </div>
+          </div>
+
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <select value="{{ fact.stateFilter }}" onChange="{{ fact.onStateFilter }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+              <option value="tots">Tots els estats</option>
+              <option value="pagada">Pagada</option>
+              <option value="pendent">Pendent</option>
+              <option value="vençuda">Vençuda</option>
+            </select>
+            <div style="flex:1;"></div>
+            <button onClick="{{ fact.onNew }}" style="background:oklch(0.68 0.19 290);color:oklch(0.13 0.02 258);border:none;border-radius:8px;padding:10px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;white-space:nowrap;">+ Generar factura</button>
+          </div>
+
+          <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;overflow:hidden;">
+              <div style="display:grid;grid-template-columns:1fr 1.3fr 1fr 1fr 0.9fr;padding:12px 18px;font-size:11.5px;font-weight:600;color:oklch(0.55 0.015 258);text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid oklch(1 0 0 / 0.08);">
+                <div>Factura</div><div>Client / Sala</div><div>Data</div><div>Import</div><div>Estat</div>
+              </div>
+              <sc-for list="{{ fact.list }}" as="inv" hint-placeholder-count="6">
+                <div style="display:grid;grid-template-columns:1fr 1.3fr 1fr 1fr 0.9fr;padding:14px 18px;font-size:13px;border-bottom:1px solid oklch(1 0 0 / 0.06);align-items:center;">
+                  <div style="color:oklch(0.7 0.015 258);">{{ inv.id }}</div>
+                  <div style="font-weight:600;">{{ inv.client }}</div>
+                  <div style="color:oklch(0.7 0.015 258);">{{ inv.dateLabel }}</div>
+                  <div>{{ inv.amountLabel }}</div>
+                  <div><span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:{{ inv.stateBg }};color:{{ inv.stateColor }};">{{ inv.state }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <sc-for list="{{ fact.list }}" as="inv" hint-placeholder-count="6">
+                <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:14px 16px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:600;font-size:13.5px;">{{ inv.id }}</span>
+                    <span style="font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:{{ inv.stateBg }};color:{{ inv.stateColor }};">{{ inv.state }}</span>
+                  </div>
+                  <div style="font-size:12.5px;color:oklch(0.65 0.015 258);">{{ inv.client }} · {{ inv.dateLabel }}</div>
+                  <div style="font-size:13px;font-weight:600;margin-top:6px;">{{ inv.amountLabel }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-if>
+
+      <!-- BASE DE DADES -->
+      <sc-if value="{{ page.basedades }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:14px;">
+          <div style="display:flex;gap:10px;align-items:center;">
+            <input type="text" value="{{ db.search }}" onChange="{{ db.onSearch }}" placeholder="Cercar en tots els registres…" style="flex:1;max-width:340px;background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 12px;color:oklch(0.97 0.004 258);font-size:13px;outline:none;font-family:Inter,sans-serif;"/>
+            <div style="flex:1;"></div>
+            <div style="font-size:12px;color:oklch(0.55 0.015 258);">{{ db.countLabel }}</div>
+          </div>
+
+          <sc-if value="{{ isDesktop }}" hint-placeholder-val="{{ true }}">
+            <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;overflow-x:auto;">
+              <div style="display:grid;grid-template-columns:70px 90px 1.2fr 1fr 1fr 0.9fr 0.9fr 0.9fr 110px;padding:12px 18px;font-size:11px;font-weight:600;color:oklch(0.55 0.015 258);text-transform:uppercase;letter-spacing:0.03em;border-bottom:1px solid oklch(1 0 0 / 0.08);min-width:900px;">
+                <button onClick="{{ db.sortById }}" style="all:unset;cursor:pointer;">ID</button>
+                <button onClick="{{ db.sortByDate }}" style="all:unset;cursor:pointer;">Data</button>
+                <button onClick="{{ db.sortByBand }}" style="all:unset;cursor:pointer;">Grup</button>
+                <div>Gènere</div>
+                <div>Lloc</div>
+                <button onClick="{{ db.sortByStatus }}" style="all:unset;cursor:pointer;">Estat</button>
+                <button onClick="{{ db.sortByAmount }}" style="all:unset;cursor:pointer;">Import</button>
+                <div>Factura</div>
+                <div>Accions</div>
+              </div>
+              <sc-for list="{{ db.rows }}" as="r" hint-placeholder-count="10">
+                <div style="display:grid;grid-template-columns:70px 90px 1.2fr 1fr 1fr 0.9fr 0.9fr 0.9fr 110px;padding:12px 18px;font-size:12.5px;border-bottom:1px solid oklch(1 0 0 / 0.06);align-items:center;min-width:900px;">
+                  <div style="color:oklch(0.55 0.015 258);">{{ r.id }}</div>
+                  <div style="color:oklch(0.7 0.015 258);">{{ r.dateLabel }}</div>
+                  <div style="font-weight:600;">{{ r.bandName }}</div>
+                  <div style="color:oklch(0.7 0.015 258);">{{ r.genre }}</div>
+                  <div style="color:oklch(0.7 0.015 258);">{{ r.venue }}</div>
+                  <div><span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;background:{{ r.statusBg }};color:{{ r.statusColor }};">{{ r.status }}</span></div>
+                  <div>{{ r.amountLabel }}</div>
+                  <div style="color:oklch(0.55 0.015 258);">{{ r.invoiceState }}</div>
+                  <div style="display:flex;gap:10px;">
+                    <button onClick="{{ r.onEdit }}" style="all:unset;cursor:pointer;color:oklch(0.82 0.14 290);font-size:12px;">Editar</button>
+                    <button onClick="{{ r.onDelete }}" style="all:unset;cursor:pointer;color:oklch(0.68 0.18 25);font-size:12px;">Eliminar</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <sc-for list="{{ db.rows }}" as="r" hint-placeholder-count="10">
+                <div style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.08);border-radius:12px;padding:14px 16px;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-weight:600;font-size:13.5px;">{{ r.bandName }}</span>
+                    <span style="font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:20px;background:{{ r.statusBg }};color:{{ r.statusColor }};">{{ r.status }}</span>
+                  </div>
+                  <div style="font-size:12px;color:oklch(0.6 0.015 258);">{{ r.dateLabel }} · {{ r.venue }} · {{ r.genre }}</div>
+                  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+                    <span style="font-size:13px;font-weight:600;">{{ r.amountLabel }}</span>
+                    <div style="display:flex;gap:12px;">
+                      <button onClick="{{ r.onEdit }}" style="all:unset;cursor:pointer;color:oklch(0.82 0.14 290);font-size:12px;">Editar</button>
+                      <button onClick="{{ r.onDelete }}" style="all:unset;cursor:pointer;color:oklch(0.68 0.18 25);font-size:12px;">Eliminar</button>
+                    </div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </sc-if>
+
+          <div style="display:flex;justify-content:center;align-items:center;gap:14px;padding:8px 0;">
+            <button onClick="{{ db.onPrevPage }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:7px 14px;color:oklch(0.97 0.004 258);font-size:12.5px;cursor:pointer;">Anterior</button>
+            <span style="font-size:12.5px;color:oklch(0.6 0.015 258);">{{ db.pageLabel }}</span>
+            <button onClick="{{ db.onNextPage }}" style="background:oklch(0.22 0.018 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:7px 14px;color:oklch(0.97 0.004 258);font-size:12.5px;cursor:pointer;">Següent</button>
+          </div>
+        </div>
+      </sc-if>
+
+    </main>
+  </div>
+
+  <sc-if value="{{ isMobile }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;bottom:0;left:0;right:0;background:oklch(0.145 0.02 258 / 0.97);backdrop-filter:blur(8px);border-top:1px solid oklch(1 0 0 / 0.08);display:flex;padding:8px 4px calc(8px + env(safe-area-inset-bottom));z-index:20;">
+      <sc-for list="{{ bottomNavItems }}" as="item" hint-placeholder-count="5">
+        <button onClick="{{ item.onClick }}" style="flex:1;background:transparent;border:none;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 2px;cursor:pointer;color:{{ item.color }};font-family:Inter,sans-serif;">
+          <span style="width:7px;height:7px;border-radius:50%;background:{{ item.dotColor }};"></span>
+          <span style="font-size:10.5px;font-weight:600;">{{ item.label }}</span>
+        </button>
+      </sc-for>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ moreSheetOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ onCloseMoreSheet }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:30;display:flex;align-items:flex-end;">
+      <div onClick="{{ stopPropagation }}" style="width:100%;background:oklch(0.19 0.02 258);border-radius:16px 16px 0 0;padding:20px 18px calc(20px + env(safe-area-inset-bottom));">
+        <div style="width:36px;height:4px;border-radius:2px;background:oklch(1 0 0 / 0.15);margin:0 auto 18px;"></div>
+        <button onClick="{{ onGoFacturacio }}" style="all:unset;display:block;width:100%;padding:14px 4px;font-size:14.5px;font-weight:500;border-bottom:1px solid oklch(1 0 0 / 0.07);cursor:pointer;">Facturació</button>
+        <button onClick="{{ onGoBaseDades }}" style="all:unset;display:block;width:100%;padding:14px 4px;font-size:14.5px;font-weight:500;border-bottom:1px solid oklch(1 0 0 / 0.07);cursor:pointer;">Base de dades</button>
+        <button onClick="{{ onLogout }}" style="all:unset;display:block;width:100%;padding:14px 4px;font-size:14.5px;font-weight:500;color:oklch(0.68 0.18 25);cursor:pointer;">Surt</button>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</sc-if>
+
+<!-- CONCERT DETAIL / NEW MODAL -->
+<sc-if value="{{ concertModalOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ onCloseConcertModal }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:40;display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div onClick="{{ stopPropagation }}" style="width:420px;max-width:100%;max-height:88vh;overflow:auto;background:oklch(0.2 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:14px;padding:24px;font-family:Inter,sans-serif;color:oklch(0.97 0.004 258);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:600;">{{ concertModalTitle }}</div>
+        <button onClick="{{ onCloseConcertModal }}" style="all:unset;cursor:pointer;color:oklch(0.55 0.015 258);font-size:18px;">✕</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Grup</label>
+          <select value="{{ concertForm.bandId }}" onChange="{{ concertForm.onBandChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+            <sc-for list="{{ bandOptions }}" as="b" hint-placeholder-count="10">
+              <option value="{{ b.id }}">{{ b.name }}</option>
+            </sc-for>
+          </select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Data</label>
+            <input type="date" value="{{ concertForm.date }}" onChange="{{ concertForm.onDateChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;"/>
+          </div>
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Hora</label>
+            <input type="time" value="{{ concertForm.time }}" onChange="{{ concertForm.onTimeChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;"/>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Sala</label>
+            <input type="text" value="{{ concertForm.venue }}" onChange="{{ concertForm.onVenueChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;"/>
+          </div>
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Ciutat</label>
+            <input type="text" value="{{ concertForm.city }}" onChange="{{ concertForm.onCityChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;"/>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Import (€)</label>
+            <input type="number" value="{{ concertForm.amount }}" onChange="{{ concertForm.onAmountChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;"/>
+          </div>
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Estat</label>
+            <select value="{{ concertForm.status }}" onChange="{{ concertForm.onStatusChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+              <option value="confirmat">Confirmat</option>
+              <option value="pendent">Pendent</option>
+              <option value="cancel·lat">Cancel·lat</option>
+            </select>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <sc-if value="{{ concertForm.isEdit }}" hint-placeholder-val="{{ false }}">
+            <button onClick="{{ concertForm.onDelete }}" style="flex:none;background:transparent;border:1px solid oklch(0.68 0.18 25 / 0.4);color:oklch(0.68 0.18 25);border-radius:8px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Eliminar</button>
+          </sc-if>
+          <div style="flex:1;"></div>
+          <button onClick="{{ onCloseConcertModal }}" style="background:transparent;border:1px solid oklch(1 0 0 / 0.12);color:oklch(0.85 0.01 258);border-radius:8px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Cancel·lar</button>
+          <button onClick="{{ concertForm.onSave }}" style="background:oklch(0.68 0.19 290);color:oklch(0.13 0.02 258);border:none;border-radius:8px;padding:11px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Desar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- BAND DETAIL MODAL -->
+<sc-if value="{{ bandModalOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ onCloseBandModal }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:40;display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div onClick="{{ stopPropagation }}" style="width:440px;max-width:100%;max-height:88vh;overflow:auto;background:oklch(0.2 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:14px;padding:24px;font-family:Inter,sans-serif;color:oklch(0.97 0.004 258);">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+        <div>
+          <div style="font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:600;">{{ bandDetail.name }}</div>
+          <span style="display:inline-block;margin-top:6px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:20px;background:{{ bandDetail.genreBg }};color:{{ bandDetail.genreColor }};">{{ bandDetail.genre }}</span>
+        </div>
+        <button onClick="{{ onCloseBandModal }}" style="all:unset;cursor:pointer;color:oklch(0.55 0.015 258);font-size:18px;">✕</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;font-size:12.5px;">
+        <div><div style="color:oklch(0.55 0.015 258);">Ciutat</div><div style="font-weight:600;margin-top:2px;">{{ bandDetail.city }}</div></div>
+        <div><div style="color:oklch(0.55 0.015 258);">Tarifa base</div><div style="font-weight:600;margin-top:2px;">{{ bandDetail.rateLabel }}</div></div>
+        <div><div style="color:oklch(0.55 0.015 258);">Contacte</div><div style="font-weight:600;margin-top:2px;">{{ bandDetail.contact }}</div></div>
+        <div><div style="color:oklch(0.55 0.015 258);">Telèfon</div><div style="font-weight:600;margin-top:2px;">{{ bandDetail.phone }}</div></div>
+      </div>
+      <div style="margin-bottom:16px;">
+        <div style="font-size:12px;color:oklch(0.55 0.015 258);margin-bottom:6px;">Integrants</div>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <sc-for list="{{ bandDetail.members }}" as="m" hint-placeholder-count="4">
+            <div style="font-size:12.5px;">{{ m }}</div>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:12px;color:oklch(0.55 0.015 258);margin-bottom:8px;">Historial d'actuacions ({{ bandDetail.history }})</div>
+        <div style="display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto;">
+          <sc-for list="{{ bandDetail.recentConcerts }}" as="c" hint-placeholder-count="3">
+            <div style="display:flex;justify-content:space-between;font-size:12px;background:oklch(0.135 0.02 258);border-radius:6px;padding:8px 10px;">
+              <span>{{ c.dateLabel }} · {{ c.venue }}</span>
+              <span style="color:oklch(0.6 0.015 258);">{{ c.amountLabel }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+</sc-if>
+
+<!-- NEW INVOICE MODAL -->
+<sc-if value="{{ invoiceModalOpen }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ onCloseInvoiceModal }}" style="position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:40;display:flex;align-items:center;justify-content:center;padding:20px;">
+    <div onClick="{{ stopPropagation }}" style="width:400px;max-width:100%;background:oklch(0.2 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:14px;padding:24px;font-family:Inter,sans-serif;color:oklch(0.97 0.004 258);">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;">
+        <div style="font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:600;">Generar factura</div>
+        <button onClick="{{ onCloseInvoiceModal }}" style="all:unset;cursor:pointer;color:oklch(0.55 0.015 258);font-size:18px;">✕</button>
+      </div>
+      <sc-if value="{{ invoiceForm.hasOptions }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <div>
+            <label style="font-size:11.5px;color:oklch(0.6 0.015 258);">Concert sense facturar</label>
+            <select value="{{ invoiceForm.concertId }}" onChange="{{ invoiceForm.onConcertChange }}" style="width:100%;margin-top:4px;background:oklch(0.135 0.02 258);border:1px solid oklch(1 0 0 / 0.1);border-radius:8px;padding:9px 10px;color:oklch(0.97 0.004 258);font-size:13px;font-family:Inter,sans-serif;">
+              <sc-for list="{{ invoiceForm.concertOptions }}" as="c" hint-placeholder-count="4">
+                <option value="{{ c.id }}">{{ c.label }}</option>
+              </sc-for>
+            </select>
+          </div>
+          <div style="background:oklch(0.135 0.02 258);border-radius:8px;padding:12px;font-size:12.5px;display:flex;justify-content:space-between;">
+            <span style="color:oklch(0.6 0.015 258);">Import (amb IVA)</span>
+            <span style="font-weight:600;">{{ invoiceForm.previewAmount }}</span>
+          </div>
+          <div style="display:flex;gap:10px;margin-top:8px;">
+            <div style="flex:1;"></div>
+            <button onClick="{{ onCloseInvoiceModal }}" style="background:transparent;border:1px solid oklch(1 0 0 / 0.12);color:oklch(0.85 0.01 258);border-radius:8px;padding:11px 16px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Cancel·lar</button>
+            <button onClick="{{ invoiceForm.onSave }}" style="background:oklch(0.68 0.19 290);color:oklch(0.13 0.02 258);border:none;border-radius:8px;padding:11px 18px;font-size:13px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;">Generar</button>
+          </div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ invoiceForm.noOptions }}" hint-placeholder-val="{{ false }}">
+        <div style="text-align:center;padding:20px 0;color:oklch(0.55 0.015 258);font-size:13px;">Tots els concerts confirmats ja tenen factura.</div>
+      </sc-if>
+    </div>
+  </div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    dataReady: false, bands: [], concerts: [], invoices: [],
+    loggedIn: false, username: "", password: "",
+    viewportWidth: typeof window !== "undefined" ? window.innerWidth : 1400,
+    page: "resum", moreSheetOpen: false,
+    resumRange: "3m",
+    calMonthIndex: 7, calSelectedDate: null,
+    concertsSearch: "", concertsStatusFilter: "tots", concertsGenreFilter: "tots",
+    concertModalOpen: false, concertModalMode: "new", concertEditId: null,
+    cf_bandId: "", cf_date: "2026-08-15", cf_time: "21:00", cf_venue: "", cf_city: "", cf_amount: "1500", cf_status: "confirmat",
+    grupsSearch: "", grupsGenreFilter: "tots",
+    bandModalOpen: false, bandDetailId: null,
+    factStateFilter: "tots", invoiceModalOpen: false, invoiceFormConcertId: "",
+    dbSearch: "", dbSortKey: "date", dbSortDir: "desc", dbPage: 0
+  };
+
+  async componentDidMount() {
+    const mod = await import("./data.js");
+    this.dataMod = mod;
+    this.setState({ dataReady: true, bands: mod.bands, concerts: mod.concerts, invoices: mod.invoices });
+    this._onResize = () => this.setState({ viewportWidth: window.innerWidth });
+    window.addEventListener("resize", this._onResize);
+  }
+  componentWillUnmount() { window.removeEventListener("resize", this._onResize); }
+
+  statusColors(status) {
+    if (status === "confirmat" || status === "pagada") return { bg: "oklch(0.72 0.15 155 / 0.16)", color: "oklch(0.78 0.15 155)" };
+    if (status === "pendent") return { bg: "oklch(0.78 0.15 80 / 0.16)", color: "oklch(0.82 0.15 80)" };
+    return { bg: "oklch(0.68 0.18 25 / 0.16)", color: "oklch(0.74 0.18 25)" };
+  }
+  genreHue(genre) {
+    const map = { "Rock": 290, "Pop": 340, "Indie": 250, "Electrònica": 200, "Jazz": 170, "Flamenc/Rumba": 25, "Hip-hop": 60, "Folk/Tradicional": 110 };
+    return map[genre] ?? 290;
+  }
+  genreColors(genre) {
+    const h = this.genreHue(genre);
+    return { color: `oklch(0.72 0.14 ${h})`, bg: `oklch(0.72 0.14 ${h} / 0.16)` };
+  }
+
+  renderVals() {
+    const { formatCurrency, formatDate, monthNames } = this.dataMod || {};
+    const isMobile = this.state.viewportWidth < 900;
+    const isDesktop = !isMobile;
+    const concerts = this.state.concerts;
+    const bands = this.state.bands;
+    const invoices = this.state.invoices;
+    const genreOptions = ["Rock","Pop","Indie","Electrònica","Jazz","Flamenc/Rumba","Hip-hop","Folk/Tradicional"];
+
+    const pages = ["resum","calendari","concerts","grups","facturacio","basedades"];
+    const pageLabels = { resum: "Resum", calendari: "Calendari", concerts: "Concerts", grups: "Grups", facturacio: "Facturació", basedades: "Base de dades" };
+    const page = {}; pages.forEach(p => page[p] = this.state.page === p);
+
+    const navItems = pages.map(p => ({
+      key: p, label: pageLabels[p], dotColor: this.state.page === p ? "oklch(0.68 0.19 290)" : "oklch(1 0 0 / 0.18)",
+      onClick: () => this.setState({ page: p })
+    }));
+    const bottomNavKeys = ["resum","calendari","concerts","grups"];
+    const bottomNavItems = bottomNavKeys.map(p => ({
+      key: p, label: pageLabels[p], color: this.state.page === p ? "oklch(0.82 0.14 290)" : "oklch(0.6 0.015 258)",
+      dotColor: this.state.page === p ? "oklch(0.68 0.19 290)" : "oklch(1 0 0 / 0.18)",
+      onClick: () => this.setState({ page: p, moreSheetOpen: false })
+    }));
+    bottomNavItems.push({
+      key: "mes", label: "Més", color: ["facturacio","basedades"].includes(this.state.page) ? "oklch(0.82 0.14 290)" : "oklch(0.6 0.015 258)",
+      dotColor: ["facturacio","basedades"].includes(this.state.page) ? "oklch(0.68 0.19 290)" : "oklch(1 0 0 / 0.18)",
+      onClick: () => this.setState({ moreSheetOpen: true })
+    });
+
+    if (!this.state.dataReady) {
+      return {
+        loggedIn: this.state.loggedIn, username: this.state.username, password: this.state.password,
+        onUsernameChange: e => this.setState({ username: e.target.value }),
+        onPasswordChange: e => this.setState({ password: e.target.value }),
+        onLogin: () => this.setState({ loggedIn: true }), preventDefault: e => e.preventDefault(),
+        loggedOut: !this.state.loggedIn,
+        isMobile, isDesktop, page, navItems, bottomNavItems, currentPageLabel: pageLabels[this.state.page],
+        contentPadding: isMobile ? "18px" : "32px 36px", contentBottomPadding: isMobile ? "90px" : "32px",
+        moreSheetOpen: false, concertModalOpen: false, bandModalOpen: false, invoiceModalOpen: false, genreOptions
+      };
+    }
+
+    // ---------- RESUM ----------
+    const rangeMap = { "1m": [7,7], "3m": [5,7], "6m": [2,7], "1y": [0,7], "all": [0,7] };
+    const [rMin, rMax] = rangeMap[this.state.resumRange];
+    const rangeLabels = { "1m": "Últim mes", "3m": "Últims 3 mesos", "6m": "Últims 6 mesos", "1y": "Últim any", "all": "Tots els temps" };
+    const resumRangeOptions = ["1m","3m","6m","1y","all"].map(k => ({
+      label: rangeLabels[k], onClick: () => this.setState({ resumRange: k }),
+      bg: this.state.resumRange === k ? "oklch(0.68 0.19 290 / 0.18)" : "transparent",
+      borderColor: this.state.resumRange === k ? "oklch(0.68 0.19 290 / 0.5)" : "oklch(1 0 0 / 0.12)",
+      textColor: this.state.resumRange === k ? "oklch(0.85 0.14 290)" : "oklch(0.7 0.015 258)"
+    }));
+    const monthAgg = {};
+    for (let m = 0; m <= 7; m++) monthAgg[m] = { count: 0, revenue: 0 };
+    concerts.forEach(c => {
+      const m = parseInt(c.date.slice(5,7),10) - 1;
+      if (c.status === "cancel·lat") { if (m in monthAgg) monthAgg[m].count += 0; return; }
+      if (m in monthAgg) { monthAgg[m].count += 1; monthAgg[m].revenue += c.amount; }
+    });
+    const rangeMonths = []; for (let m = rMin; m <= rMax; m++) rangeMonths.push(m);
+    const maxCount = Math.max(1, ...rangeMonths.map(m => monthAgg[m].count));
+    const maxRev = Math.max(1, ...rangeMonths.map(m => monthAgg[m].revenue));
+    const monthBars = rangeMonths.map(m => ({ label: monthNames[m], count: monthAgg[m].count, heightPct: Math.round((monthAgg[m].count / maxCount) * 100) }));
+    const revenueBars = rangeMonths.map(m => ({ label: monthNames[m], revenueLabel: `${Math.round(monthAgg[m].revenue/1000)}k`, heightPct: Math.round((monthAgg[m].revenue / maxRev) * 100) }));
+
+    const augConcerts = concerts.filter(c => c.date.slice(0,7) === "2026-08" && c.status !== "cancel·lat");
+    const julConcerts = concerts.filter(c => c.date.slice(0,7) === "2026-07" && c.status !== "cancel·lat");
+    const augRevenue = augConcerts.reduce((s,c) => s + c.amount, 0);
+    const julRevenue = julConcerts.reduce((s,c) => s + c.amount, 0);
+    const delta = julRevenue > 0 ? Math.round(((augRevenue - julRevenue) / julRevenue) * 100) : 0;
+    const kpis = {
+      totalConcerts: augConcerts.length, revenue: formatCurrency(augRevenue),
+      avg: formatCurrency(augConcerts.length ? Math.round(augRevenue / augConcerts.length) : 0),
+      deltaLabel: (delta >= 0 ? "+" : "") + delta + "%", deltaColor: delta >= 0 ? "oklch(0.72 0.15 155)" : "oklch(0.68 0.18 25)"
+    };
+
+    const genreRevenue = {}; genreOptions.forEach(g => genreRevenue[g] = 0);
+    let totalGenreRevenue = 0;
+    concerts.filter(c => c.status !== "cancel·lat").forEach(c => { genreRevenue[c.genre] += c.amount; totalGenreRevenue += c.amount; });
+    let acc = 0; const gradientStops = [];
+    const genreLegend = genreOptions.map(g => {
+      const pct = totalGenreRevenue ? Math.round((genreRevenue[g] / totalGenreRevenue) * 100) : 0;
+      const { color } = this.genreColors(g);
+      const start = acc; acc += pct; gradientStops.push(`${color} ${start}% ${acc}%`);
+      return { genre: g, pct, color };
+    }).filter(g => g.pct > 0).sort((a,b) => b.pct - a.pct);
+    const genrePieGradient = `conic-gradient(${gradientStops.join(",")})`;
+
+    const upcoming = concerts.filter(c => c.date >= "2026-08-07" && c.status !== "cancel·lat").slice(0,4).map(c => {
+      const sc = this.statusColors(c.status);
+      return { day: c.date.slice(8,10), month: monthNames[parseInt(c.date.slice(5,7),10)-1], bandName: c.bandName, venue: c.venue, status: c.status, statusBg: sc.bg, statusColor: sc.color };
+    });
+
+    // ---------- CALENDARI ----------
+    const weekdayLabels = ["dl","dt","dc","dj","dv","ds","dg"];
+    const cmi = this.state.calMonthIndex;
+    const monthLabel = `${monthNames[((cmi%12)+12)%12]} de 2026`;
+    const firstOfMonth = new Date(2026, cmi, 1);
+    const startOffset = (firstOfMonth.getDay() + 6) % 7;
+    const daysInMonth = new Date(2026, cmi+1, 0).getDate();
+    const cells = [];
+    for (let i=0;i<startOffset;i++) cells.push(null);
+    for (let d=1; d<=daysInMonth; d++) cells.push(d);
+    while (cells.length % 7 !== 0) cells.push(null);
+    const eventsByDate = {};
+    concerts.forEach(c => { (eventsByDate[c.date] = eventsByDate[c.date] || []).push(c); });
+    const weeks = [];
+    for (let i=0;i<cells.length;i+=7) {
+      const days = cells.slice(i,i+7).map(d => {
+        if (!d) return { num: "", dots: [], borderColor: "transparent", bg: "transparent", textColor: "transparent", onClick: () => {} };
+        const dateStr = `2026-${String(cmi+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+        const evs = eventsByDate[dateStr] || [];
+        const selected = this.state.calSelectedDate === dateStr;
+        return {
+          num: d, dateStr,
+          dots: evs.slice(0,3).map(e => ({ color: this.statusColors(e.status).color })),
+          borderColor: selected ? "oklch(0.68 0.19 290 / 0.7)" : "oklch(1 0 0 / 0.07)",
+          bg: selected ? "oklch(0.68 0.19 290 / 0.12)" : (dateStr === "2026-08-07" ? "oklch(1 0 0 / 0.04)" : "oklch(0.19 0.018 258)"),
+          textColor: "oklch(0.9 0.004 258)",
+          onClick: () => this.setState({ calSelectedDate: dateStr })
+        };
+      });
+      weeks.push({ days });
+    }
+    const selDate = this.state.calSelectedDate;
+    const selEvents = selDate ? (eventsByDate[selDate] || []) : [];
+    const cal = {
+      monthLabel,
+      onPrev: () => this.setState({ calMonthIndex: this.state.calMonthIndex - 1, calSelectedDate: null }),
+      onNext: () => this.setState({ calMonthIndex: this.state.calMonthIndex + 1, calSelectedDate: null }),
+      weeks, hasSelection: !!selDate, hasEvents: selEvents.length > 0, noEvents: !!selDate && selEvents.length === 0,
+      selectedLabel: selDate ? formatDate(selDate) : "",
+      selectedEvents: selEvents.map(e => { const sc = this.statusColors(e.status); return { bandName: e.bandName, venue: e.venue, city: e.city, time: e.time, amountLabel: formatCurrency(e.amount), status: e.status, statusBg: sc.bg, statusColor: sc.color }; })
+    };
+
+    // ---------- CONCERTS ----------
+    const cSearch = this.state.concertsSearch.toLowerCase();
+    let filteredConcerts = concerts.filter(c =>
+      (this.state.concertsStatusFilter === "tots" || c.status === this.state.concertsStatusFilter) &&
+      (this.state.concertsGenreFilter === "tots" || c.genre === this.state.concertsGenreFilter) &&
+      (!cSearch || c.bandName.toLowerCase().includes(cSearch) || c.venue.toLowerCase().includes(cSearch) || c.city.toLowerCase().includes(cSearch))
+    ).sort((a,b) => b.date.localeCompare(a.date));
+    const concertsUi = {
+      search: this.state.concertsSearch, onSearch: e => this.setState({ concertsSearch: e.target.value }),
+      statusFilter: this.state.concertsStatusFilter, onStatusFilter: e => this.setState({ concertsStatusFilter: e.target.value }),
+      genreFilter: this.state.concertsGenreFilter, onGenreFilter: e => this.setState({ concertsGenreFilter: e.target.value }),
+      isEmpty: filteredConcerts.length === 0,
+      onNew: () => this.openConcertModal("new"),
+      list: filteredConcerts.map(c => {
+        const sc = this.statusColors(c.status);
+        return { id: c.id, dateLabel: formatDate(c.date), bandName: c.bandName, venue: c.venue, city: c.city, status: c.status, statusBg: sc.bg, statusColor: sc.color, amountLabel: formatCurrency(c.amount), onClick: () => this.openConcertModal("edit", c.id) };
+      })
+    };
+
+    // ---------- GRUPS ----------
+    const gSearch = this.state.grupsSearch.toLowerCase();
+    const filteredBands = bands.filter(b => (this.state.grupsGenreFilter === "tots" || b.genre === this.state.grupsGenreFilter) && (!gSearch || b.name.toLowerCase().includes(gSearch)));
+    const grupsUi = {
+      search: this.state.grupsSearch, onSearch: e => this.setState({ grupsSearch: e.target.value }),
+      genreFilter: this.state.grupsGenreFilter, onGenreFilter: e => this.setState({ grupsGenreFilter: e.target.value }),
+      list: filteredBands.map(b => {
+        const gc = this.genreColors(b.genre);
+        return { id: b.id, name: b.name, genre: b.genre, genreBg: gc.bg, genreColor: gc.color, city: b.city, membersCount: b.members.length, history: b.history, rateLabel: formatCurrency(b.rate), onClick: () => this.setState({ bandModalOpen: true, bandDetailId: b.id }) };
+      })
+    };
+    const bandDetailSrc = bands.find(b => b.id === this.state.bandDetailId);
+    const bandDetail = bandDetailSrc ? (() => {
+      const gc = this.genreColors(bandDetailSrc.genre);
+      const recent = concerts.filter(c => c.bandId === bandDetailSrc.id).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,4)
+        .map(c => ({ dateLabel: formatDate(c.date), venue: c.venue, amountLabel: formatCurrency(c.amount) }));
+      return { name: bandDetailSrc.name, genre: bandDetailSrc.genre, genreBg: gc.bg, genreColor: gc.color, city: bandDetailSrc.city, rateLabel: formatCurrency(bandDetailSrc.rate), contact: bandDetailSrc.contact, phone: bandDetailSrc.phone, members: bandDetailSrc.members, history: bandDetailSrc.history, recentConcerts: recent };
+    })() : { name:"", genre:"", genreBg:"", genreColor:"", city:"", rateLabel:"", contact:"", phone:"", members:[], history:0, recentConcerts:[] };
+
+    // ---------- FACTURACIO ----------
+    const totalBilled = invoices.reduce((s,i) => s + i.amount, 0);
+    const pending = invoices.filter(i => i.state === "pendent").reduce((s,i) => s + i.amount, 0);
+    const overdue = invoices.filter(i => i.state === "vençuda").reduce((s,i) => s + i.amount, 0);
+    const thisMonth = invoices.filter(i => i.issueDate.slice(0,7) === "2026-08").reduce((s,i) => s + i.amount, 0);
+    const filteredInvoices = invoices.filter(i => this.state.factStateFilter === "tots" || i.state === this.state.factStateFilter).sort((a,b) => b.issueDate.localeCompare(a.issueDate));
+    const fact = {
+      kpis: { totalBilled: formatCurrency(totalBilled), pending: formatCurrency(pending), overdue: formatCurrency(overdue), thisMonth: formatCurrency(thisMonth) },
+      stateFilter: this.state.factStateFilter, onStateFilter: e => this.setState({ factStateFilter: e.target.value }),
+      onNew: () => this.setState({ invoiceModalOpen: true, invoiceFormConcertId: "" }),
+      list: filteredInvoices.map(i => { const sc = this.statusColors(i.state); return { id: i.id, client: i.client, dateLabel: formatDate(i.issueDate), amountLabel: formatCurrency(i.amount), state: i.state, stateBg: sc.bg, stateColor: sc.color }; })
+    };
+    const billedConcertIds = new Set(invoices.map(i => i.concertId));
+    const unbilled = concerts.filter(c => c.status === "confirmat" && !billedConcertIds.has(c.id));
+    const invForm = this.state.invoiceFormConcertId || (unbilled[0] && unbilled[0].id) || "";
+    const invConcert = concerts.find(c => c.id === invForm);
+    const invoiceForm = {
+      hasOptions: unbilled.length > 0, noOptions: unbilled.length === 0,
+      concertId: invForm, onConcertChange: e => this.setState({ invoiceFormConcertId: e.target.value }),
+      concertOptions: unbilled.map(c => ({ id: c.id, label: `${c.bandName} — ${formatDate(c.date)} (${c.venue})` })),
+      previewAmount: invConcert ? formatCurrency(Math.round(invConcert.amount*1.21)) : "—",
+      onSave: () => this.saveInvoice(invForm)
+    };
+
+    // ---------- BASE DE DADES ----------
+    const dbSearchL = this.state.dbSearch.toLowerCase();
+    let dbRows = concerts.filter(c => !dbSearchL || c.bandName.toLowerCase().includes(dbSearchL) || c.venue.toLowerCase().includes(dbSearchL) || c.city.toLowerCase().includes(dbSearchL));
+    const dir = this.state.dbSortDir === "asc" ? 1 : -1;
+    const keyFn = { id: c=>c.id, date: c=>c.date, band: c=>c.bandName, status: c=>c.status, amount: c=>c.amount }[this.state.dbSortKey];
+    dbRows = [...dbRows].sort((a,b) => a===b?0:(keyFn(a) > keyFn(b) ? dir : -dir));
+    const pageSize = 8; const totalPages = Math.max(1, Math.ceil(dbRows.length / pageSize));
+    const dbPage = Math.min(this.state.dbPage, totalPages-1);
+    const pageRows = dbRows.slice(dbPage*pageSize, dbPage*pageSize+pageSize);
+    const invByConcert = {}; invoices.forEach(i => invByConcert[i.concertId] = i.state);
+    const db = {
+      search: this.state.dbSearch, onSearch: e => this.setState({ dbSearch: e.target.value, dbPage: 0 }),
+      countLabel: `${dbRows.length} registres`,
+      sortById: () => this.toggleSort("id"), sortByDate: () => this.toggleSort("date"), sortByBand: () => this.toggleSort("band"), sortByStatus: () => this.toggleSort("status"), sortByAmount: () => this.toggleSort("amount"),
+      rows: pageRows.map(r => { const sc = this.statusColors(r.status); return { id: r.id, dateLabel: formatDate(r.date), bandName: r.bandName, genre: r.genre, venue: r.venue, status: r.status, statusBg: sc.bg, statusColor: sc.color, amountLabel: formatCurrency(r.amount), invoiceState: invByConcert[r.id] || "—", onEdit: () => this.openConcertModal("edit", r.id), onDelete: () => this.deleteConcert(r.id) }; }),
+      onPrevPage: () => this.setState({ dbPage: Math.max(0, dbPage-1) }), onNextPage: () => this.setState({ dbPage: Math.min(totalPages-1, dbPage+1) }),
+      pageLabel: `Pàgina ${dbPage+1} de ${totalPages}`
+    };
+
+    const concertModalTitle = this.state.concertModalMode === "new" ? "Nou concert" : "Detall del concert";
+    const concertForm = {
+      isEdit: this.state.concertModalMode === "edit",
+      bandId: this.state.cf_bandId, onBandChange: e => this.setState({ cf_bandId: e.target.value }),
+      date: this.state.cf_date, onDateChange: e => this.setState({ cf_date: e.target.value }),
+      time: this.state.cf_time, onTimeChange: e => this.setState({ cf_time: e.target.value }),
+      venue: this.state.cf_venue, onVenueChange: e => this.setState({ cf_venue: e.target.value }),
+      city: this.state.cf_city, onCityChange: e => this.setState({ cf_city: e.target.value }),
+      amount: this.state.cf_amount, onAmountChange: e => this.setState({ cf_amount: e.target.value }),
+      status: this.state.cf_status, onStatusChange: e => this.setState({ cf_status: e.target.value }),
+      onSave: () => this.saveConcert(), onDelete: () => this.deleteConcert(this.state.concertEditId)
+    };
+
+    return {
+      loggedIn: this.state.loggedIn, username: this.state.username, password: this.state.password,
+      onUsernameChange: e => this.setState({ username: e.target.value }), onPasswordChange: e => this.setState({ password: e.target.value }),
+      onLogin: () => this.setState({ loggedIn: true }), preventDefault: e => e.preventDefault(),
+      onLogout: () => this.setState({ loggedIn: false, page: "resum", moreSheetOpen: false }),
+      loggedOut: !this.state.loggedIn,
+      isMobile, isDesktop, page, navItems, bottomNavItems, currentPageLabel: pageLabels[this.state.page],
+      contentPadding: isMobile ? "18px" : "32px 36px", contentBottomPadding: isMobile ? "90px" : "32px",
+      chartGridCols: isMobile ? "1fr" : "1fr 1fr", resumLowerCols: isMobile ? "1fr" : "1.1fr 0.9fr",
+      bandGridCols: isMobile ? "1fr" : "repeat(auto-fill,minmax(230px,1fr))",
+      calGridDisplay: isMobile ? "flex" : "flex", weekdayLabels, genreOptions,
+      resum: { rangeOptions: resumRangeOptions, kpis, monthBars, revenueBars, genreLegend, genrePieGradient, upcoming },
+      cal, concertsUi, grupsUi, bandDetail, fact, invoiceForm, db,
+      moreSheetOpen: this.state.moreSheetOpen, onCloseMoreSheet: () => this.setState({ moreSheetOpen: false }),
+      onGoFacturacio: () => this.setState({ page: "facturacio", moreSheetOpen: false }),
+      onGoBaseDades: () => this.setState({ page: "basedades", moreSheetOpen: false }),
+      stopPropagation: e => e.stopPropagation(),
+      concertModalOpen: this.state.concertModalOpen, concertModalTitle, concertForm, bandOptions: bands.map(b => ({ id: b.id, name: b.name })),
+      onCloseConcertModal: () => this.setState({ concertModalOpen: false }),
+      bandModalOpen: this.state.bandModalOpen, onCloseBandModal: () => this.setState({ bandModalOpen: false }),
+      invoiceModalOpen: this.state.invoiceModalOpen, onCloseInvoiceModal: () => this.setState({ invoiceModalOpen: false })
+    };
+  }
+
+  openConcertModal(mode, id) {
+    if (mode === "new") {
+      this.setState({ concertModalOpen: true, concertModalMode: "new", concertEditId: null, cf_bandId: this.state.bands[0]?.id || "", cf_date: "2026-08-15", cf_time: "21:00", cf_venue: "", cf_city: "", cf_amount: "1500", cf_status: "confirmat" });
+    } else {
+      const c = this.state.concerts.find(x => x.id === id);
+      if (!c) return;
+      this.setState({ concertModalOpen: true, concertModalMode: "edit", concertEditId: id, cf_bandId: c.bandId, cf_date: c.date, cf_time: c.time, cf_venue: c.venue, cf_city: c.city, cf_amount: String(c.amount), cf_status: c.status });
+    }
+  }
+  saveConcert() {
+    const band = this.state.bands.find(b => b.id === this.state.cf_bandId) || this.state.bands[0];
+    const rec = { id: this.state.concertEditId || ("c" + Date.now()), date: this.state.cf_date, time: this.state.cf_time, venue: this.state.cf_venue || "Sala per determinar", city: this.state.cf_city || band.city, bandId: band.id, bandName: band.name, genre: band.genre, status: this.state.cf_status, amount: parseInt(this.state.cf_amount, 10) || 0 };
+    let concerts = [...this.state.concerts];
+    if (this.state.concertEditId) { concerts = concerts.map(c => c.id === rec.id ? rec : c); }
+    else { concerts = [rec, ...concerts]; }
+    this.setState({ concerts, concertModalOpen: false });
+  }
+  deleteConcert(id) {
+    this.setState({ concerts: this.state.concerts.filter(c => c.id !== id), invoices: this.state.invoices.filter(i => i.concertId !== id), concertModalOpen: false });
+  }
+  saveInvoice(concertId) {
+    const c = this.state.concerts.find(x => x.id === concertId);
+    if (!c) return;
+    const invoices = [...this.state.invoices];
+    const num = invoices.length + 1;
+    invoices.unshift({ id: "F-2026-" + String(num).padStart(3,"0"), concertId: c.id, client: c.venue, bandName: c.bandName, issueDate: "2026-08-07", dueDate: "2026-08-07", amount: Math.round(c.amount*1.21), state: "pendent" });
+    this.setState({ invoices, invoiceModalOpen: false });
+  }
+  toggleSort(key) {
+    if (this.state.dbSortKey === key) this.setState({ dbSortDir: this.state.dbSortDir === "asc" ? "desc" : "asc" });
+    else this.setState({ dbSortKey: key, dbSortDir: "asc" });
+  }
+}
+</script>
+</body>
+</html>
