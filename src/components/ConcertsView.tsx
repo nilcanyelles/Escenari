@@ -2,12 +2,14 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, Concert, Invoice } from "@/lib/types";
+import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
 import { uniqueTags } from "@/lib/tags";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { deleteConcertAction } from "@/app/(app)/concerts/actions";
+import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import ConcertModal from "@/components/ConcertModal";
+import InvoicePreview from "@/components/InvoicePreview";
 
 export function DeleteConcertBtn({ id }: { id: string }) {
   const router = useRouter();
@@ -47,11 +49,14 @@ function RouteSheetBtns({ c }: { c: Concert }) {
   );
 }
 
-export default function ConcertsView({ bands, concerts, invoices, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; today: string }) {
+export default function ConcertsView({ bands, concerts, invoices, companyInfo, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; today: string }) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("tots");
   const [tagFilter, setTagFilter] = useState("tots");
   const [modal, setModal] = useState<{ mode: "new" | "edit"; concertId: string | null } | null>(null);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
+  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
 
   const searchL = search.toLowerCase();
   const list = concerts.filter((c) =>
@@ -75,7 +80,8 @@ export default function ConcertsView({ bands, concerts, invoices, today }: { ban
       const ic = statusColors(inv.state);
       invoiceCell = (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <button type="button" className="row-rs-btn" style={{ color: ic.color }} title={"Visualitza la factura (" + inv.id + ")"} aria-label="Visualitza la factura" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="row-rs-btn" style={{ color: ic.color }} title={"Visualitza la factura (" + inv.id + ")"} aria-label="Visualitza la factura"
+            onClick={(e) => { e.stopPropagation(); setPreviewInvoiceId(inv.id); }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
           </button>
         </div>
@@ -83,7 +89,15 @@ export default function ConcertsView({ bands, concerts, invoices, today }: { ban
     } else if (c.status === "confirmat") {
       invoiceCell = (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <button type="button" className="row-rs-btn" title="Genera factura" aria-label="Genera factura" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="row-rs-btn" title="Genera factura" aria-label="Genera factura" disabled={generatingFor === c.id}
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!confirm("Generar factura per aquest concert?")) return;
+              setGeneratingFor(c.id);
+              await generateInvoiceAction(c.id);
+              router.refresh();
+              setGeneratingFor(null);
+            }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="13" x2="12" y2="17"></line><line x1="10" y1="15" x2="14" y2="15"></line></svg>
           </button>
         </div>
@@ -108,6 +122,8 @@ export default function ConcertsView({ bands, concerts, invoices, today }: { ban
   }
 
   const editingConcert = modal?.mode === "edit" ? concerts.find((c) => c.id === modal.concertId) || null : null;
+  const previewInvoice = previewInvoiceId ? invoices.find((i) => i.id === previewInvoiceId) || null : null;
+  const previewConcert = previewInvoice ? concerts.find((c) => c.id === previewInvoice.concertId) || null : null;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -153,6 +169,10 @@ export default function ConcertsView({ bands, concerts, invoices, today }: { ban
           bands={bands}
           onClose={() => setModal(null)}
         />
+      )}
+
+      {previewInvoice && (
+        <InvoicePreview invoice={previewInvoice} concert={previewConcert} companyInfo={companyInfo} onClose={() => setPreviewInvoiceId(null)} />
       )}
     </div>
   );
