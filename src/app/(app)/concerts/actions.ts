@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import type { Concert } from "@/lib/types";
 
 export type SaveConcertInput = {
   id: string | null;
@@ -16,6 +17,7 @@ export type SaveConcertInput = {
   attendance: Record<string, string>;
   substitutes: Record<string, string>;
   noSubstitute: Record<string, boolean>;
+  skipDefaults?: boolean;
 };
 
 function revalidateAll() {
@@ -52,10 +54,13 @@ export async function saveConcertAction(data: SaveConcertInput) {
     );
     bandRow = (await pool.query("select * from bands where id=$1", [newId])).rows[0];
   }
-  if (!bandRow) {
+  if (!bandRow && !data.skipDefaults) {
     bandRow = (await pool.query("select * from bands order by name limit 1")).rows[0];
   }
-  if (!bandRow) return;
+  if (!bandRow && !data.skipDefaults) return;
+
+  const venue = data.skipDefaults ? data.venue.trim() : (data.venue.trim() || "Sala per determinar");
+  const city = data.skipDefaults ? data.city.trim() : (data.city.trim() || bandRow.city);
 
   const id = data.id || "c" + Date.now();
   await pool.query(
@@ -65,13 +70,31 @@ export async function saveConcertAction(data: SaveConcertInput) {
        date=$2, time=$3, venue=$4, city=$5, festa_entitat=$6, band_id=$7, band_name=$8, tags=$9, status=$10, amount=$11,
        attendance=$12, substitutes=$13, no_substitute=$14`,
     [
-      id, data.date, data.time, data.venue.trim() || "Sala per determinar", data.city.trim() || bandRow.city, (data.festaEntitat || "").trim(),
-      bandRow.id, bandRow.name, JSON.stringify(bandRow.tags || []), data.status, Math.round(data.amount) || 0,
+      id, data.date, data.time, venue, city, (data.festaEntitat || "").trim(),
+      bandRow ? bandRow.id : null, bandRow ? bandRow.name : "", JSON.stringify(bandRow?.tags || []), data.status, Math.round(data.amount) || 0,
       JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.noSubstitute || {}),
     ]
   );
 
   revalidateAll();
+
+  return {
+    id,
+    date: data.date,
+    time: data.time,
+    venue,
+    city,
+    festaEntitat: (data.festaEntitat || "").trim(),
+    bandId: bandRow ? bandRow.id : "",
+    bandName: bandRow ? bandRow.name : "",
+    tags: bandRow?.tags || [],
+    status: data.status as Concert["status"],
+    amount: Math.round(data.amount) || 0,
+    attendance: data.attendance || {},
+    substitutes: data.substitutes || {},
+    noSubstitute: data.noSubstitute || {},
+    routeSheet: null,
+  } as Concert;
 }
 
 export async function saveRouteSheetAction(concertId: string, routeSheet: unknown) {

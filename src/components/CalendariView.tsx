@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
 import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep } from "@/lib/format";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { bandColor } from "@/lib/tags";
+import { saveConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import ConcertModal from "@/components/ConcertModal";
@@ -29,6 +31,8 @@ function groupByDate(list: Concert[]) {
 }
 
 export default function CalendariView({ bands, concerts, today }: { bands: Band[]; concerts: Concert[]; today: string }) {
+  const router = useRouter();
+  const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [calMonthIndex, setCalMonthIndex] = useState(7);
   const [calViewMode, setCalViewMode] = useState<"month" | "week">("month");
   const [calWeekOffset, setCalWeekOffset] = useState(0);
@@ -277,6 +281,36 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       ? (bands.find((b) => b.id === calBandFilter[0])?.name || "1 grup")
       : calBandFilter.length + " grups";
 
+  async function handleNewConcert() {
+    const created = await saveConcertAction({
+      id: null,
+      bandName: "",
+      date: calSelectedDate || today,
+      time: "",
+      venue: "",
+      city: "",
+      festaEntitat: "",
+      amount: 0,
+      status: "pendent",
+      attendance: {},
+      substitutes: {},
+      noSubstitute: {},
+      skipDefaults: true,
+    });
+    router.refresh();
+    setDraftConcert(created);
+    setConcertModalId(created.id);
+  }
+
+  async function discardDraftAndClose() {
+    if (draftConcert) {
+      await deleteConcertAction(draftConcert.id);
+      router.refresh();
+    }
+    setConcertModalId(null);
+    setDraftConcert(null);
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="range-pills cal-view-pills">
@@ -310,7 +344,9 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
           <button className={calViewMode === "month" ? "active" : ""} onClick={() => setCalViewMode("month")}>Mes</button>
           <button className={calViewMode === "week" ? "active" : ""} onClick={() => setCalViewMode("week")}>Setmana</button>
         </div>
-        <div className="cal-view-pills-right"></div>
+        <div className="cal-view-pills-right">
+          <button className="btn-accent" onClick={handleNewConcert}>+ Nou concert</button>
+        </div>
       </div>
 
       <div className={"cal-cols" + (calViewMode === "week" ? " cal-cols-week" : "")}>
@@ -350,8 +386,9 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       </div>
 
       {concertModalId && (() => {
-        const c = concerts.find((x) => x.id === concertModalId);
+        const c = concerts.find((x) => x.id === concertModalId) || (draftConcert && draftConcert.id === concertModalId ? draftConcert : null);
         if (!c) return null;
+        const isNewDraft = !!draftConcert && draftConcert.id === concertModalId;
         const navigableList = calConcerts.slice().sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
         const navigableIndex = navigableList.findIndex((x) => x.id === c.id);
         function navigateConcert(dir: "prev" | "next") {
@@ -365,8 +402,11 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
             mode="edit"
             concert={c}
             bands={bands}
-            onClose={() => setConcertModalId(null)}
-            onOpenRouteSheetPreview={() => { setConcertModalId(null); setRsPreviewConcertId(c.id); }}
+            isDraft={isNewDraft}
+            startInEditMode={isNewDraft}
+            onDiscardDraft={discardDraftAndClose}
+            onClose={() => { setConcertModalId(null); setDraftConcert(null); }}
+            onOpenRouteSheetPreview={() => { setConcertModalId(null); setDraftConcert(null); setRsPreviewConcertId(c.id); }}
             onNavigate={navigateConcert}
             hasPrev={navigableIndex > 0}
             hasNext={navigableIndex !== -1 && navigableIndex < navigableList.length - 1}

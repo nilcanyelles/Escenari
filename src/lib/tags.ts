@@ -41,8 +41,9 @@ function xmlEscape(str: string): string {
 }
 
 function hashStr(str: string): number {
+  const s = str || "";
   let h = 0;
-  for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
+  for (let i = 0; i < s.length; i++) h = (Math.imul(h, 31) + s.charCodeAt(i)) | 0;
   // Mesclador d'avalanxa (estil Murmur3) perquè cadenes similars com "b1"/"b2" acabin ben repartides.
   h ^= h >>> 16;
   h = Math.imul(h, 0x85ebca6b);

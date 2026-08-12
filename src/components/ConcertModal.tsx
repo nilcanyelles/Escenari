@@ -9,6 +9,7 @@ import { rsIsComplete } from "@/lib/route-sheet";
 import { bandColorHue } from "@/lib/tags";
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import ShareStoryModal from "@/components/ShareStoryModal";
+import WhatsappShareModal from "@/components/WhatsappShareModal";
 
 type Cf = {
   bandId: string;
@@ -31,6 +32,7 @@ function personLabel(m: Person): string {
 
 export default function ConcertModal({
   mode, concert, bands, onClose, onOpenRouteSheetPreview, onNavigate, hasPrev, hasNext,
+  isDraft, startInEditMode, onDiscardDraft,
 }: {
   mode: "new" | "edit";
   concert: Concert | null;
@@ -40,6 +42,9 @@ export default function ConcertModal({
   onNavigate?: (dir: "prev" | "next") => void;
   hasPrev?: boolean;
   hasNext?: boolean;
+  isDraft?: boolean;
+  startInEditMode?: boolean;
+  onDiscardDraft?: () => void;
 }) {
   const router = useRouter();
   const [cf, setCf] = useState<Cf>(() => {
@@ -60,11 +65,16 @@ export default function ConcertModal({
   const [bandDropdownOpen, setBandDropdownOpen] = useState(false);
   const [bandSearch, setBandSearch] = useState("");
   const [saving, setSaving] = useState(false);
-  const [isEditing, setIsEditing] = useState(mode === "new");
+  const [isEditing, setIsEditing] = useState(mode === "new" || !!startInEditMode);
   const [editSnapshot, setEditSnapshot] = useState<Cf | null>(null);
   const [activeTab, setActiveTab] = useState<"info" | "routesheet" | "attendance">("info");
   const [shareOpen, setShareOpen] = useState(false);
+  const [whatsappOpen, setWhatsappOpen] = useState(false);
+  const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [pendingNavDir, setPendingNavDir] = useState<"prev" | "next" | null>(null);
   const substituteSaveTimer = useRef<number | null>(null);
+  const everSavedRef = useRef(false);
 
   const bandTyped = (cf.bandName || "").trim().toLowerCase();
   const currentBand = bands.find((b) => b.name.toLowerCase() === bandTyped) || bands.find((b) => b.id === cf.bandId);
@@ -72,6 +82,7 @@ export default function ConcertModal({
   const bandMatches = bands.filter((b) => !bandSearchLower || b.name.toLowerCase().indexOf(bandSearchLower) !== -1);
 
   async function persist(payload: Cf) {
+    everSavedRef.current = true;
     setSaving(true);
     await saveConcertAction({
       id: mode === "edit" ? concert!.id : null,
@@ -111,14 +122,30 @@ export default function ConcertModal({
     setIsEditing(false);
   }
 
-  function handleCloseClick() {
-    if (mode === "edit" && isEditing) discardEditAndGoBack();
+  function closeModal() {
+    if (isDraft && !everSavedRef.current) onDiscardDraft?.();
     else onClose();
   }
 
-  async function handleDelete() {
+  function handleCloseClick() {
+    if (isDraft && !everSavedRef.current) { setShowDiscardConfirm(true); return; }
+    if (mode === "edit" && isEditing) discardEditAndGoBack();
+    else closeModal();
+  }
+
+  function requestNavigate(dir: "prev" | "next") {
+    if (isEditing) { setPendingNavDir(dir); return; }
+    onNavigate?.(dir);
+  }
+
+  function handleOverlayClick() {
+    if (isDraft && !everSavedRef.current) { setShowDiscardConfirm(true); return; }
+    closeModal();
+  }
+
+  async function confirmDelete() {
     if (!concert) return;
-    if (!confirm("Segur que vols eliminar aquest concert?")) return;
+    setShowDeleteConfirm(false);
     setSaving(true);
     await deleteConcertAction(concert.id);
     router.refresh();
@@ -231,9 +258,6 @@ export default function ConcertModal({
   }
 
   const [routeSheetComplete, setRouteSheetComplete] = useState(() => mode === "edit" && concert ? rsIsComplete(concert) : false);
-  const rsBadgeColors = routeSheetComplete
-    ? { bg: "oklch(0.72 0.15 155 / 0.16)", color: "oklch(0.78 0.15 155)" }
-    : { bg: "oklch(0.78 0.15 80 / 0.16)", color: "oklch(0.82 0.15 80)" };
 
   const bandHue = cf.bandId ? bandColorHue(cf.bandId) : null;
   const modalStyle = bandHue !== null
@@ -246,17 +270,17 @@ export default function ConcertModal({
       if (shareOpen) return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-      if (e.key === "ArrowLeft" && hasPrev) onNavigate!("prev");
-      else if (e.key === "ArrowRight" && hasNext) onNavigate!("next");
+      if (e.key === "ArrowLeft" && hasPrev) requestNavigate("prev");
+      else if (e.key === "ArrowRight" && hasNext) requestNavigate("next");
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onNavigate, hasPrev, hasNext, shareOpen]);
+  }, [onNavigate, hasPrev, hasNext, shareOpen, isEditing]);
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={handleOverlayClick}>
       {onNavigate && (
-        <button type="button" className="cf-nav-edge-btn" title="Concert anterior" aria-label="Concert anterior" disabled={!hasPrev} onClick={(e) => { e.stopPropagation(); onNavigate("prev"); }}>
+        <button type="button" className="cf-nav-edge-btn" title="Concert anterior" aria-label="Concert anterior" disabled={!hasPrev} onClick={(e) => { e.stopPropagation(); requestNavigate("prev"); }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
       )}
@@ -268,9 +292,21 @@ export default function ConcertModal({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             {mode === "edit" && activeTab === "info" && !isEditing && (
-              <button type="button" className="row-rs-btn" title="Comparteix l'story" aria-label="Comparteix l'story" onClick={() => setShareOpen(true)}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line></svg>
-              </button>
+              <div className="cf-share-menu-wrap">
+                <button type="button" className="row-rs-btn" title="Comparteix" aria-label="Comparteix">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                </button>
+                <div className="cf-share-menu">
+                  <div className="cf-share-menu-panel">
+                    <button type="button" className="cf-share-menu-btn" title="Instagram" aria-label="Instagram" onClick={() => setShareOpen(true)}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                    </button>
+                    <button type="button" className="cf-share-menu-btn" title="WhatsApp" aria-label="WhatsApp" onClick={() => setWhatsappOpen(true)}>
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                    </button>
+                  </div>
+                </div>
+              </div>
             )}
             {mode === "edit" && activeTab === "info" && (
               isEditing ? (
@@ -288,13 +324,18 @@ export default function ConcertModal({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path><polyline points="17 21 17 13 7 13 7 21"></polyline><polyline points="7 3 7 8 15 8"></polyline></svg>
               </button>
             )}
-            <button className="modal-close" title="Cancel·lar" aria-label="Cancel·lar" onClick={handleCloseClick}>✕</button>
+            {mode === "edit" && activeTab === "routesheet" && concert && (
+              <button type="button" className={"row-rs-btn" + (routeSheetComplete ? " rs-complete" : "")} title="Previsualitza el PDF" aria-label="Previsualitza el PDF" onClick={onOpenRouteSheetPreview}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              </button>
+            )}
+            <button className="cf-head-close" title="Cancel·lar" aria-label="Cancel·lar" onClick={handleCloseClick}>✕</button>
           </div>
         </div>
 
-        {mode === "edit" && (
-          <div className="modal-tabs">
-            <button type="button" className={activeTab === "info" ? "active" : ""} onClick={() => setActiveTab("info")}>Info</button>
+        <div className="modal-tabs">
+          <button type="button" className={activeTab === "info" ? "active" : ""} onClick={() => setActiveTab("info")}>Info</button>
+          {mode === "edit" && (
             <div className="cf-rs-tab-wrap">
               {!routeSheetComplete && (
                 <div className="cf-rs-warning-badge">
@@ -304,9 +345,9 @@ export default function ConcertModal({
               )}
               <button type="button" className={activeTab === "routesheet" ? "active" : ""} onClick={() => setActiveTab("routesheet")}>Full de ruta</button>
             </div>
-            <button type="button" className={activeTab === "attendance" ? "active" : ""} onClick={() => setActiveTab("attendance")}>Assistència</button>
-          </div>
-        )}
+          )}
+          <button type="button" className={activeTab === "attendance" ? "active" : ""} onClick={() => setActiveTab("attendance")}>Assistència</button>
+        </div>
 
         <div className="modal-form">
           {activeTab === "info" && (
@@ -399,15 +440,7 @@ export default function ConcertModal({
           )}
 
           {activeTab === "routesheet" && mode === "edit" && concert && (
-            <div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-                <span className="badge sm" style={{ background: rsBadgeColors.bg, color: rsBadgeColors.color }}>{routeSheetComplete ? "Acabat" : "Inacabat"}</span>
-                <button type="button" className={"row-rs-btn" + (routeSheetComplete ? " rs-complete" : "")} title="Previsualitza el PDF" aria-label="Previsualitza el PDF" onClick={onOpenRouteSheetPreview}>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-                </button>
-              </div>
-              <RouteSheetEditor concert={concert} onCompleteChange={setRouteSheetComplete} />
-            </div>
+            <RouteSheetEditor concert={concert} onCompleteChange={setRouteSheetComplete} onSaved={() => { everSavedRef.current = true; }} />
           )}
 
           {activeTab === "attendance" && (
@@ -431,30 +464,9 @@ export default function ConcertModal({
             )
           )}
 
-          {mode === "new" && (
-            <div style={{ marginTop: 4 }}>
-              {(hasMusics || hasCrew) && (
-                <>
-                  <div className="modal-title" style={{ margin: "4px 0 12px" }}>Assistència</div>
-                  {hasMusics && (
-                    <>
-                      <label className="form-label">Músics</label>
-                      <div className="cf-convocatoria-list">{renderAttendanceRows(currentBand!.members)}</div>
-                    </>
-                  )}
-                  {hasCrew && (
-                    <>
-                      <label className="form-label" style={{ display: "block", marginTop: hasMusics ? 12 : 0 }}>Crew</label>
-                      <div className="cf-convocatoria-list">{renderAttendanceRows(currentBand!.crew)}</div>
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          )}
 
           {mode === "edit" && (
-            <button type="button" className="cf-delete-btn" disabled={saving} onClick={handleDelete}>
+            <button type="button" className="cf-delete-btn" disabled={saving} onClick={() => setShowDeleteConfirm(true)}>
               <span>Eliminar concert</span>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
             </button>
@@ -462,11 +474,45 @@ export default function ConcertModal({
         </div>
       </div>
       {onNavigate && (
-        <button type="button" className="cf-nav-edge-btn" title="Concert següent" aria-label="Concert següent" disabled={!hasNext} onClick={(e) => { e.stopPropagation(); onNavigate("next"); }}>
+        <button type="button" className="cf-nav-edge-btn" title="Concert següent" aria-label="Concert següent" disabled={!hasNext} onClick={(e) => { e.stopPropagation(); requestNavigate("next"); }}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
         </button>
       )}
       {shareOpen && concert && <ShareStoryModal concert={concert} onClose={() => setShareOpen(false)} />}
+      {whatsappOpen && concert && <WhatsappShareModal concert={concert} onClose={() => setWhatsappOpen(false)} />}
+      {showDiscardConfirm && (
+        <div className="modal-overlay cf-confirm-overlay" onClick={(e) => { e.stopPropagation(); setShowDiscardConfirm(false); }}>
+          <div className="modal cf-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cf-confirm-message">Els canvis no es desaran.</div>
+            <div className="modal-actions cf-confirm-actions">
+              <button type="button" className="btn-outline" onClick={() => setShowDiscardConfirm(false)}>Torna a l&apos;edició</button>
+              <button type="button" className="btn-danger-outline" onClick={() => { setShowDiscardConfirm(false); onDiscardDraft?.(); }}>Cancel·lar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {showDeleteConfirm && (
+        <div className="modal-overlay cf-confirm-overlay" onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}>
+          <div className="modal cf-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cf-confirm-message">Estàs segur que vols eliminar el concert?</div>
+            <div className="modal-actions cf-confirm-actions">
+              <button type="button" className="btn-danger-outline" disabled={saving} onClick={confirmDelete}>Eliminar</button>
+              <button type="button" className="btn-outline" onClick={() => setShowDeleteConfirm(false)}>Torna enrere</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {pendingNavDir && (
+        <div className="modal-overlay cf-confirm-overlay" onClick={(e) => { e.stopPropagation(); setPendingNavDir(null); }}>
+          <div className="modal cf-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="cf-confirm-message">Els canvis no es desaran.</div>
+            <div className="modal-actions cf-confirm-actions">
+              <button type="button" className="btn-outline" onClick={() => setPendingNavDir(null)}>Seguir editant</button>
+              <button type="button" className="btn-danger-outline" onClick={() => { const dir = pendingNavDir; setPendingNavDir(null); onNavigate?.(dir); }}>Cancel·lar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

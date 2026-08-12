@@ -6,7 +6,7 @@ import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
 import { uniqueTags } from "@/lib/tags";
 import { rsIsComplete } from "@/lib/route-sheet";
-import { deleteConcertAction } from "@/app/(app)/concerts/actions";
+import { deleteConcertAction, saveConcertAction } from "@/app/(app)/concerts/actions";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import ConcertModal from "@/components/ConcertModal";
 import InvoicePreview from "@/components/InvoicePreview";
@@ -56,7 +56,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("tots");
   const [tagFilter, setTagFilter] = useState("tots");
-  const [modal, setModal] = useState<{ mode: "new" | "edit"; concertId: string | null } | null>(null);
+  const [modal, setModal] = useState<{ concertId: string } | null>(null);
+  const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
@@ -118,9 +119,9 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
       invoiceCell = <span className="t-dim">—</span>;
     }
 
-    const isSelected = modal?.mode === "edit" && modal.concertId === c.id;
+    const isSelected = modal?.concertId === c.id;
     return (
-      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => setModal({ mode: "edit", concertId: c.id })}>
+      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => setModal({ concertId: c.id })}>
         <div className="t-dim">{formatDate(c.date)}</div>
         <div className="t-strong">{c.bandName}</div>
         <div className="t-dim">{c.city}</div>
@@ -134,7 +135,10 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
     );
   }
 
-  const editingConcert = modal?.mode === "edit" ? concerts.find((c) => c.id === modal.concertId) || null : null;
+  const editingConcert = modal
+    ? concerts.find((c) => c.id === modal.concertId) || (draftConcert && draftConcert.id === modal.concertId ? draftConcert : null)
+    : null;
+  const isNewDraft = !!draftConcert && modal?.concertId === draftConcert.id;
   const previewInvoice = previewInvoiceId ? invoices.find((i) => i.id === previewInvoiceId) || null : null;
   const previewConcert = previewInvoice ? concerts.find((c) => c.id === previewInvoice.concertId) || null : null;
   const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
@@ -146,7 +150,37 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
     if (navigableIndex === -1) return;
     const nextIndex = dir === "prev" ? navigableIndex - 1 : navigableIndex + 1;
     const target = navigableList[nextIndex];
-    if (target) setModal({ mode: "edit", concertId: target.id });
+    if (target) setModal({ concertId: target.id });
+  }
+
+  async function handleNewConcert() {
+    const created = await saveConcertAction({
+      id: null,
+      bandName: "",
+      date: today,
+      time: "",
+      venue: "",
+      city: "",
+      festaEntitat: "",
+      amount: 0,
+      status: "pendent",
+      attendance: {},
+      substitutes: {},
+      noSubstitute: {},
+      skipDefaults: true,
+    });
+    router.refresh();
+    setDraftConcert(created);
+    setModal({ concertId: created.id });
+  }
+
+  async function discardDraftAndClose() {
+    if (draftConcert) {
+      await deleteConcertAction(draftConcert.id);
+      router.refresh();
+    }
+    setModal(null);
+    setDraftConcert(null);
   }
 
   return (
@@ -163,7 +197,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button className="btn-accent" onClick={() => setModal({ mode: "new", concertId: null })}>+ Nou concert</button>
+        <button className="btn-accent" onClick={handleNewConcert}>+ Nou concert</button>
       </div>
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
@@ -187,13 +221,16 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
 
       {modal && (
         <ConcertModal
-          key={modal.mode + ":" + (modal.concertId || "new")}
-          mode={modal.mode}
+          key={"edit:" + modal.concertId}
+          mode="edit"
           concert={editingConcert}
           bands={bands}
-          onClose={() => setModal(null)}
-          onOpenRouteSheetPreview={editingConcert ? () => { setModal(null); setRsPreviewConcertId(editingConcert.id); } : undefined}
-          onNavigate={modal.mode === "edit" ? navigateConcert : undefined}
+          isDraft={isNewDraft}
+          startInEditMode={isNewDraft}
+          onDiscardDraft={discardDraftAndClose}
+          onClose={() => { setModal(null); setDraftConcert(null); }}
+          onOpenRouteSheetPreview={editingConcert ? () => { setModal(null); setDraftConcert(null); setRsPreviewConcertId(editingConcert.id); } : undefined}
+          onNavigate={navigateConcert}
           hasPrev={navigableIndex > 0}
           hasNext={navigableIndex !== -1 && navigableIndex < navigableList.length - 1}
         />

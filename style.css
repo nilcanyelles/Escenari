@@ -506,6 +506,35 @@ button { font-family: inherit; }
 }
 .row-rs-btn:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); }
 .row-rs-btn:disabled { opacity: 0.3; cursor: default; pointer-events: none; }
+.cf-head-close {
+  all: unset; cursor: pointer; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; flex: none;
+  color: var(--text-fainter); font-size: 18px;
+}
+.cf-head-close:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); }
+.cf-share-menu-wrap { position: relative; }
+.cf-share-menu {
+  position: absolute; top: 100%; left: 50%; transform: translateX(-50%); z-index: 20; padding-top: 8px;
+  opacity: 0; visibility: hidden; pointer-events: none; transition: opacity .12s ease;
+}
+.cf-share-menu-wrap:hover .cf-share-menu,
+.cf-share-menu-wrap:focus-within .cf-share-menu {
+  opacity: 1; visibility: visible; pointer-events: auto;
+}
+.cf-share-menu-panel {
+  display: flex; gap: 8px; padding: 10px;
+  background: var(--bg-card-2); border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.cf-share-menu-btn {
+  all: unset; cursor: pointer; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; border-radius: 10px; flex: none;
+  color: var(--text-dim); background: var(--bg-deep); border: 1px solid var(--border-input);
+}
+.cf-share-menu-btn[title="Instagram"]:hover { color: #E1306C; border-color: #E1306C; }
+.cf-share-menu-btn[title="WhatsApp"]:hover { color: #25D366; border-color: #25D366; }
 .cf-nav-edge-btn {
   all: unset; cursor: pointer; box-sizing: border-box; flex: none;
   width: 40px; height: 40px; border-radius: 50%;
@@ -581,6 +610,10 @@ button { font-family: inherit; }
   border-radius: 14px; padding: 24px; color: var(--text);
 }
 .modal.wide { width: 440px; }
+.cf-confirm-overlay { z-index: 55; }
+.cf-confirm-modal { width: 320px; text-align: center; }
+.cf-confirm-message { font-size: 14px; color: var(--text); margin-bottom: 18px; }
+.cf-confirm-actions { justify-content: center; margin-top: 0; }
 .modal.band-edit-modal { width: 620px; max-width: 95vw; }
 .modal.narrow { width: 400px; }
 .modal.rs-modal { width: 640px; }
@@ -695,6 +728,12 @@ button { font-family: inherit; }
 .modal-title { font-family: 'Space Grotesk', sans-serif; font-size: 17px; font-weight: 600; }
 .modal-close { all: unset; cursor: pointer; color: var(--text-fainter); font-size: 18px; }
 .modal-form { display: flex; flex-direction: column; gap: 12px; }
+.wa-share-textarea {
+  background: var(--bg-deep); border: 1px solid var(--border-input); border-radius: var(--radius-sm);
+  padding: 14px; font-size: 13.5px; line-height: 1.5; color: var(--text);
+  font-family: inherit; resize: vertical; width: 100%; box-sizing: border-box;
+}
+.wa-share-textarea:focus { outline: none; border-color: oklch(0.68 0.19 290 / 0.6); }
 .share-story-body { flex-direction: row; align-items: flex-start; gap: 24px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .form-label { font-size: 11.5px; color: var(--text-faint); }

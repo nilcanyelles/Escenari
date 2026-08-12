@@ -46,7 +46,7 @@ function TimePairInput({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-export default function RouteSheetEditor({ concert, onCompleteChange }: { concert: Concert; onCompleteChange?: (complete: boolean) => void }) {
+export default function RouteSheetEditor({ concert, onCompleteChange, onSaved }: { concert: Concert; onCompleteChange?: (complete: boolean) => void; onSaved?: () => void }) {
   const router = useRouter();
   const [rsf, setRsf] = useState<RouteSheet>(() => normalizeRouteSheet(concert.routeSheet as RouteSheet | null, concert));
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
@@ -96,6 +96,7 @@ export default function RouteSheetEditor({ concert, onCompleteChange }: { concer
       await saveRouteSheetAction(concert.id, rsf);
       router.refresh();
       setSaving(false);
+      onSaved?.();
     }, 600);
     return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
