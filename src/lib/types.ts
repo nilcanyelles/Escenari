@@ -18,6 +18,7 @@ export type Concert = {
   time: string;
   venue: string;
   city: string;
+  festaEntitat: string;
   bandId: string;
   bandName: string;
   tags: string[];

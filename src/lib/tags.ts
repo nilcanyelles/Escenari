@@ -40,13 +40,33 @@ function xmlEscape(str: string): string {
   return String(str == null ? "" : str).replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&apos;" }[ch] as string));
 }
 
+function hashStr(str: string): number {
+  let h = 0;
+  for (let i = 0; i < str.length; i++) h = (Math.imul(h, 31) + str.charCodeAt(i)) | 0;
+  // Mesclador d'avalanxa (estil Murmur3) perquè cadenes similars com "b1"/"b2" acabin ben repartides.
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b);
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35);
+  h ^= h >>> 16;
+  return Math.abs(h);
+}
+
+// Cada grup té un color propi (derivat del seu id), independent del gènere/etiqueta.
+export function bandColorHue(id: string): number {
+  return hashStr(id) % 360;
+}
+
+export function bandColor(id: string): { color: string; bg: string } {
+  const h = bandColorHue(id);
+  return { color: `oklch(0.72 0.14 ${h})`, bg: `oklch(0.72 0.14 ${h} / 0.16)` };
+}
+
 export function bandPhotoDataUri(b: { id: string; name: string; tags?: string[] }): string {
   const primaryTag = (b.tags && b.tags[0]) || "";
-  const h = TAG_HUE.hasOwnProperty(primaryTag) ? TAG_HUE[primaryTag] : 290;
+  const h = bandColorHue(b.id);
   const icon = TAG_ICON_PATHS.hasOwnProperty(primaryTag) ? TAG_ICON_PATHS[primaryTag] : TAG_ICON_PATHS["Rock"];
-  let seed = 0;
-  for (let i = 0; i < b.id.length; i++) seed += b.id.charCodeAt(i);
-  const h2 = (h + 35 + (seed % 25)) % 360;
+  const h2 = (h + 35 + (hashStr(b.id + "x") % 25)) % 360;
   const svg = (
     `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
     `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +

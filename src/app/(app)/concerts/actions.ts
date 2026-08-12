@@ -10,6 +10,7 @@ export type SaveConcertInput = {
   time: string;
   venue: string;
   city: string;
+  festaEntitat: string;
   amount: number;
   status: string;
   attendance: Record<string, string>;
@@ -58,13 +59,13 @@ export async function saveConcertAction(data: SaveConcertInput) {
 
   const id = data.id || "c" + Date.now();
   await pool.query(
-    `insert into concerts (id, date, time, venue, city, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+    `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
      on conflict (id) do update set
-       date=$2, time=$3, venue=$4, city=$5, band_id=$6, band_name=$7, tags=$8, status=$9, amount=$10,
-       attendance=$11, substitutes=$12, no_substitute=$13`,
+       date=$2, time=$3, venue=$4, city=$5, festa_entitat=$6, band_id=$7, band_name=$8, tags=$9, status=$10, amount=$11,
+       attendance=$12, substitutes=$13, no_substitute=$14`,
     [
-      id, data.date, data.time, data.venue.trim() || "Sala per determinar", data.city.trim() || bandRow.city,
+      id, data.date, data.time, data.venue.trim() || "Sala per determinar", data.city.trim() || bandRow.city, (data.festaEntitat || "").trim(),
       bandRow.id, bandRow.name, JSON.stringify(bandRow.tags || []), data.status, Math.round(data.amount) || 0,
       JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.noSubstitute || {}),
     ]

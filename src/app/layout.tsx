@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "../../style.css";
 
 export const metadata: Metadata = {
-  title: "La Bona Party",
+  title: "Escenari",
   description: "Gestió d'actuacions musicals",
 };
 

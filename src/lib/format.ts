@@ -22,7 +22,7 @@ export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function monthWithPrep(monthFull: string): string {
+export function monthWithPrep(monthFull: string): string {
   return /^[aeiouàéèíòóú]/i.test(monthFull) ? "d'" + monthFull : "de " + monthFull;
 }
 

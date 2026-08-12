@@ -29,6 +29,7 @@ export async function getConcerts(): Promise<Concert[]> {
     time: r.time,
     venue: r.venue,
     city: r.city,
+    festaEntitat: r.festa_entitat,
     bandId: r.band_id,
     bandName: r.band_name,
     tags: r.tags,

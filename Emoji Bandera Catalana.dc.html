@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<div style="width:100%;height:100%;min-height:400px;display:flex;align-items:center;justify-content:center;background:oklch(0.97 0.005 90);">
+  <div style="width:256px;height:256px;border-radius:56px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.18);display:flex;flex-direction:column;">
+    <sc-for list="{{ stripes }}" as="s" hint-placeholder-count="9">
+      <div style="flex:1;background:{{ s.color }};"></div>
+    </sc-for>
+  </div>
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const yellow = '#FCDD09';
+    const red = '#DA121A';
+    const colors = [yellow, red, yellow, red, yellow, red, yellow, red, yellow];
+    return { stripes: colors.map((color, i) => ({ color, i })) };
+  }
+}
+
+</script>
+</body>
+</html>

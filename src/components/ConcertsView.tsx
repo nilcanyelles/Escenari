@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
@@ -61,6 +61,14 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  useEffect(() => {
+    if (modal?.mode === "edit" && modal.concertId) {
+      const el = rowRefs.current[modal.concertId];
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+  }, [modal]);
 
   const searchL = search.toLowerCase();
   const list = concerts.filter((c) =>
@@ -110,13 +118,14 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
       invoiceCell = <span className="t-dim">—</span>;
     }
 
+    const isSelected = modal?.mode === "edit" && modal.concertId === c.id;
     return (
-      <div className="t-row concerts-cols clickable" onClick={() => setModal({ mode: "edit", concertId: c.id })}>
+      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => setModal({ mode: "edit", concertId: c.id })}>
         <div className="t-dim">{formatDate(c.date)}</div>
         <div className="t-strong">{c.bandName}</div>
         <div className="t-dim">{c.city}</div>
         <div className="t-dim">{c.venue}</div>
-        <div className="t-dim"></div>
+        <div className="t-dim">{c.festaEntitat || "—"}</div>
         <div><span className="badge" style={{ background: sc.bg, color: sc.color }}>{c.status}</span></div>
         <div className="rs-btn-group"><RouteSheetBtns c={c} onEdit={() => setRsModalConcertId(c.id)} onPreview={() => setRsPreviewConcertId(c.id)} /></div>
         <div style={{ textAlign: "center" }}>{invoiceCell}</div>
@@ -130,6 +139,15 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const previewConcert = previewInvoice ? concerts.find((c) => c.id === previewInvoice.concertId) || null : null;
   const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
   const rsPreviewConcert = rsPreviewConcertId ? concerts.find((c) => c.id === rsPreviewConcertId) || null : null;
+
+  const navigableList = [...upcomingList, ...pastList];
+  const navigableIndex = editingConcert ? navigableList.findIndex((c) => c.id === editingConcert.id) : -1;
+  function navigateConcert(dir: "prev" | "next") {
+    if (navigableIndex === -1) return;
+    const nextIndex = dir === "prev" ? navigableIndex - 1 : navigableIndex + 1;
+    const target = navigableList[nextIndex];
+    if (target) setModal({ mode: "edit", concertId: target.id });
+  }
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -174,8 +192,10 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           concert={editingConcert}
           bands={bands}
           onClose={() => setModal(null)}
-          onOpenRouteSheet={editingConcert ? () => { setModal(null); setRsModalConcertId(editingConcert.id); } : undefined}
           onOpenRouteSheetPreview={editingConcert ? () => { setModal(null); setRsPreviewConcertId(editingConcert.id); } : undefined}
+          onNavigate={modal.mode === "edit" ? navigateConcert : undefined}
+          hasPrev={navigableIndex > 0}
+          hasNext={navigableIndex !== -1 && navigableIndex < navigableList.length - 1}
         />
       )}
 
