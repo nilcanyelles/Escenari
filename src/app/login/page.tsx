@@ -10,11 +10,11 @@ export default async function LoginPage({
   return (
     <div className="login-screen">
       <div className="login-glow"></div>
-      <img className="login-bg-logo" src="/logo.webp" alt="" />
+      <img className="login-bg-logo" src="/logo-escenari.png" alt="" />
       <form className="login-card" action={loginAction}>
         <input type="hidden" name="next" value={next || "/"} />
         <div className="login-logo-row">
-          <img className="login-logo-img" src="/logo.webp" alt="La Bona Party" />
+          <img className="login-logo-img" src="/logo-escenari.png" alt="Escenari" />
         </div>
         <div className="login-form">
           <div className="field-group">
@@ -34,7 +34,7 @@ export default async function LoginPage({
           </button>
         </div>
       </form>
-      <div className="login-copyright">© 2026 La Bona Party — Accés d&apos;administració</div>
+      <div className="login-copyright">© 2026 Escenari — Accés d&apos;administració</div>
     </div>
   );
 }

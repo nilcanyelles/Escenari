@@ -33,9 +33,9 @@ export default function InvoicePreview({
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 22, borderBottom: "2px solid oklch(0.2 0.01 258)" }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <div style={{ width: 40, height: 40, borderRadius: 10, background: "oklch(0.55 0.19 290)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16, color: "oklch(0.99 0.002 258)", flex: "none" }}>LB</div>
+                <div style={{ width: 40, height: 40, borderRadius: 10, background: "oklch(0.55 0.19 290)", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 16, color: "oklch(0.99 0.002 258)", flex: "none" }}>E</div>
                 <div>
-                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17, letterSpacing: "0.01em" }}>{(companyInfo.nom || "La Bona Party").toUpperCase()}</div>
+                  <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 17, letterSpacing: "0.01em" }}>{(companyInfo.nom || "Escenari").toUpperCase()}</div>
                   {companyInfo.cif ? (
                     <div style={{ fontSize: 11, color: "oklch(0.45 0.01 258)", marginTop: 2 }}>CIF: {companyInfo.cif}</div>
                   ) : (
@@ -96,7 +96,7 @@ export default function InvoicePreview({
                 {companyInfo.iban && <><br />Compte: {companyInfo.iban}</>}
               </div>
               <div style={{ fontSize: 11, color: "oklch(0.5 0.01 258)", textAlign: "right", lineHeight: 1.6 }}>
-                Estat: {invoice.state}.<br />Gràcies per confiar en La Bona Party.
+                Estat: {invoice.state}.<br />Gràcies per confiar en Escenari.
               </div>
             </div>
 

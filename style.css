@@ -77,7 +77,7 @@ button { font-family: inherit; }
   box-shadow: 0 30px 80px -20px rgba(0,0,0,0.6), inset 0 1px 0 oklch(1 0 0 / 0.05);
 }
 .login-logo-row { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 32px; }
-.login-logo-img { width: 150px; height: auto; }
+.login-logo-img { width: 220px; height: auto; }
 .login-subtitle { font-size: 12.5px; color: var(--text-faint); margin-top: 3px; text-align: center; }
 .mobile-logo-img { height: 24px; width: auto; flex: none; }
 .field-group { display: flex; flex-direction: column; gap: 6px; }
@@ -652,12 +652,16 @@ button { font-family: inherit; }
 }
 .share-story-flag svg { display: block; width: 100%; height: 100%; }
 .share-story-map-select { position: relative; margin-top: 6px; }
+.share-story-map-select-trigger,
+.share-story-map-tile.active {
+  background: oklch(0.68 0.19 290 / 0.18); border-color: oklch(0.68 0.19 290 / 0.5); color: var(--text);
+}
 .share-story-map-select-trigger {
   display: flex; align-items: center; gap: 8px; width: 100%;
-  background: oklch(0.68 0.19 290 / 0.18); border: 1px solid oklch(0.68 0.19 290 / 0.5); border-radius: var(--radius-sm);
-  padding: 7px 10px; color: var(--accent-strong); font-size: 11.5px; font-weight: 600; cursor: pointer;
+  border: 1px solid oklch(0.68 0.19 290 / 0.5); border-radius: var(--radius-sm);
+  padding: 7px 10px; font-size: 11.5px; font-weight: 600; cursor: pointer;
 }
-.share-story-map-select-trigger span { flex: 1; text-align: left; }
+.share-story-map-select-label { flex: 1; text-align: left; }
 .share-story-map-select-chevron { flex: none; color: var(--text-faint); }
 .share-story-map-menu {
   position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 20;
@@ -671,7 +675,6 @@ button { font-family: inherit; }
   background: transparent; color: var(--text-muted); font-size: 11.5px; font-weight: 600; cursor: pointer;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
-.share-story-map-tile.active { background: oklch(0.68 0.19 290 / 0.18); border-color: oklch(0.68 0.19 290 / 0.5); color: var(--accent-strong); }
 .share-story-colors { display: flex; gap: 10px; margin-top: 6px; }
 .share-story-color-swatch {
   width: 32px; height: 32px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; box-sizing: border-box;
@@ -681,15 +684,11 @@ button { font-family: inherit; }
 .share-story-pinpad-row { display: flex; gap: 4px; }
 .share-story-pinpad-row span { width: 32px; height: 32px; flex: none; }
 .share-story-pinpad .row-rs-btn { width: 32px; height: 32px; background: var(--bg-card-2); border: 1px solid var(--border-input); }
-.share-story-map-edit-toggle {
-  padding: 7px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-input);
-  background: transparent; color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer;
+.share-story-pads-row { display: flex; gap: 24px; margin-top: 12px; }
+.share-story-pad-center {
+  width: 32px; height: 32px; flex: none;
+  display: flex; align-items: center; justify-content: center; color: var(--text-faint);
 }
-.share-story-map-edit-toggle:hover { color: var(--text); border-color: var(--accent); }
-.share-story-mapedit { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
-.share-story-scalepad { display: flex; align-items: center; gap: 10px; }
-.share-story-scalepad .row-rs-btn { width: 32px; height: 32px; background: var(--bg-card-2); border: 1px solid var(--border-input); }
-.share-story-scale-value { font-size: 12.5px; font-weight: 600; color: var(--text-dim); min-width: 40px; text-align: center; }
 .modal-tabs { display: flex; gap: 4px; background: var(--bg-card-2); border: 1px solid var(--border-input); border-radius: 10px; padding: 3px; margin-bottom: 16px; }
 .modal-tabs button {
   flex: 1; border: none; background: transparent; cursor: pointer;

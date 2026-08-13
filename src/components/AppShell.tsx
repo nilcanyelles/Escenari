@@ -22,14 +22,14 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
     <div className="app-shell">
       <div className="main-col">
         <div className="mobile-topbar mobile-only">
-          <img className="mobile-logo-img" src="/logo.webp" alt="La Bona Party" />
+          <img className="mobile-logo-img" src="/logo.webp" alt="Escenari" />
           <div className="spacer"></div>
           <ProfileButton />
         </div>
 
         <div className="page-header desktop-only">
           <div className="page-header-brand">
-            <img className="topbar-logo-img" src="/logo.webp" alt="La Bona Party" />
+            <img className="topbar-logo-img" src="/logo.webp" alt="Escenari" />
           </div>
           <div className="topnav">
             {PAGES.map((p) => {

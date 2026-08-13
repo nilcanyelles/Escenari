@@ -259,7 +259,7 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
       )}
 
       <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid oklch(0.88 0.005 258)", fontSize: 10, color: "oklch(0.5 0.01 258)", textAlign: "center" }}>
-        La Bona Party · {concert.date.split("-")[0]}
+        Escenari · {concert.date.split("-")[0]}
       </div>
     </div>
   );

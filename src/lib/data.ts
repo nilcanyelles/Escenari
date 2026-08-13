@@ -51,7 +51,7 @@ export async function getClientDetails(): Promise<Record<string, ClientDetails>>
 
 export async function getCompanyInfo(): Promise<CompanyInfo> {
   const { rows } = await db().query("select nom, cif, address, iban from company_info where id = 1");
-  return rows[0] || { nom: "La Bona Party", cif: "", address: "", iban: "" };
+  return rows[0] || { nom: "Escenari", cif: "", address: "", iban: "" };
 }
 
 export async function getInvoices(): Promise<Invoice[]> {

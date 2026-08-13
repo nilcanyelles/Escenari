@@ -153,7 +153,7 @@ function escapeHtml(s: string): string {
 
 type StoryVals = {
   poblacio: string; ubicacio: string; hora: string; data: string; grup: string; collaDisplay: string;
-  accentColor: string; pinTx: number; pinTy: number; mapStyle: MapStyleId;
+  accentColor: string; pinTx: number; pinTy: number; mapStyle: MapStyleId; mapEnabled: boolean;
   mapOffsetX: number; mapOffsetY: number; mapScale: number; mapRotation: number;
 };
 
@@ -164,8 +164,7 @@ function buildTemplateHtml(v: StoryVals): string {
   const mapStrokeWidth = cfg.strokeWidth;
   const mapRight = 10 - v.mapOffsetX;
   const mapBottom = 100 - v.mapOffsetY;
-  return `<div xmlns="http://www.w3.org/1999/xhtml" style="width:1080px;height:1920px;position:relative;background:transparent;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow:hidden;box-sizing:border-box;">
-    <div style="position:absolute;right:${mapRight}px;bottom:${mapBottom}px;width:480px;display:flex;flex-direction:column;align-items:center;transform:rotate(${v.mapRotation}deg) scale(${v.mapScale});">
+  const mapBlock = !v.mapEnabled ? "" : `<div style="position:absolute;right:${mapRight}px;bottom:${mapBottom}px;width:480px;display:flex;flex-direction:column;align-items:center;transform:rotate(${v.mapRotation}deg) scale(${v.mapScale});">
       <svg xmlns="http://www.w3.org/2000/svg" viewBox="${mapViewBox}" width="480" height="480" style="display:block;overflow:visible;">
         <path d="${mapPath}" fill="none" stroke="#ffffff" stroke-width="${mapStrokeWidth}" stroke-linejoin="round" stroke-linecap="round" stroke-opacity="0.92"></path>
         <g transform="translate(${v.pinTx},${v.pinTy}) scale(${1 / v.mapScale})">
@@ -173,7 +172,9 @@ function buildTemplateHtml(v: StoryVals): string {
           <circle cx="0" cy="-6" r="6" fill="#ffffff"></circle>
         </g>
       </svg>
-    </div>
+    </div>`;
+  return `<div xmlns="http://www.w3.org/1999/xhtml" style="width:1080px;height:1920px;position:relative;background:transparent;font-family:'Helvetica Neue',Helvetica,Arial,sans-serif;overflow:hidden;box-sizing:border-box;">
+    ${mapBlock}
     <div style="position:absolute;left:80px;right:80px;bottom:130px;display:flex;flex-direction:column;gap:20px;">
       <div style="font-size:104px;font-weight:800;line-height:0.94;color:#ffffff;text-transform:uppercase;letter-spacing:-2px;text-shadow:0 4px 24px rgba(0,0,0,0.55);">${escapeHtml(v.poblacio)}</div>
       <div style="display:flex;align-items:center;gap:14px;font-size:46px;font-weight:500;color:#ffffff;opacity:0.94;text-shadow:0 3px 18px rgba(0,0,0,0.55);">
@@ -198,6 +199,7 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [accentColor, setAccentColor] = useState(ACCENT_OPTIONS[0]);
   const [mapStyle, setMapStyle] = useState<MapStyleId>("catalunya");
+  const [mapEnabled, setMapEnabled] = useState(true);
   const [mapEditOpen, setMapEditOpen] = useState(false);
   const [mapMenuOpen, setMapMenuOpen] = useState(false);
   const mapMenuRef = useRef<HTMLDivElement>(null);
@@ -219,7 +221,7 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
   function nudgePin(dx: number, dy: number) {
     setAdjByMap((prev) => {
       const cur = prev[mapStyle];
-      return { ...prev, [mapStyle]: { ...cur, pinX: Math.max(0, Math.min(100, cur.pinX + dx)), pinY: Math.max(0, Math.min(100, cur.pinY + dy)) } };
+      return { ...prev, [mapStyle]: { ...cur, pinX: cur.pinX + dx, pinY: cur.pinY + dy } };
     });
   }
 
@@ -307,6 +309,7 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
     collaDisplay: (concert.festaEntitat || "").trim() ? concert.festaEntitat : "—",
     accentColor,
     mapStyle,
+    mapEnabled,
     mapOffsetX: adj.offsetX,
     mapOffsetY: adj.offsetY,
     mapScale: adj.scale,
@@ -339,7 +342,7 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
   useEffect(() => {
     renderToCanvas();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accentColor, mapStyle, adjByMap, concert.id]);
+  }, [accentColor, mapStyle, mapEnabled, adjByMap, concert.id]);
 
   async function handleDownload() {
     const canvas = canvasRef.current;
@@ -374,11 +377,25 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
           </div>
           <div className="share-story-controls">
             <div>
-              <label className="form-label">Mapa</label>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <label className="form-label">Mapa</label>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <button type="button" className="row-rs-btn" title={mapEnabled ? "Amaga el mapa" : "Mostra el mapa"} aria-label={mapEnabled ? "Amaga el mapa" : "Mostra el mapa"} style={{ color: mapEnabled ? "var(--green)" : "var(--red)" }} onClick={() => setMapEnabled((v) => !v)}>
+                    {mapEnabled ? (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                    ) : (
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    )}
+                  </button>
+                  <button type="button" className="row-rs-btn" title="Edita la posició i mida del mapa" aria-label="Edita la posició i mida del mapa" disabled={!mapEnabled} style={mapEditOpen ? { color: "var(--green)" } : undefined} onClick={() => setMapEditOpen((v) => !v)}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                  </button>
+                </div>
+              </div>
               <div className="share-story-map-select" ref={mapMenuRef}>
                 <button type="button" className="share-story-map-select-trigger" onClick={() => setMapMenuOpen((v) => !v)}>
                   <FlagIcon id={mapStyle} />
-                  <span>{MAP_OPTIONS.find((m) => m.id === mapStyle)?.label}</span>
+                  <span className="share-story-map-select-label">{MAP_OPTIONS.find((m) => m.id === mapStyle)?.label}</span>
                   <svg className="share-story-map-select-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
                 </button>
                 {mapMenuOpen && (
@@ -392,6 +409,96 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
                   </div>
                 )}
               </div>
+              {mapEnabled && mapEditOpen && (
+                <div className="share-story-pads-row">
+                  <div className="share-story-pinpad">
+                    <div className="share-story-pinpad-row">
+                      <button type="button" className="row-rs-btn" title="Redueix el mapa" aria-label="Redueix el mapa"
+                        onMouseDown={() => startHold(() => adjustMapScale(-0.05))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => adjustMapScale(-0.05))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                      </button>
+                      <button type="button" className="row-rs-btn" title="Mou el mapa amunt" aria-label="Mou el mapa amunt"
+                        onMouseDown={() => startHold(() => nudgeMap(0, -6))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgeMap(0, -6))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                      </button>
+                      <button type="button" className="row-rs-btn" title="Amplia el mapa" aria-label="Amplia el mapa"
+                        onMouseDown={() => startHold(() => adjustMapScale(0.05))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => adjustMapScale(0.05))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                      </button>
+                    </div>
+                    <div className="share-story-pinpad-row">
+                      <button type="button" className="row-rs-btn" title="Mou el mapa a l'esquerra" aria-label="Mou el mapa a l'esquerra"
+                        onMouseDown={() => startHold(() => nudgeMap(-6, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgeMap(-6, 0))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                      </button>
+                      <span className="share-story-pad-center" title="Mida i posició del mapa">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"></polygon><line x1="8" y1="2" x2="8" y2="18"></line><line x1="16" y1="6" x2="16" y2="22"></line></svg>
+                      </span>
+                      <button type="button" className="row-rs-btn" title="Mou el mapa a la dreta" aria-label="Mou el mapa a la dreta"
+                        onMouseDown={() => startHold(() => nudgeMap(6, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgeMap(6, 0))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </button>
+                    </div>
+                    <div className="share-story-pinpad-row">
+                      <button type="button" className="row-rs-btn" title="Gira el mapa en sentit antihorari" aria-label="Gira el mapa en sentit antihorari"
+                        onMouseDown={() => startHold(() => adjustMapRotation(-3))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => adjustMapRotation(-3))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                      </button>
+                      <button type="button" className="row-rs-btn" title="Mou el mapa avall" aria-label="Mou el mapa avall"
+                        onMouseDown={() => startHold(() => nudgeMap(0, 6))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgeMap(0, 6))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </button>
+                      <button type="button" className="row-rs-btn" title="Gira el mapa en sentit horari" aria-label="Gira el mapa en sentit horari"
+                        onMouseDown={() => startHold(() => adjustMapRotation(3))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => adjustMapRotation(3))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"></path></svg>
+                      </button>
+                    </div>
+                  </div>
+                  <div className="share-story-pinpad">
+                    <div className="share-story-pinpad-row">
+                      <span></span>
+                      <button type="button" className="row-rs-btn" title="Amunt" aria-label="Amunt"
+                        onMouseDown={() => startHold(() => nudgePin(0, -2))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgePin(0, -2))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
+                      </button>
+                      <span></span>
+                    </div>
+                    <div className="share-story-pinpad-row">
+                      <button type="button" className="row-rs-btn" title="Esquerra" aria-label="Esquerra"
+                        onMouseDown={() => startHold(() => nudgePin(-2, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgePin(-2, 0))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                      </button>
+                      <span className="share-story-pad-center" title="Posició de la xinxeta">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C7.6 2 4 5.6 4 10c0 6 8 12 8 12s8-6 8-12c0-4.4-3.6-8-8-8z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                      </span>
+                      <button type="button" className="row-rs-btn" title="Dreta" aria-label="Dreta"
+                        onMouseDown={() => startHold(() => nudgePin(2, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgePin(2, 0))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                      </button>
+                    </div>
+                    <div className="share-story-pinpad-row">
+                      <span></span>
+                      <button type="button" className="row-rs-btn" title="Avall" aria-label="Avall"
+                        onMouseDown={() => startHold(() => nudgePin(0, 2))} onMouseUp={stopHold} onMouseLeave={stopHold}
+                        onTouchStart={() => startHold(() => nudgePin(0, 2))} onTouchEnd={stopHold}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </button>
+                      <span></span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
             <div>
               <label className="form-label">Color</label>
@@ -400,108 +507,6 @@ export default function ShareStoryModal({ concert, onClose }: { concert: Concert
                   <button key={c} type="button" className={"share-story-color-swatch" + (accentColor === c ? " active" : "")} style={{ background: c }} onClick={() => setAccentColor(c)} aria-label={"Color " + c} />
                 ))}
               </div>
-            </div>
-            <div>
-              <label className="form-label">Posició de la xinxeta al mapa</label>
-              <div className="share-story-pinpad">
-                <div className="share-story-pinpad-row">
-                  <span></span>
-                  <button type="button" className="row-rs-btn" title="Amunt" aria-label="Amunt"
-                    onMouseDown={() => startHold(() => nudgePin(0, -2))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={() => startHold(() => nudgePin(0, -2))} onTouchEnd={stopHold}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                  </button>
-                  <span></span>
-                </div>
-                <div className="share-story-pinpad-row">
-                  <button type="button" className="row-rs-btn" title="Esquerra" aria-label="Esquerra"
-                    onMouseDown={() => startHold(() => nudgePin(-2, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={() => startHold(() => nudgePin(-2, 0))} onTouchEnd={stopHold}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                  </button>
-                  <span></span>
-                  <button type="button" className="row-rs-btn" title="Dreta" aria-label="Dreta"
-                    onMouseDown={() => startHold(() => nudgePin(2, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={() => startHold(() => nudgePin(2, 0))} onTouchEnd={stopHold}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                  </button>
-                </div>
-                <div className="share-story-pinpad-row">
-                  <span></span>
-                  <button type="button" className="row-rs-btn" title="Avall" aria-label="Avall"
-                    onMouseDown={() => startHold(() => nudgePin(0, 2))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                    onTouchStart={() => startHold(() => nudgePin(0, 2))} onTouchEnd={stopHold}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                  </button>
-                  <span></span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <button type="button" className="share-story-map-edit-toggle" onClick={() => setMapEditOpen((v) => !v)}>
-                {mapEditOpen ? "Amaga l'edició del mapa" : "Edita la posició i mida del mapa"}
-              </button>
-              {mapEditOpen && (
-                <div className="share-story-mapedit">
-                  <div className="share-story-pinpad">
-                    <div className="share-story-pinpad-row">
-                      <span></span>
-                      <button type="button" className="row-rs-btn" title="Mou el mapa amunt" aria-label="Mou el mapa amunt"
-                        onMouseDown={() => startHold(() => nudgeMap(0, -6))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                        onTouchStart={() => startHold(() => nudgeMap(0, -6))} onTouchEnd={stopHold}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline></svg>
-                      </button>
-                      <span></span>
-                    </div>
-                    <div className="share-story-pinpad-row">
-                      <button type="button" className="row-rs-btn" title="Mou el mapa a l'esquerra" aria-label="Mou el mapa a l'esquerra"
-                        onMouseDown={() => startHold(() => nudgeMap(-6, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                        onTouchStart={() => startHold(() => nudgeMap(-6, 0))} onTouchEnd={stopHold}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                      </button>
-                      <span></span>
-                      <button type="button" className="row-rs-btn" title="Mou el mapa a la dreta" aria-label="Mou el mapa a la dreta"
-                        onMouseDown={() => startHold(() => nudgeMap(6, 0))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                        onTouchStart={() => startHold(() => nudgeMap(6, 0))} onTouchEnd={stopHold}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                      </button>
-                    </div>
-                    <div className="share-story-pinpad-row">
-                      <span></span>
-                      <button type="button" className="row-rs-btn" title="Mou el mapa avall" aria-label="Mou el mapa avall"
-                        onMouseDown={() => startHold(() => nudgeMap(0, 6))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                        onTouchStart={() => startHold(() => nudgeMap(0, 6))} onTouchEnd={stopHold}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
-                      </button>
-                      <span></span>
-                    </div>
-                  </div>
-                  <div className="share-story-scalepad">
-                    <button type="button" className="row-rs-btn" title="Redueix el mapa" aria-label="Redueix el mapa"
-                      onMouseDown={() => startHold(() => adjustMapScale(-0.05))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={() => startHold(() => adjustMapScale(-0.05))} onTouchEnd={stopHold}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                    <button type="button" className="row-rs-btn" title="Amplia el mapa" aria-label="Amplia el mapa"
-                      onMouseDown={() => startHold(() => adjustMapScale(0.05))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={() => startHold(() => adjustMapScale(0.05))} onTouchEnd={stopHold}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                    </button>
-                  </div>
-                  <div className="share-story-scalepad">
-                    <button type="button" className="row-rs-btn" title="Gira el mapa en sentit antihorari" aria-label="Gira el mapa en sentit antihorari"
-                      onMouseDown={() => startHold(() => adjustMapRotation(-3))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={() => startHold(() => adjustMapRotation(-3))} onTouchEnd={stopHold}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
-                    </button>
-                    <button type="button" className="row-rs-btn" title="Gira el mapa en sentit horari" aria-label="Gira el mapa en sentit horari"
-                      onMouseDown={() => startHold(() => adjustMapRotation(3))} onMouseUp={stopHold} onMouseLeave={stopHold}
-                      onTouchStart={() => startHold(() => adjustMapRotation(3))} onTouchEnd={stopHold}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.13-9.36L23 10"></path></svg>
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
             <div className="spacer"></div>
             <button type="button" className="btn-save" disabled={rendering} onClick={handleDownload}>Descarrega PNG</button>
