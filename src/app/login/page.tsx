@@ -34,7 +34,7 @@ export default async function LoginPage({
           </button>
         </div>
       </form>
-      <div className="login-copyright">© 2026 Escenari — Accés d&apos;administració</div>
+      <div className="login-copyright">© {new Date().getFullYear()} Escenari — Accés d&apos;administració</div>
     </div>
   );
 }

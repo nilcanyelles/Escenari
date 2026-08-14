@@ -33,7 +33,7 @@ function groupByDate(list: Concert[]) {
 export default function CalendariView({ bands, concerts, today }: { bands: Band[]; concerts: Concert[]; today: string }) {
   const router = useRouter();
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
-  const [calMonthIndex, setCalMonthIndex] = useState(7);
+  const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week">("month");
   const [calWeekOffset, setCalWeekOffset] = useState(0);
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
@@ -62,7 +62,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
     }
   }, [concertModalId]);
 
-  const base = new Date(2026, calMonthIndex, 1);
+  const base = new Date(parseInt(today.slice(0, 4), 10), calMonthIndex, 1);
   const y = base.getFullYear(), mIdx = base.getMonth();
   const monthLabel = MONTH_FULL[mIdx] + " de " + y;
   const startOffset = (base.getDay() + 6) % 7;

@@ -8,7 +8,6 @@ import {
   computeInvoiceYearAgg, computeProjectedYearAgg, pieSlicePath, type InvoiceRecord,
 } from "@/lib/resum-helpers";
 
-const RESUM_YEARS = [2026, 2025, 2024, 2023, 2022];
 const NBSP = " ";
 
 function HbarSplitRow({ label, valueLabel, pct1, pct2, cls1, cls2, pct3, cls3, exactLabel }: {
@@ -128,11 +127,18 @@ function MiniDonut3({ part1, part2, part3, label1, label2, label3, color1, color
 }
 
 export default function ResumView({ bands, concerts, invoices, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; today: string }) {
+  const currentYear = parseInt(today.slice(0, 4), 10);
   const [resumRange, setResumRange] = useState<"year" | "all">("year");
-  const [resumYear, setResumYear] = useState(2026);
+  const [resumYear, setResumYear] = useState(currentYear);
   const [resumBandFilter, setResumBandFilter] = useState<string[]>([]);
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
   const [bandFilterOpen, setBandFilterOpen] = useState(false);
+
+  // Anys disponibles al selector: els que apareixen a les dades, més l'any actual.
+  const yearSet: Record<number, boolean> = { [currentYear]: true };
+  concerts.forEach((c) => { yearSet[parseInt(c.date.slice(0, 4), 10)] = true; });
+  invoices.forEach((i) => { yearSet[parseInt(i.issueDate.slice(0, 4), 10)] = true; });
+  const resumYears = Object.keys(yearSet).map(Number).sort((a, b) => b - a);
 
   const bandFilterSet: Record<string, boolean> = {};
   resumBandFilter.forEach((id) => { bandFilterSet[id] = true; });
@@ -172,7 +178,7 @@ export default function ResumView({ bands, concerts, invoices, today }: { bands:
 
   if (resumRange === "all") {
     chartContainerClass = "hbars";
-    const years = RESUM_YEARS.slice().sort((a, b) => a - b);
+    const years = resumYears.slice().sort((a, b) => a - b);
     const yagg = computeYearAgg(srcConcerts, years, today);
     const invYagg = computeInvoiceYearAgg(invoiceRecords, years);
     const projYagg = computeProjectedYearAgg(srcConcerts, invoicedIds, years);
@@ -252,7 +258,7 @@ export default function ResumView({ bands, concerts, invoices, today }: { bands:
             <>
               <div className="year-picker-overlay" onClick={() => setYearPickerOpen(false)}></div>
               <div className="year-dropdown" onClick={(e) => e.stopPropagation()}>
-                {RESUM_YEARS.map((y) => (
+                {resumYears.map((y) => (
                   <button key={y} className={"year-option" + (resumRange === "year" && resumYear === y ? " active" : "")}
                     onClick={() => { setResumRange("year"); setResumYear(y); setYearPickerOpen(false); }}>{y}</button>
                 ))}

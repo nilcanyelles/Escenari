@@ -73,20 +73,26 @@ export async function resetSampleDataAction() {
       await client.query("delete from concerts");
       await client.query("delete from client_details");
 
-      for (const c of CONCERTS) {
-        await client.query(
-          `insert into concerts (id, date, time, venue, city, band_id, band_name, tags, status, amount)
-           values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-          [c.id, c.date, c.time, c.venue, c.city, c.bandId, c.bandName, JSON.stringify(c.tags), c.status, c.amount]
-        );
-      }
-      for (const i of INVOICES) {
-        await client.query(
-          `insert into invoices (id, concert_id, client, band_name, issue_date, due_date, amount, state)
-           values ($1,$2,$3,$4,$5,$6,$7,$8)`,
-          [i.id, i.concertId, i.client, i.bandName, i.issueDate, i.dueDate, i.amount, i.state]
-        );
-      }
+      // Insercions en bloc via unnest: una consulta per taula en lloc d'una per fila.
+      await client.query(
+        `insert into concerts (id, date, time, venue, city, band_id, band_name, tags, status, amount)
+         select * from unnest($1::text[], $2::date[], $3::text[], $4::text[], $5::text[], $6::text[], $7::text[], $8::jsonb[], $9::text[], $10::int[])`,
+        [
+          CONCERTS.map((c) => c.id), CONCERTS.map((c) => c.date), CONCERTS.map((c) => c.time),
+          CONCERTS.map((c) => c.venue), CONCERTS.map((c) => c.city), CONCERTS.map((c) => c.bandId),
+          CONCERTS.map((c) => c.bandName), CONCERTS.map((c) => JSON.stringify(c.tags)),
+          CONCERTS.map((c) => c.status), CONCERTS.map((c) => c.amount),
+        ]
+      );
+      await client.query(
+        `insert into invoices (id, concert_id, client, band_name, issue_date, due_date, amount, state)
+         select * from unnest($1::text[], $2::text[], $3::text[], $4::text[], $5::date[], $6::date[], $7::int[], $8::text[])`,
+        [
+          INVOICES.map((i) => i.id), INVOICES.map((i) => i.concertId), INVOICES.map((i) => i.client),
+          INVOICES.map((i) => i.bandName), INVOICES.map((i) => i.issueDate), INVOICES.map((i) => i.dueDate),
+          INVOICES.map((i) => i.amount), INVOICES.map((i) => i.state),
+        ]
+      );
 
       function hashStr(str: string) {
         let h = 0;
@@ -102,7 +108,7 @@ export async function resetSampleDataAction() {
       CONCERTS.forEach((c) => { if (c.venue) clientNames.add(c.venue); });
       INVOICES.forEach((i) => { if (i.client) clientNames.add(i.client); });
 
-      for (const name of clientNames) {
+      const clientRows = Array.from(clientNames).map((name) => {
         const h = hashStr(name);
         const letter = CIF_LETTERS[h % CIF_LETTERS.length];
         const digits = String(10000000 + (h % 90000000)).slice(-8);
@@ -110,11 +116,17 @@ export async function resetSampleDataAction() {
         const street = STREET_NAMES[Math.floor(h / 13) % STREET_NAMES.length];
         const num = (h % 98) + 1;
         const city = cityByClient[name] || "";
-        await client.query(
-          "insert into client_details (client_name, cif, nom, address) values ($1,$2,$3,$4) on conflict (client_name) do nothing",
-          [name, letter + digits, `${name} ${suffix}`, `${street}, ${num}${city ? ", " + city : ""}`]
-        );
-      }
+        return { name, cif: letter + digits, nom: `${name} ${suffix}`, address: `${street}, ${num}${city ? ", " + city : ""}` };
+      });
+      await client.query(
+        `insert into client_details (client_name, cif, nom, address)
+         select * from unnest($1::text[], $2::text[], $3::text[], $4::text[])
+         on conflict (client_name) do nothing`,
+        [
+          clientRows.map((r) => r.name), clientRows.map((r) => r.cif),
+          clientRows.map((r) => r.nom), clientRows.map((r) => r.address),
+        ]
+      );
 
       await client.query("commit");
     } catch (err) {
