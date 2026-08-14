@@ -65,7 +65,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
   useEffect(() => {
-    if (modal?.mode === "edit" && modal.concertId) {
+    if (modal?.concertId) {
       const el = rowRefs.current[modal.concertId];
       if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
@@ -169,6 +169,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
       noSubstitute: {},
       skipDefaults: true,
     });
+    if (!created) return;
     router.refresh();
     setDraftConcert(created);
     setModal({ concertId: created.id });

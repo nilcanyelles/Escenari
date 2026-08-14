@@ -297,6 +297,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       noSubstitute: {},
       skipDefaults: true,
     });
+    if (!created) return;
     router.refresh();
     setDraftConcert(created);
     setConcertModalId(created.id);
