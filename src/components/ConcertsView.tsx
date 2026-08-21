@@ -6,12 +6,18 @@ import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
 import { uniqueTags } from "@/lib/tags";
 import { rsIsComplete } from "@/lib/route-sheet";
-import { deleteConcertAction, saveConcertAction } from "@/app/(app)/concerts/actions";
+import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import ConcertModal from "@/components/ConcertModal";
 import InvoicePreview from "@/components/InvoicePreview";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
+
+const STATUS_CYCLE = ["cancel·lat", "pendent", "confirmat"];
+function nextStatus(status: string): string {
+  const i = STATUS_CYCLE.indexOf(status);
+  return STATUS_CYCLE[(i === -1 ? 0 : i + 1) % STATUS_CYCLE.length];
+}
 
 export function DeleteConcertBtn({ id }: { id: string }) {
   const router = useRouter();
@@ -60,9 +66,14 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
   const [generatingFor, setGeneratingFor] = useState<string | null>(null);
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
+  const PAGE_SIZE = 50;
+  const [upcomingVisible, setUpcomingVisible] = useState(PAGE_SIZE);
+  const [pastVisible, setPastVisible] = useState(PAGE_SIZE);
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const statusSaveTimers = useRef<Record<string, number>>({});
 
   useEffect(() => {
     if (modal?.concertId) {
@@ -70,6 +81,28 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
       if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     }
   }, [modal]);
+
+  useEffect(() => {
+    setUpcomingVisible(PAGE_SIZE);
+    setPastVisible(PAGE_SIZE);
+  }, [search, statusFilter, tagFilter]);
+
+  // Reconcile optimistic status overrides against the server-confirmed prop: only
+  // drop an override once `concerts` (refreshed by router.refresh() after the write)
+  // actually agrees with it. Clearing on a timer/guess instead of this causes a
+  // visible flicker back to the stale value while the refresh is still in flight.
+  useEffect(() => {
+    setStatusOverrides((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const serverConcert = concerts.find((c) => c.id === id);
+        if (serverConcert && serverConcert.status === next[id]) { delete next[id]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [concerts]);
 
   const searchL = search.toLowerCase();
   const list = concerts.filter((c) =>
@@ -86,7 +119,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   invoices.forEach((i) => { invByConcert[i.concertId] = i; });
 
   function ConcertRow({ c }: { c: Concert }) {
-    const sc = statusColors(c.status);
+    const displayStatus = statusOverrides[c.id] ?? c.status;
+    const sc = statusColors(displayStatus);
     const inv = invByConcert[c.id];
     let invoiceCell: React.ReactNode;
     if (inv) {
@@ -99,7 +133,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           </button>
         </div>
       );
-    } else if (c.status === "confirmat") {
+    } else if (displayStatus === "confirmat") {
       invoiceCell = (
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
           <button type="button" className="row-rs-btn" title="Genera factura" aria-label="Genera factura" disabled={generatingFor === c.id}
@@ -127,7 +161,20 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
         <div className="t-dim">{c.city}</div>
         <div className="t-dim">{c.venue}</div>
         <div className="t-dim">{c.festaEntitat || "—"}</div>
-        <div><span className="badge" style={{ background: sc.bg, color: sc.color }}>{c.status}</span></div>
+        <div>
+          <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
+            title="Canvia l'estat" aria-label="Canvia l'estat"
+            onClick={(e) => {
+              e.stopPropagation();
+              const next = nextStatus(displayStatus);
+              setStatusOverrides((prev) => ({ ...prev, [c.id]: next }));
+              if (statusSaveTimers.current[c.id]) window.clearTimeout(statusSaveTimers.current[c.id]);
+              statusSaveTimers.current[c.id] = window.setTimeout(async () => {
+                await setConcertStatusAction(c.id, next);
+                router.refresh();
+              }, 400);
+            }}>{displayStatus}</button>
+        </div>
         <div className="rs-btn-group"><RouteSheetBtns c={c} onEdit={() => setRsModalConcertId(c.id)} onPreview={() => setRsPreviewConcertId(c.id)} /></div>
         <div style={{ textAlign: "center" }}>{invoiceCell}</div>
         <div onClick={(e) => e.stopPropagation()}><DeleteConcertBtn id={c.id} /></div>
@@ -185,7 +232,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="glow-blooms" aria-hidden="true"></div>
       <div className="filter-bar concerts-filterbar">
         <input className="input search" type="text" placeholder="Cercar grup, sala, ciutat…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -198,25 +246,41 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button className="btn-accent" onClick={handleNewConcert}>+ Nou concert</button>
+        <button className="glow-cta" onClick={handleNewConcert}>+ Nou concert</button>
       </div>
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>
       ) : (
-        <div className="table-wrap no-clip">
+        <div className="concerts-list">
           <div className="t-row t-head concerts-cols">
             <div>Data</div><div>Grup</div><div>Població</div><div>Ubicació</div><div>Festa/entitat</div><div>Estat</div>
             <div style={{ textAlign: "center" }}>FDR</div><div style={{ textAlign: "center" }}>Factura</div><div></div>
           </div>
-          {upcomingList.map((c) => <ConcertRow key={c.id} c={c} />)}
-          {pastList.length > 0 && (
-            <div className="concerts-section-divider">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-              <span>Bolos realitzats ({pastList.length})</span>
-            </div>
+          <div className="table-wrap no-clip">
+            {upcomingList.slice(0, upcomingVisible).map((c) => <ConcertRow key={c.id} c={c} />)}
+          </div>
+          {upcomingVisible < upcomingList.length && (
+            <button type="button" className="load-more-btn" onClick={() => setUpcomingVisible((v) => v + PAGE_SIZE)}>
+              Mostra {Math.min(PAGE_SIZE, upcomingList.length - upcomingVisible)} més ({upcomingList.length - upcomingVisible} restants)
+            </button>
           )}
-          {pastList.map((c) => <ConcertRow key={c.id} c={c} />)}
+          {pastList.length > 0 && (
+            <>
+              <div className="concerts-section-divider">
+                <span>Bolos realitzats</span>
+                <span className="concerts-section-divider-count">{pastList.length}</span>
+              </div>
+              <div className="table-wrap no-clip">
+                {pastList.slice(0, pastVisible).map((c) => <ConcertRow key={c.id} c={c} />)}
+              </div>
+            </>
+          )}
+          {pastVisible < pastList.length && (
+            <button type="button" className="load-more-btn" onClick={() => setPastVisible((v) => v + PAGE_SIZE)}>
+              Mostra {Math.min(PAGE_SIZE, pastList.length - pastVisible)} més ({pastList.length - pastVisible} restants)
+            </button>
+          )}
         </div>
       )}
 

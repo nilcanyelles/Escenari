@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Person } from "@/lib/types";
+import { syncBandPeopleToContacts } from "@/app/(app)/contactes/actions";
 
 export type SaveBandInput = {
   id: string;
@@ -40,9 +41,45 @@ export async function saveBandAction(data: SaveBandInput) {
     [newName || existing.name, JSON.stringify(tags), data.id]
   );
 
+  await syncBandPeopleToContacts(members.concat(crew));
+
   revalidatePath("/grups");
   revalidatePath("/concerts");
   revalidatePath("/");
   revalidatePath("/calendari");
   revalidatePath("/base-de-dades");
+  revalidatePath("/contactes");
+}
+
+// Els músics/crew viuen dins dels grups (sense identitat pròpia): la mateixa
+// persona pot aparèixer a diversos grups com a entrades independents amb el
+// mateix nom. Editar el seu contacte actualitza totes les entrades que
+// coincideixin de nom a tots els grups, perquè es vegi com una sola persona.
+export async function updatePersonContactAction(data: { name: string; phone: string; email: string; instruments: string[] }) {
+  const pool = db();
+  const name = (data.name || "").trim();
+  if (!name) return;
+  const phone = (data.phone || "").trim();
+  const email = (data.email || "").trim();
+  const instruments = (data.instruments || []).filter((i) => i && i.trim());
+
+  const { rows } = await pool.query("select id, members, crew from bands");
+  for (const row of rows) {
+    let changed = false;
+    const patch = (list: Person[]) => list.map((p) => {
+      if (p.name !== name) return p;
+      changed = true;
+      return { ...p, phone, email, instruments };
+    });
+    const members = patch(row.members || []);
+    const crew = patch(row.crew || []);
+    if (changed) {
+      await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), row.id]);
+    }
+  }
+
+  await syncBandPeopleToContacts([{ name, role: "", phone, email }]);
+
+  revalidatePath("/grups");
+  revalidatePath("/contactes");
 }

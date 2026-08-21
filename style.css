@@ -133,7 +133,16 @@ button { font-family: inherit; }
   border-bottom: 1px solid var(--border);
   padding: 14px 18px; display: none; align-items: center; gap: 10px;
 }
-.content { flex: 1; padding: 32px 36px; padding-bottom: 32px; }
+.content { flex: 1; padding: 32px 36px; padding-bottom: 32px; position: relative; }
+
+.page-transition { animation: page-fade-in 0.32s cubic-bezier(0.16, 1, 0.3, 1); }
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-transition { animation: none; }
+}
 
 .page-header {
   display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 20px;
@@ -144,17 +153,31 @@ button { font-family: inherit; }
 .page-header-brand { display: flex; align-items: center; }
 .topbar-logo-img { height: 26px; width: auto; }
 .topnav {
+  position: relative;
   justify-self: center; display: flex; align-items: center; gap: 2px;
   background: var(--bg-panel); border: 1px solid var(--border); border-radius: 13px; padding: 4px;
 }
+.topnav-indicator {
+  position: absolute; top: 4px; bottom: 4px; left: 0; z-index: 0;
+  background: linear-gradient(135deg, oklch(0.66 0.25 330), oklch(0.58 0.23 295));
+  box-shadow: 0 6px 20px -6px oklch(0.6 0.27 330 / 0.65);
+  border-radius: 9px;
+  transition: transform 0.55s cubic-bezier(0.16, 1, 0.3, 1), width 0.55s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.15s ease;
+  pointer-events: none;
+}
 .topnav-item {
+  position: relative; z-index: 1;
   display: flex; align-items: center; gap: 8px; text-align: left;
   background: transparent; border: none; border-radius: 9px;
   padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500;
   color: var(--text-muted); white-space: nowrap;
+  transition: color 0.2s ease;
 }
 .topnav-item:hover { background: oklch(1 0 0 / 0.05); color: var(--text); }
-.topnav-item.active { background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-strong); }
+.topnav-item.active { color: oklch(0.99 0.01 330); }
+@media (prefers-reduced-motion: reduce) {
+  .topnav-indicator { transition: opacity 0.15s ease; }
+}
 .page-title-badge {
   height: 40px; border-radius: 12px; flex: none;
   background: linear-gradient(135deg, oklch(0.68 0.19 290 / 0.25), oklch(0.68 0.19 290 / 0.06));
@@ -371,7 +394,20 @@ button { font-family: inherit; }
 .badge { font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; flex: none; white-space: nowrap; }
 .badge-btn { all: unset; box-sizing: border-box; font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; flex: none; white-space: nowrap; cursor: pointer; }
 .badge-btn:hover { filter: brightness(1.15); }
+.badge-btn:disabled { opacity: 0.6; cursor: default; pointer-events: none; }
 .badge.sm { font-size: 10.5px; padding: 2px 8px; }
+.instrument-badge { background: oklch(0.68 0.19 290 / 0.14); color: oklch(0.72 0.16 290); display: inline-flex; align-items: center; gap: 5px; padding-left: 4px; }
+.instrument-badge:not(:has(.instrument-badge-icon)) { padding-left: 9px; }
+.instrument-badge-icon { width: 18px; height: 18px; object-fit: contain; flex: none; border-radius: 4px; }
+.badge.sm .instrument-badge-icon { width: 14px; height: 14px; }
+.instrument-badge-x {
+  all: unset; box-sizing: border-box; display: flex; align-items: center; justify-content: center;
+  width: 13px; height: 13px; border-radius: 50%; cursor: pointer; color: inherit; opacity: 0.7;
+}
+.instrument-badge-x:hover { opacity: 1; background: oklch(1 0 0 / 0.15); }
+.instrument-dropdown { width: 240px; padding: 8px; }
+.instrument-search { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
+.instrument-option-list { max-height: 220px; overflow-y: auto; }
 .status-cycle-btn {
   all: unset; font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 20px;
   cursor: pointer; text-transform: capitalize; text-align: center; box-sizing: border-box;
@@ -436,15 +472,14 @@ button { font-family: inherit; }
 
 /* ---------- FILTER BARS ---------- */
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-.concerts-filterbar {
-  position: sticky; top: 75px; z-index: 3; background: var(--bg);
-  padding: 10px 0; margin: -10px 0;
+.concerts-list, .contactes-list { display: flex; flex-direction: column; gap: 16px; }
+.t-head.concerts-cols, .t-head.contactes-cols {
+  position: sticky; top: 75px; z-index: 2; background: var(--bg-card);
+  border-radius: var(--radius); border: 1px solid var(--border);
 }
-.t-head.concerts-cols { position: sticky; top: 133px; z-index: 2; background: var(--bg-card); }
 .t-head.db-cols { position: sticky; top: 75px; z-index: 2; background: var(--bg-card); }
 @media (max-width: 899px) {
-  .concerts-filterbar { top: 63px; }
-  .t-head.concerts-cols { top: 169px; }
+  .t-head.concerts-cols, .t-head.contactes-cols { top: 63px; }
   .t-head.db-cols { top: 63px; }
 }
 .input, select.input {
@@ -481,12 +516,23 @@ button { font-family: inherit; }
 .t-head button { all: unset; cursor: pointer; }
 .t-head button:hover { color: var(--text); }
 .concerts-section-divider {
-  display: flex; align-items: center; gap: 8px;
-  padding: 13px 18px; font-size: 12.5px; font-weight: 700; color: var(--text-muted);
-  text-transform: uppercase; letter-spacing: 0.06em;
-  background: var(--bg-deep); border-bottom: 2px solid var(--border); border-top: 2px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+  width: fit-content; margin: 4px 0 4px 4px;
+  font-size: 13px; font-weight: 800; color: var(--text-muted);
+  text-transform: uppercase; letter-spacing: 0.07em;
 }
-.concerts-section-divider svg { flex: none; color: var(--text-fainter); }
+.concerts-section-divider-count {
+  margin-left: 2px; padding: 2px 9px; border-radius: 999px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: none;
+  background: var(--bg-panel); color: var(--text-faint);
+}
+.load-more-btn {
+  display: block; width: fit-content; margin: 14px auto; text-align: center;
+  background: transparent; border: none; border-radius: 999px;
+  padding: 8px 18px; font-size: 12.5px; font-weight: 600; color: var(--text-faint); cursor: pointer;
+}
+.load-more-btn:hover { color: var(--text); }
+.glow .load-more-btn:hover { color: oklch(0.85 0.1 330); }
 .row-actions { display: flex; gap: 10px; justify-content: flex-end; }
 .row-action-link { all: unset; cursor: pointer; font-size: 12px; }
 .row-action-link.edit { color: var(--accent-text); }
@@ -548,6 +594,7 @@ button { font-family: inherit; }
 .rs-btn-group { display: flex; align-items: center; justify-content: center; gap: 4px; }
 
 .concerts-cols { grid-template-columns: 100px 1.2fr 0.9fr 0.9fr 0.9fr 0.8fr 92px 90px 34px; min-width: 870px; }
+.contactes-cols { grid-template-columns: 1.2fr 1fr 1.1fr 1fr 1.3fr 34px; min-width: 760px; }
 .fact-cols { grid-template-columns: 1fr 1.3fr 1fr 1fr 0.9fr 40px; min-width: 600px; }
 .db-cols { grid-template-columns: 70px 135px 1.2fr 1fr 1fr 0.9fr 0.9fr 0.9fr 110px; min-width: 960px; }
 .db-cols > * { text-align: center; justify-self: center; }
@@ -689,15 +736,32 @@ button { font-family: inherit; }
   width: 32px; height: 32px; flex: none;
   display: flex; align-items: center; justify-content: center; color: var(--text-faint);
 }
-.modal-tabs { display: flex; gap: 4px; background: var(--bg-card-2); border: 1px solid var(--border-input); border-radius: 10px; padding: 3px; margin-bottom: 16px; }
+.modal-tabs { position: relative; display: flex; background: var(--bg-card-2); border: 1px solid var(--border-input); border-radius: 10px; padding: 3px; margin-bottom: 16px; }
+.modal-tabs-indicator {
+  position: absolute; top: 3px; bottom: 3px; left: 3px; z-index: 0;
+  width: calc((100% - 6px) / 3);
+  background: linear-gradient(135deg, oklch(0.66 0.25 330), oklch(0.58 0.23 295));
+  box-shadow: 0 4px 14px -4px oklch(0.6 0.27 330 / 0.55);
+  border-radius: 7px;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+.modal-tabs button, .modal-tabs .cf-rs-tab-wrap { position: relative; z-index: 1; }
 .modal-tabs button {
   flex: 1; border: none; background: transparent; cursor: pointer;
   padding: 8px 10px; border-radius: 7px; font-size: 12.5px; font-weight: 600; color: var(--text-muted);
-  transition: color .15s ease, background .15s ease;
+  transition: color .15s ease;
 }
-.modal-tabs button.active { background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-strong); }
+.modal-tabs button.active {
+  color: oklch(0.99 0.01 330);
+}
 .cf-view-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 14px; }
 .cf-view-value { margin-top: 4px; font-size: 14px; font-weight: 600; color: var(--text); }
+.member-row-btn {
+  background: transparent; border: none; padding: 0; text-align: left; cursor: pointer;
+  display: block; width: 100%; font-family: inherit;
+}
+.member-row-btn:hover { color: oklch(0.68 0.19 290); }
 .modal.rs-doc-modal { width: 900px; max-width: 95vw; padding: 0; overflow: hidden; display: flex; flex-direction: column; }
 .rs-doc-top-toolbar { display: flex; align-items: center; gap: 8px; padding: 10px 14px; background: oklch(0.2 0.02 258); flex: none; }
 .rs-doc-icon-btn {
@@ -862,15 +926,14 @@ button { font-family: inherit; }
 }
 .band-modal-name { font-family: 'Space Grotesk', sans-serif; font-size: 24px; font-weight: 700; color: white; text-shadow: 0 1px 4px rgba(0,0,0,0.5); }
 .band-modal-head .modal-close { color: white; }
-.band-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; font-size: 12.5px; }
-.band-detail-label { color: var(--text-fainter); }
-.band-detail-value { font-weight: 600; margin-top: 2px; }
-.band-section-title { font-size: 12px; color: var(--text-fainter); margin-bottom: 6px; }
-.band-members { display: flex; flex-direction: column; gap: 4px; }
-.band-member { font-size: 12.5px; }
-.band-history-list { display: flex; flex-direction: column; gap: 6px; max-height: 180px; overflow: auto; }
-.band-history-row { display: flex; justify-content: space-between; font-size: 12px; background: var(--bg-deep); border-radius: 6px; padding: 8px 10px; }
-.band-history-amount { color: var(--text-faint); }
+.member-avatar { width: 92px; height: 92px; border-radius: 50%; object-fit: cover; border: 1px solid var(--border-input); flex: none; }
+.member-profile-modal { width: 580px; padding: 32px; }
+/* Deliberately more generous than .modal-form's own 12px sibling gap: these
+   three groups (Catxet, Músics, Crew) are equal-standing sections, not a
+   single flowing list, so they read as distinct blocks rather than one
+   undifferentiated stack. List rows inside each section keep their own
+   tighter 6px rhythm, giving the box two clear tiers of spacing. */
+.band-info-view { display: flex; flex-direction: column; gap: 20px; }
 
 .invoice-preview { background: var(--bg-deep); border-radius: var(--radius-sm); padding: 12px; font-size: 12.5px; display: flex; justify-content: space-between; }
 
@@ -907,4 +970,161 @@ button { font-family: inherit; }
   .cal-right-col { flex: 1 1 420px; min-width: 280px; max-width: 520px; }
   .cal-side-panel { flex: 1; min-height: 0; box-sizing: border-box; overflow-y: auto; }
   .cal-cols-week .cal-left-col { flex: 1 1 auto; max-width: none; width: 100%; }
+}
+
+/* =========================================================================
+   GLOW — platform-wide redesign direction, established on Concerts and
+   extended to every tab.
+   <!-- impeccable:direction glow-v1
+   THESIS: every screen reads as a lit stage, not a spreadsheet — one
+   committed magenta-violet glow against near-black, refusing the flat
+   card-grid dashboard default.
+   OWN-WORLD: near-black ground; two huge soft radial blooms in magenta
+   (330°) and indigo (260°) behind each page's own header; glass panels
+   (translucent fill + blur + 1px hairline); pill-shaped controls; Space
+   Grotesk display kept from the existing brand, pushed far larger than
+   any previous heading.
+   STORY: the operator sees at a glance what this screen holds and can
+   jump straight into the row/card/day that needs attention.
+   FIRST VIEWPORT: oversized page title + one-line summary over the glow,
+   glass pill filter bar (where the page has one) with a gradient pill
+   CTA, glass table/card surfaces below with glow-tinted hover and halo
+   status badges.
+   FORM: brief-pinned (user-supplied references), not concept-seed rolled.
+   Proven first on Concerts, then extended surface by surface, each
+   inheriting this established world rather than re-inventing it.
+   FINISH: unreviewed and undocumented is unfinished; this build ends
+   with the finish review, the verdict, DESIGN.md, and every shipping
+   raster carrying its provenance. -->
+   ========================================================================= */
+
+.glow {
+  position: relative;
+  padding-top: 4px;
+}
+.glow-blooms { display: none; }
+
+.glow .concerts-filterbar,
+.glow .grups-filterbar,
+.glow .db-filterbar,
+.glow .facturacio-filterbar,
+.glow .contactes-filterbar {
+  background: oklch(1 0 0 / 0.04); border: 1px solid oklch(1 0 0 / 0.09);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  border-radius: 999px; padding: 8px 8px 8px 20px; margin-bottom: 20px;
+}
+.glow .concerts-filterbar .input,
+.glow .grups-filterbar .input,
+.glow .db-filterbar .input,
+.glow .facturacio-filterbar .input,
+.glow .contactes-filterbar .input {
+  background: transparent; border: none; color: var(--text); padding: 8px 10px;
+}
+.glow .concerts-filterbar .input.search,
+.glow .grups-filterbar .input.search,
+.glow .db-filterbar .input.search,
+.glow .facturacio-filterbar .input.search,
+.glow .contactes-filterbar .input.search { min-width: 200px; }
+.glow .input:focus, .glow select.input:focus { outline: none; }
+.glow select.input {
+  background: oklch(1 0 0 / 0.05); border: 1px solid oklch(1 0 0 / 0.1); border-radius: 999px;
+}
+
+.glow-cta {
+  background: linear-gradient(135deg, oklch(0.66 0.25 330), oklch(0.58 0.23 295));
+  color: oklch(0.99 0.01 330); border: none; border-radius: 999px;
+  padding: 11px 22px; font-size: 13.5px; font-weight: 700; letter-spacing: -0.01em;
+  cursor: pointer; white-space: nowrap;
+  box-shadow: 0 10px 28px -8px oklch(0.6 0.27 330 / 0.6);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-cta:hover { transform: translateY(-1px); box-shadow: 0 14px 34px -8px oklch(0.6 0.27 330 / 0.75); }
+.glow-cta:active { transform: translateY(0); }
+.glow-cta:focus-visible { outline: 2px solid oklch(0.75 0.2 330); outline-offset: 2px; }
+
+.glow .table-wrap {
+  background: oklch(1 0 0 / 0.035); border: 1px solid oklch(1 0 0 / 0.08);
+  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65);
+}
+.glow .t-head { background: oklch(1 0 0 / 0.03); }
+.glow .t-head.concerts-cols, .glow .t-head.contactes-cols {
+  background: var(--bg-card); border-color: oklch(1 0 0 / 0.09);
+  box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.6);
+}
+.glow .t-row.clickable:hover { background: oklch(0.6 0.27 330 / 0.09); }
+.glow .t-row.selected {
+  background: oklch(0.6 0.27 330 / 0.16);
+  box-shadow: inset 2px 0 0 oklch(0.66 0.25 330);
+}
+.glow .t-row.selected:hover { background: oklch(0.6 0.27 330 / 0.2); }
+.glow .concerts-section-divider { color: oklch(0.85 0.1 330); }
+.glow .concerts-section-divider-count {
+  background: linear-gradient(135deg, oklch(0.66 0.25 330), oklch(0.58 0.23 295));
+  color: oklch(0.99 0.01 330);
+  box-shadow: 0 4px 12px -5px oklch(0.6 0.27 330 / 0.6);
+}
+
+.glow .badge, .glow .badge-btn {
+  box-shadow: 0 0 0 1px currentColor, 0 0 5px -3px currentColor;
+}
+
+.glow .pill.active {
+  background: oklch(0.6 0.27 330 / 0.18); border-color: oklch(0.6 0.27 330 / 0.5);
+  color: oklch(0.88 0.1 330);
+}
+
+.glow .cal-grid-panel,
+.glow .cal-side-panel {
+  background: oklch(1 0 0 / 0.035); border: 1px solid oklch(1 0 0 / 0.08);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+}
+
+.glow .card {
+  background: oklch(1 0 0 / 0.035); border: 1px solid oklch(1 0 0 / 0.08);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+}
+
+.glow .db-view-toggle {
+  background: transparent; border: none; padding: 0; gap: 6px;
+}
+.glow .db-view-btn { border-radius: 999px; padding: 8px 16px; }
+.glow .db-view-btn.active {
+  background: linear-gradient(135deg, oklch(0.66 0.25 330), oklch(0.58 0.23 295));
+  color: oklch(0.99 0.01 330);
+}
+
+.glow .band-card {
+  background: oklch(1 0 0 / 0.035); border: 1px solid oklch(1 0 0 / 0.08);
+  -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+  transition: transform 0.16s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.16s ease;
+}
+.glow .band-card:hover { transform: translateY(-2px); border-color: oklch(0.6 0.27 330 / 0.5); }
+
+/* Glass card, for pages built from cards rather than tables (Resum, Grups,
+   Base de dades summary tiles). */
+.glow-card {
+  background: oklch(1 0 0 / 0.035); border: 1px solid oklch(1 0 0 / 0.08);
+  -webkit-backdrop-filter: blur(24px); backdrop-filter: blur(24px);
+  border-radius: 20px;
+  box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65);
+}
+
+.glow ::selection { background: oklch(0.6 0.27 330 / 0.35); color: var(--text); }
+.glow ::-webkit-scrollbar { width: 10px; height: 10px; }
+.glow ::-webkit-scrollbar-thumb { background: oklch(0.6 0.27 330 / 0.35); border-radius: 999px; }
+.glow ::-webkit-scrollbar-thumb:hover { background: oklch(0.6 0.27 330 / 0.55); }
+.glow ::-webkit-scrollbar-track { background: transparent; }
+
+@media (max-width: 640px) {
+  .glow-blooms { height: 320px; }
+  .glow .concerts-filterbar,
+  .glow .grups-filterbar,
+  .glow .db-filterbar,
+  .glow .facturacio-filterbar,
+  .glow .contactes-filterbar { border-radius: 20px; padding: 10px; }
 }

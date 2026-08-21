@@ -2,13 +2,30 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PAGES, NavIcon, USER_NAME, USER_ROLE, USER_INITIALS } from "@/lib/nav";
 import { logoutAction } from "@/app/login/actions";
+
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export default function AppShell({ todayLabel, children }: { todayLabel: string; children: React.ReactNode }) {
   const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
+  const topnavRef = useRef<HTMLDivElement>(null);
+  const [indicator, setIndicator] = useState<{ left: number; width: number; ready: boolean }>({ left: 0, width: 0, ready: false });
+
+  useIsomorphicLayoutEffect(() => {
+    function measure() {
+      const nav = topnavRef.current;
+      if (!nav) return;
+      const active = nav.querySelector<HTMLAnchorElement>(".topnav-item.active");
+      if (!active) { setIndicator((prev) => ({ ...prev, ready: false })); return; }
+      setIndicator({ left: active.offsetLeft, width: active.offsetWidth, ready: true });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    return () => window.removeEventListener("resize", measure);
+  }, [pathname]);
 
   function ProfileButton() {
     return (
@@ -31,7 +48,16 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
           <div className="page-header-brand">
             <img className="topbar-logo-img" src="/logo.webp" alt="Escenari" />
           </div>
-          <div className="topnav">
+          <div className="topnav" ref={topnavRef}>
+            <div
+              className="topnav-indicator"
+              style={{
+                transform: `translateX(${indicator.left}px)`,
+                width: indicator.width,
+                opacity: indicator.ready ? 1 : 0,
+              }}
+              aria-hidden="true"
+            ></div>
             {PAGES.map((p) => {
               const active = pathname === p.href;
               return (
@@ -41,7 +67,7 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
                   href={p.href}
                   title={p.label}
                 >
-                  <NavIcon page={p.key} color={active ? "var(--accent-text)" : "var(--text-muted)"} className="nav-icon" />
+                  <NavIcon page={p.key} color={active ? "oklch(0.99 0.01 330)" : "var(--text-muted)"} className="nav-icon" />
                   <span>{p.label}</span>
                 </Link>
               );
@@ -53,7 +79,9 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
           </div>
         </div>
 
-        <main className="content">{children}</main>
+        <main className="content">
+          <div key={pathname} className="page-transition">{children}</div>
+        </main>
       </div>
 
       <div className="bottom-nav mobile-only">

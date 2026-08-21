@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { today, addDays } from "@/lib/format";
+import { syncClientToContacts } from "@/app/(app)/contactes/actions";
 
 // Bloqueig d'assessorament (advisory lock) perquè dues generacions simultànies
 // no calculin el mateix número de factura.
@@ -40,6 +41,7 @@ export async function generateInvoiceAction(concertId: string) {
       [id, c.id, c.venue, c.band_name, todayStr, addDays(todayStr, 30), amount]
     );
     await client.query("commit");
+    await syncClientToContacts(c.venue);
   } catch (err) {
     await client.query("rollback");
     throw err;
@@ -50,6 +52,7 @@ export async function generateInvoiceAction(concertId: string) {
   revalidatePath("/facturacio");
   revalidatePath("/concerts");
   revalidatePath("/");
+  revalidatePath("/contactes");
 }
 
 export async function saveCompanyInfoAction(data: { nom: string; cif: string; address: string; iban: string }) {

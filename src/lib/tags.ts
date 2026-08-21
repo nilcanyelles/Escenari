@@ -11,6 +11,50 @@ export function uniqueTags(items: { tags?: string[] }[]): string[] {
 
 export const TAG_PRESETS = ["Rock", "Pop", "Indie", "Electrònica", "Jazz", "Flamenc/Rumba", "Hip-hop", "Folk/Tradicional"];
 
+// Splits a free-text role like "guitarra, veu i cors" into its parts. Used as
+// a fallback wherever a person has no explicit `instruments` array saved yet.
+export function splitInstruments(role: string): string[] {
+  return (role || "")
+    .split(/[,/]| i /i)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export function instrumentsFor(p: { role: string; instruments?: string[] }): string[] {
+  return p.instruments && p.instruments.length ? p.instruments : splitInstruments(p.role);
+}
+
+export const INSTRUMENT_PRESETS = [
+  "Acordió cromàtic", "Acordió diatònic", "Arpa", "Baix elèctric", "Balalaica", "Bandúrria", "Banjo", "Bateria",
+  "Bombardó", "Bombo", "Bongos", "Caixa de percussió", "Caixa de ritmes", "Caixó", "Campanes tubulars", "Castanyoles",
+  "Celesta", "Címbals", "Clarinet", "Contrabaix", "Contrafagot", "Contrasurdo", "Corn anglès", "Cornamusa", "Corneta",
+  "Darbukka", "Dolçaina", "Fagot", "Fiscorn", "Flabiol", "Flabiol i tamborí", "Flauta", "Flauta travessera", "Flautí",
+  "Gaita", "Glockenspiel", "Gong", "Gralla seca", "Gralla dolça", "Gralla baixa", "Guitarra", "Guitarra acústica",
+  "Guitarra espanyola", "Guitarra elèctrica", "Guitarró", "Harmònica", "Llaüt", "Mandolina", "Maraques", "Melòdica",
+  "Metal·lòfon", "Oboè", "Ocarina", "Orgue", "Pandereta", "Pandero", "Piano", "Piccolo", "Plats", "Platerets",
+  "Sac de gemecs", "Saxofon soprano", "Saxofon alto", "Saxofon tenor", "Saxofon baríton", "Sintetitzador", "Surdo",
+  "Tabal", "Tamborí", "Tarota", "Tenora", "Tible", "Timbal", "Timbala", "Triangle", "Trombó", "Trompeta", "Tuba",
+  "Ukelele", "Vibràfon", "Viola", "Violí", "Violoncel", "Xequeré", "Xilòfon", "Xiulet",
+];
+
+// Only a handful of instruments have a real icon asset so far (public/instruments/);
+// the rest of INSTRUMENT_PRESETS simply render without one.
+const INSTRUMENT_ICON_FILES: Record<string, string> = {
+  "acordió": "acordio.png",
+  "acordió cromàtic": "acordio.png",
+  "acordió diatònic": "acordio.png",
+  "arpa": "arpa.png",
+  "baix elèctric": "baix.png",
+  "guitarra acústica": "guitarra-acustica.png",
+  "piano": "piano.png",
+  "sintetitzador": "sintetitzador.png",
+};
+
+export function instrumentIconFor(name: string): string | null {
+  const file = INSTRUMENT_ICON_FILES[(name || "").trim().toLowerCase()];
+  return file ? "/instruments/" + file : null;
+}
+
 export const TAG_HUE: Record<string, number> = {
   "Rock": 290, "Pop": 340, "Indie": 250, "Electrònica": 200, "Jazz": 170, "Flamenc/Rumba": 25, "Hip-hop": 60, "Folk/Tradicional": 110,
 };
@@ -79,6 +123,27 @@ export function bandPhotoDataUri(b: { id: string; name: string; tags?: string[] 
     `<g transform="translate(-70,-70) scale(5.8)" fill="none" stroke="white" stroke-width="1" stroke-linecap="round" stroke-linejoin="round">${icon}</g>` +
     `</g>` +
     `<text x="150" y="168" font-family="Space Grotesk,Arial,sans-serif" font-size="72" font-weight="700" fill="white" fill-opacity="0.92" text-anchor="middle">${xmlEscape(bandInitials(b.name))}</text>` +
+    `</svg>`
+  );
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+// Cada persona té un color propi (derivat del seu nom), en el mateix estil que els grups.
+export function personColorHue(name: string): number {
+  return hashStr(name) % 360;
+}
+
+export function personPhotoDataUri(name: string): string {
+  const h = personColorHue(name);
+  const h2 = (h + 35 + (hashStr(name + "x") % 25)) % 360;
+  const svg = (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="hsl(${h},55%,40%)"/>` +
+    `<stop offset="1" stop-color="hsl(${h2},50%,22%)"/>` +
+    `</linearGradient></defs>` +
+    `<rect width="300" height="300" fill="url(#g)"/>` +
+    `<text x="150" y="172" font-family="Space Grotesk,Arial,sans-serif" font-size="86" font-weight="700" fill="white" fill-opacity="0.95" text-anchor="middle">${xmlEscape(bandInitials(name))}</text>` +
     `</svg>`
   );
   return "data:image/svg+xml;utf8," + encodeURIComponent(svg);

@@ -3,8 +3,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import type { Band, Person } from "@/lib/types";
-import { bandPhotoDataUri, tagColors } from "@/lib/tags";
+import { bandPhotoDataUri, tagColors, bandColorHue, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { saveBandAction } from "@/app/(app)/grups/actions";
+import MemberProfileModal from "@/components/MemberProfileModal";
 
 type Bf = {
   name: string;
@@ -25,16 +26,24 @@ function XIcon() {
   );
 }
 
-export default function BandModal({ band, onClose }: { band: Band; onClose: () => void }) {
+export default function BandModal({
+  band, allBands, concertCountByPerson, onClose,
+}: {
+  band: Band;
+  allBands: Band[];
+  concertCountByPerson: Record<string, number>;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const [bf, setBf] = useState<Bf>({
     name: band.name, tags: (band.tags || []).slice(), city: band.city, rate: String(band.rate),
     contact: band.contact, phone: band.phone,
-    members: (band.members || []).map((p) => ({ name: p.name, role: p.role })),
-    crew: (band.crew || []).map((p) => ({ name: p.name, role: p.role })),
+    members: (band.members || []).map((p) => ({ name: p.name, role: p.role, phone: p.phone, email: p.email, instruments: p.instruments })),
+    crew: (band.crew || []).map((p) => ({ name: p.name, role: p.role, phone: p.phone, email: p.email, instruments: p.instruments })),
   });
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [profileName, setProfileName] = useState<string | null>(null);
 
   async function handleSave() {
     setSaving(true);
@@ -59,10 +68,13 @@ export default function BandModal({ band, onClose }: { band: Band; onClose: () =
     );
   }
 
+  const bandHue = bandColorHue(band.id);
+  const modalStyle = { background: `linear-gradient(160deg, oklch(0.32 0.1 ${bandHue} / 0.55) 0%, oklch(0.2 0.02 258) 55%), oklch(0.2 0.02 258)` };
+
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal wide band-edit-modal" onClick={(e) => e.stopPropagation()}>
-        <div className="band-modal-head" style={{ backgroundImage: `linear-gradient(180deg, rgba(10,10,15,0.2), rgba(10,10,15,0.8)), url("${bandPhotoDataUri(band)}")` }}>
+      <div className="modal wide band-edit-modal" style={modalStyle} onClick={(e) => e.stopPropagation()}>
+        <div className="band-modal-head" style={{ backgroundImage: `linear-gradient(180deg, rgba(9,7,16,0.88) 0%, rgba(9,7,16,0.55) 45%, rgba(9,7,16,0.32) 100%), url("${bandPhotoDataUri(band)}")` }}>
           {isEditing ? (
             <div style={{ width: "100%" }}>
               <input className="field-input" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 17, fontWeight: 700, background: "oklch(1 0 0 / 0.12)", borderColor: "transparent", color: "#fff" }}
@@ -135,29 +147,57 @@ export default function BandModal({ band, onClose }: { band: Band; onClose: () =
               </div>
             </>
           ) : (
-            <>
-              <div className="band-detail-grid">
-                <div><div className="band-detail-label">Ciutat</div><div className="band-detail-value">{bf.city || "—"}</div></div>
-                <div><div className="band-detail-label">Catxet</div><div className="band-detail-value">{bf.rate} €</div></div>
-                <div><div className="band-detail-label">Contacte</div><div className="band-detail-value">{bf.contact || "—"}</div></div>
-                <div><div className="band-detail-label">Telèfon</div><div className="band-detail-value">{bf.phone || "—"}</div></div>
-              </div>
+            <div className="band-info-view">
+              <div><span className="form-label">Catxet</span><div className="cf-view-value">{bf.rate} €</div></div>
               <div>
-                <label className="form-label">Músics</label>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
-                  {bf.members.length ? bf.members.map((p, i) => <div key={i} className="band-detail-value">{p.name}{p.role ? " — " + p.role : ""}</div>) : <div className="empty-state">Cap músic registrat.</div>}
+                <label className="form-label">Músics{bf.members.length ? " · " + bf.members.length : ""}</label>
+                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>
+                  {bf.members.length ? bf.members.map((p, i) => {
+                    const instruments = instrumentsFor(p);
+                    return (
+                      <button key={i} type="button" className="cf-view-value member-row-btn" onClick={() => setProfileName(p.name)}>
+                        <span>{p.name}</span>
+                        {instruments.length > 0 && (
+                          <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", marginLeft: 8, verticalAlign: "middle" }}>
+                            {instruments.map((instr, j) => {
+                              const icon = instrumentIconFor(instr);
+                              return (
+                                <span key={j} className="badge instrument-badge sm">
+                                  {icon && <img className="instrument-badge-icon" src={icon} alt="" />}
+                                  {instr}
+                                </span>
+                              );
+                            })}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  }) : <div className="empty-state">Cap músic registrat.</div>}
                 </div>
               </div>
               <div>
-                <label className="form-label">Crew</label>
+                <label className="form-label">Crew{bf.crew.length ? " · " + bf.crew.length : ""}</label>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
-                  {bf.crew.length ? bf.crew.map((p, i) => <div key={i} className="band-detail-value">{p.name}{p.role ? " — " + p.role : ""}</div>) : <div className="empty-state">Cap crew registrat.</div>}
+                  {bf.crew.length ? bf.crew.map((p, i) => (
+                    <button key={i} type="button" className="cf-view-value member-row-btn" onClick={() => setProfileName(p.name)}>
+                      {p.name}{p.role && <span style={{ color: "var(--text-muted)", fontWeight: 500 }}> — {p.role}</span>}
+                    </button>
+                  )) : <div className="empty-state">Cap crew registrat.</div>}
                 </div>
               </div>
-            </>
+            </div>
           )}
         </div>
       </div>
+      {profileName && (
+        <MemberProfileModal
+          key={profileName}
+          name={profileName}
+          allBands={allBands}
+          concertCountByPerson={concertCountByPerson}
+          onClose={() => setProfileName(null)}
+        />
+      )}
     </div>
   );
 }

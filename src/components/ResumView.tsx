@@ -250,7 +250,8 @@ export default function ResumView({ bands, concerts, invoices, today }: { bands:
   );
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div className="glow-blooms" aria-hidden="true"></div>
       <div className="range-pills">
         <div className="year-select-wrap">
           <button className="pill active" onClick={() => setYearPickerOpen((v) => !v)}>{selectorLabel} ▾</button>

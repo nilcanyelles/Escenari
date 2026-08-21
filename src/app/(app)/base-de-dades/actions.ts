@@ -2,6 +2,7 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
+import { syncClientToContacts } from "@/app/(app)/contactes/actions";
 
 function revalidateAll() {
   revalidatePath("/base-de-dades");
@@ -49,7 +50,10 @@ export async function upsertClientDetailsAction(clientName: string, field: "cif"
     [clientName]
   );
   await pool.query(`update client_details set ${field} = $1 where client_name = $2`, [value, clientName]);
+  const cd = (await pool.query("select cif, nom, address from client_details where client_name=$1", [clientName])).rows[0];
+  await syncClientToContacts(clientName, cd);
   revalidateAll();
+  revalidatePath("/contactes");
 }
 
 let resetInFlight = false;

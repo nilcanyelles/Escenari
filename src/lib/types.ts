@@ -1,4 +1,4 @@
-export type Person = { name: string; role: string };
+export type Person = { name: string; role: string; phone?: string; email?: string; instruments?: string[] };
 
 export type Band = {
   id: string;
@@ -24,7 +24,7 @@ export type Concert = {
   tags: string[];
   status: "confirmat" | "pendent" | "cancel·lat";
   amount: number;
-  attendance: Record<string, "sí" | "no">;
+  attendance: Record<string, "yes" | "no">;
   substitutes: Record<string, string>;
   noSubstitute: Record<string, boolean>;
   routeSheet: unknown;
@@ -53,4 +53,20 @@ export type CompanyInfo = {
   cif: string;
   address: string;
   iban: string;
+};
+
+export type ContactKind = "grup" | "ruta" | "empresa";
+
+export type Contact = {
+  id: string;
+  name: string;
+  kinds: ContactKind[];
+  role: string;
+  phone: string;
+  email: string;
+  company: string;
+  cif: string;
+  address: string;
+  iban: string;
+  notes: string;
 };

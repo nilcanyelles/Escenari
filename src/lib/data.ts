@@ -1,5 +1,5 @@
 import { db } from "./db";
-import type { Band, Concert, Invoice, CompanyInfo, ClientDetails } from "./types";
+import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact } from "./types";
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
@@ -52,6 +52,23 @@ export async function getClientDetails(): Promise<Record<string, ClientDetails>>
 export async function getCompanyInfo(): Promise<CompanyInfo> {
   const { rows } = await db().query("select nom, cif, address, iban from company_info where id = 1");
   return rows[0] || { nom: "Escenari", cif: "", address: "", iban: "" };
+}
+
+export async function getContacts(): Promise<Contact[]> {
+  const { rows } = await db().query("select * from contacts order by name");
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    kinds: r.kinds,
+    role: r.role,
+    phone: r.phone,
+    email: r.email,
+    company: r.company,
+    cif: r.cif,
+    address: r.address,
+    iban: r.iban,
+    notes: r.notes,
+  }));
 }
 
 export async function getInvoices(): Promise<Invoice[]> {

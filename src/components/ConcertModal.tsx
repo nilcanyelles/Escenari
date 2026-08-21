@@ -334,6 +334,11 @@ export default function ConcertModal({
         </div>
 
         <div className="modal-tabs">
+          <div
+            className="modal-tabs-indicator"
+            style={{ transform: `translateX(${activeTab === "info" ? 0 : activeTab === "routesheet" ? 100 : 200}%)` }}
+            aria-hidden="true"
+          ></div>
           <button type="button" className={activeTab === "info" ? "active" : ""} onClick={() => setActiveTab("info")}>Info</button>
           {mode === "edit" && (
             <div className="cf-rs-tab-wrap">
@@ -366,7 +371,7 @@ export default function ConcertModal({
                         <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
                           {bandMatches.length ? bandMatches.map((b) => (
                             <button key={b.id} type="button" className={"year-option" + (b.id === cf.bandId ? " active" : "")} onClick={() => {
-                              setCf((prev) => ({ ...prev, bandName: b.name, bandId: b.id, attendance: {}, substitutes: {}, noSubstitute: {} }));
+                              setCf((prev) => ({ ...prev, bandName: b.name, bandId: b.id, attendance: {}, substitutes: {}, noSubstitute: {}, ...(isDraft ? { amount: String(b.rate) } : {}) }));
                               setBandDropdownOpen(false);
                             }}>{b.name}</button>
                           )) : <div className="cf-band-noresults">Cap grup coincideix</div>}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, ClientDetails } from "@/lib/types";
 import { formatDate, formatCurrency, statusColors, pad2, capitalize, MONTH_FULL, WEEKDAY_SHORT, today } from "@/lib/format";
@@ -64,6 +64,10 @@ export default function BaseDeDadesView({
   const [sortKey, setSortKey] = useState<SortKey>("date");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [datePickerFor, setDatePickerFor] = useState<string | null>(null);
+  const PAGE_SIZE = 50;
+  const [rowsVisible, setRowsVisible] = useState(PAGE_SIZE);
+
+  useEffect(() => { setRowsVisible(PAGE_SIZE); }, [search, view, sortKey, sortDir]);
 
   const searchL = search.toLowerCase();
 
@@ -110,8 +114,9 @@ export default function BaseDeDadesView({
   const countLabel = view === "concerts" ? rows.length + " registres" : view === "grups" ? bandRows.length + " grups" : clientRows.length + " clients";
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-      <div className="filter-bar">
+    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <div className="glow-blooms" aria-hidden="true"></div>
+      <div className="filter-bar db-filterbar">
         <div className="db-view-toggle">
           <button type="button" className={"db-view-btn" + (view === "grups" ? " active" : "")} onClick={() => { setView("grups"); setSearch(""); }}>Grups</button>
           <button type="button" className={"db-view-btn" + (view === "concerts" ? " active" : "")} onClick={() => { setView("concerts"); setSearch(""); }}>Concerts</button>
@@ -141,7 +146,7 @@ export default function BaseDeDadesView({
               <div>Factura</div>
               <div></div>
             </div>
-            {rows.map((r) => {
+            {rows.slice(0, rowsVisible).map((r) => {
               const sc = statusColors(r.status);
               return (
                 <div key={r.id} className="t-row db-cols">
@@ -176,6 +181,11 @@ export default function BaseDeDadesView({
                 </div>
               );
             })}
+            {rowsVisible < rows.length && (
+              <button type="button" className="load-more-btn" onClick={() => setRowsVisible((v) => v + PAGE_SIZE)}>
+                Mostra {Math.min(PAGE_SIZE, rows.length - rowsVisible)} més ({rows.length - rowsVisible} restants)
+              </button>
+            )}
           </div>
         ) : <div className="empty-state">Cap registre coincideix amb la cerca.</div>
       )}

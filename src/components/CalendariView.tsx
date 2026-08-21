@@ -313,7 +313,8 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
   }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="glow-blooms" aria-hidden="true"></div>
       <div className="range-pills cal-view-pills">
         <div className="cal-view-pills-left">
           <div className="year-select-wrap">
@@ -346,7 +347,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
           <button className={calViewMode === "week" ? "active" : ""} onClick={() => setCalViewMode("week")}>Setmana</button>
         </div>
         <div className="cal-view-pills-right">
-          <button className="btn-accent" onClick={handleNewConcert}>+ Nou concert</button>
+          <button className="glow-cta" onClick={handleNewConcert}>+ Nou concert</button>
         </div>
       </div>
 

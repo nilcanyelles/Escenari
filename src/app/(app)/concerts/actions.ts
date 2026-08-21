@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Concert } from "@/lib/types";
+import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
 
 export type SaveConcertInput = {
   id: string | null;
@@ -100,6 +101,15 @@ export async function saveConcertAction(data: SaveConcertInput) {
 export async function saveRouteSheetAction(concertId: string, routeSheet: unknown) {
   const pool = db();
   await pool.query("update concerts set route_sheet = $1 where id = $2", [JSON.stringify(routeSheet), concertId]);
+  const contacts = (routeSheet as { contacts?: { name: string; role: string; phone: string; company: string }[] } | null)?.contacts;
+  if (contacts) await syncRouteSheetContactsToContacts(contacts);
+  revalidateAll();
+  revalidatePath("/contactes");
+}
+
+export async function setConcertStatusAction(id: string, status: string) {
+  const pool = db();
+  await pool.query("update concerts set status=$1 where id=$2", [status, id]);
   revalidateAll();
 }
 

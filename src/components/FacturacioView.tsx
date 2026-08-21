@@ -47,7 +47,8 @@ export default function FacturacioView({ concerts, invoices, companyInfo }: { co
   const previewConcert = previewInvoice ? concerts.find((c) => c.id === previewInvoice.concertId) || null : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      <div className="glow-blooms" aria-hidden="true"></div>
       <div className="card" style={{ padding: "12px 16px" }}>
         <div className="card-title">Dades de l&apos;empresa emissora</div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 14, marginTop: 8 }}>
@@ -79,7 +80,7 @@ export default function FacturacioView({ concerts, invoices, companyInfo }: { co
           <option value="vençuda">Vençuda</option>
         </select>
         <div className="spacer"></div>
-        <button className="btn-accent" onClick={() => setGenModalOpen(true)}>+ Generar factura</button>
+        <button className="glow-cta" onClick={() => setGenModalOpen(true)}>+ Generar factura</button>
       </div>
 
       {list.length ? (

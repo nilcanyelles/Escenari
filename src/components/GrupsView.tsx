@@ -6,7 +6,7 @@ import { formatCurrency } from "@/lib/format";
 import { uniqueTags, tagColors, bandPhotoDataUri } from "@/lib/tags";
 import BandModal from "@/components/BandModal";
 
-export default function GrupsView({ bands, historyByBand }: { bands: Band[]; historyByBand: Record<string, number> }) {
+export default function GrupsView({ bands, historyByBand, concertCountByPerson }: { bands: Band[]; historyByBand: Record<string, number>; concertCountByPerson: Record<string, number> }) {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [tagFilterOpen, setTagFilterOpen] = useState(false);
   const [openBandId, setOpenBandId] = useState<string | null>(null);
@@ -20,7 +20,8 @@ export default function GrupsView({ bands, historyByBand }: { bands: Band[]; his
   const openBand = openBandId ? bands.find((b) => b.id === openBandId) || null : null;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <div className="glow-blooms" aria-hidden="true"></div>
       <div className="filter-bar">
         <div className="year-select-wrap">
           <button className="pill active" onClick={() => setTagFilterOpen((v) => !v)}>{tagFilterLabel} ▾</button>
@@ -73,7 +74,15 @@ export default function GrupsView({ bands, historyByBand }: { bands: Band[]; his
         <div className="empty-state">Cap grup coincideix amb els filtres.</div>
       )}
 
-      {openBand && <BandModal key={openBand.id} band={openBand} onClose={() => setOpenBandId(null)} />}
+      {openBand && (
+        <BandModal
+          key={openBand.id}
+          band={openBand}
+          allBands={bands}
+          concertCountByPerson={concertCountByPerson}
+          onClose={() => setOpenBandId(null)}
+        />
+      )}
     </div>
   );
 }
