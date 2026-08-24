@@ -52,14 +52,20 @@ export default function AppShell({
     <div className="app-shell">
       <div className="main-col">
         <div className="mobile-topbar mobile-only">
-          <img className="mobile-logo-img" src="/logo.webp" alt="Escenari" />
+          <span className="brand-lockup">
+            <img className="brand-mark" src="/logo-mark.png" alt="" />
+            <span className="brand-name">ESCENARI</span>
+          </span>
           <div className="spacer"></div>
           <ProfileButton />
         </div>
 
         <div className="page-header desktop-only">
           <div className="page-header-brand">
-            <img className="topbar-logo-img" src="/logo.webp" alt="Escenari" />
+            <span className="brand-lockup">
+              <img className="brand-mark" src="/logo-mark.png" alt="" />
+              <span className="brand-name">ESCENARI</span>
+            </span>
           </div>
           <div className="topnav" ref={topnavRef}>
             <div

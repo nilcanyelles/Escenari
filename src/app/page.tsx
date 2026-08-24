@@ -43,7 +43,10 @@ export default async function LandingPage() {
     <div className="landing">
       <div className="login-glow"></div>
       <header className="landing-header">
-        <img className="landing-logo" src="/logo.webp" alt="Escenari" />
+        <span className="brand-lockup">
+          <img className="brand-mark" src="/logo-mark.png" alt="" />
+          <span className="brand-name">ESCENARI</span>
+        </span>
         <nav className="landing-nav">
           {userId ? (
             <Link className="btn-primary landing-cta-sm" href="/resum">Obre l&apos;aplicació</Link>

@@ -1343,3 +1343,15 @@ button { font-family: inherit; }
 }
 .artist-section-title { font-size: 13px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.07em; margin: 26px 0 12px; }
 .artist-section-title:first-child { margin-top: 0; }
+
+/* ---------- BRAND LOCKUP (marca E + nom) ---------- */
+.brand-lockup { display: inline-flex; align-items: center; gap: 9px; }
+.brand-mark { height: 26px; width: auto; flex: none; }
+.brand-name {
+  font-family: "Space Grotesk", Inter, sans-serif;
+  font-size: 13.5px; font-weight: 600; letter-spacing: 0.32em;
+  color: oklch(0.78 0.1 275);
+  transform: translateY(1px);
+}
+.mobile-topbar .brand-mark { height: 22px; }
+.mobile-topbar .brand-name { font-size: 12px; }

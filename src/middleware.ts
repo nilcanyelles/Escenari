@@ -8,6 +8,6 @@ export default clerkMiddleware(async (auth, request) => {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo.webp|logo-escenari.png|instruments/).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo-mark.png|logo-escenari.png|instruments/).*)",
   ],
 };
