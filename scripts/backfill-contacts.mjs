@@ -23,9 +23,9 @@ async function upsert(f) {
   const name = (f.name || "").trim();
   if (!name) return false;
   await pool.query(
-    `insert into contacts (id, name, kinds, role, phone, email, company, cif, address, iban)
-     values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10)
-     on conflict (lower(name)) do update set
+    `insert into contacts (id, name, kinds, role, phone, email, company, cif, address, iban, workspace_id)
+     values ($1, $2, $3::jsonb, $4, $5, $6, $7, $8, $9, $10, 'ws_legacy')
+     on conflict (workspace_id, lower(name)) do update set
        kinds = (select coalesce(jsonb_agg(distinct k), '[]'::jsonb) from jsonb_array_elements_text(contacts.kinds || excluded.kinds) as k),
        role = case when contacts.role = '' then excluded.role else contacts.role end,
        phone = case when contacts.phone = '' then excluded.phone else contacts.phone end,

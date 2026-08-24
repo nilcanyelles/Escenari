@@ -3,16 +3,29 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { PAGES, NavIcon, USER_NAME, USER_ROLE, USER_INITIALS } from "@/lib/nav";
-import { logoutAction } from "@/app/login/actions";
+import { SignOutButton } from "@clerk/nextjs";
+import { NavIcon, initialsOf, type NavPage } from "@/lib/nav";
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-export default function AppShell({ todayLabel, children }: { todayLabel: string; children: React.ReactNode }) {
+export type ShellUser = { name: string; roleLabel: string };
+
+export default function AppShell({
+  todayLabel,
+  pages,
+  user,
+  children,
+}: {
+  todayLabel: string;
+  pages: NavPage[];
+  user: ShellUser;
+  children: React.ReactNode;
+}) {
   const pathname = usePathname();
   const [profileOpen, setProfileOpen] = useState(false);
   const topnavRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState<{ left: number; width: number; ready: boolean }>({ left: 0, width: 0, ready: false });
+  const initials = initialsOf(user.name);
 
   useIsomorphicLayoutEffect(() => {
     function measure() {
@@ -30,7 +43,7 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
   function ProfileButton() {
     return (
       <button className="profile-btn" onClick={() => setProfileOpen((v) => !v)}>
-        <div className="profile-btn-avatar">{USER_INITIALS}</div>
+        <div className="profile-btn-avatar">{initials}</div>
       </button>
     );
   }
@@ -58,7 +71,7 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
               }}
               aria-hidden="true"
             ></div>
-            {PAGES.map((p) => {
+            {pages.map((p) => {
               const active = pathname === p.href;
               return (
                 <Link
@@ -85,7 +98,7 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
       </div>
 
       <div className="bottom-nav mobile-only">
-        {PAGES.map((p) => {
+        {pages.map((p) => {
           const active = pathname === p.href;
           return (
             <Link
@@ -104,14 +117,14 @@ export default function AppShell({ todayLabel, children }: { todayLabel: string;
       {profileOpen && (
         <div className="profile-overlay" onClick={() => setProfileOpen(false)}>
           <div className="profile-popover" onClick={(e) => e.stopPropagation()}>
-            <div className="profile-popover-avatar">{USER_INITIALS}</div>
-            <div className="profile-popover-name">{USER_NAME}</div>
-            <div className="profile-popover-role">{USER_ROLE}</div>
-            <form action={logoutAction}>
-              <button className="btn-danger-outline" style={{ width: "100%" }} type="submit">
+            <div className="profile-popover-avatar">{initials}</div>
+            <div className="profile-popover-name">{user.name}</div>
+            <div className="profile-popover-role">{user.roleLabel}</div>
+            <SignOutButton redirectUrl="/">
+              <button className="btn-danger-outline" style={{ width: "100%" }} type="button">
                 Tanca sessió
               </button>
-            </form>
+            </SignOutButton>
           </div>
         </div>
       )}

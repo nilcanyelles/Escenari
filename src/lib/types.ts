@@ -10,6 +10,10 @@ export type Band = {
   tags: string[];
   members: Person[];
   crew: Person[];
+  joinCode?: string;
+  logo?: string;
+  color1?: string;
+  color2?: string;
 };
 
 export type Concert = {

@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Person } from "@/lib/types";
+import { requireManagerAction } from "@/lib/current-user";
 import { syncBandPeopleToContacts } from "@/app/(app)/contactes/actions";
 
 export type SaveBandInput = {
@@ -18,6 +19,7 @@ export type SaveBandInput = {
 };
 
 export async function saveBandAction(data: SaveBandInput) {
+  const { workspaceId } = await requireManagerAction();
   const pool = db();
   const newName = (data.name || "").trim();
   const tags = data.tags.filter((t) => t && t.trim());
@@ -28,24 +30,24 @@ export async function saveBandAction(data: SaveBandInput) {
   const contact = (data.contact || "").trim();
   const phone = (data.phone || "").trim();
 
-  const existing = (await pool.query("select name from bands where id=$1", [data.id])).rows[0];
+  const existing = (await pool.query("select name from bands where id=$1 and workspace_id=$2", [data.id, workspaceId])).rows[0];
   if (!existing) return;
 
   await pool.query(
-    `update bands set name=$1, tags=$2, city=$3, rate=$4, contact=$5, phone=$6, members=$7, crew=$8 where id=$9`,
-    [newName || existing.name, JSON.stringify(tags), city, rate, contact, phone, JSON.stringify(members), JSON.stringify(crew), data.id]
+    `update bands set name=$1, tags=$2, city=$3, rate=$4, contact=$5, phone=$6, members=$7, crew=$8 where id=$9 and workspace_id=$10`,
+    [newName || existing.name, JSON.stringify(tags), city, rate, contact, phone, JSON.stringify(members), JSON.stringify(crew), data.id, workspaceId]
   );
 
   await pool.query(
-    "update concerts set band_name=$1, tags=$2 where band_id=$3",
-    [newName || existing.name, JSON.stringify(tags), data.id]
+    "update concerts set band_name=$1, tags=$2 where band_id=$3 and workspace_id=$4",
+    [newName || existing.name, JSON.stringify(tags), data.id, workspaceId]
   );
 
-  await syncBandPeopleToContacts(members.concat(crew));
+  await syncBandPeopleToContacts(workspaceId, members.concat(crew));
 
   revalidatePath("/grups");
   revalidatePath("/concerts");
-  revalidatePath("/");
+  revalidatePath("/resum");
   revalidatePath("/calendari");
   revalidatePath("/base-de-dades");
   revalidatePath("/contactes");
@@ -56,6 +58,7 @@ export async function saveBandAction(data: SaveBandInput) {
 // mateix nom. Editar el seu contacte actualitza totes les entrades que
 // coincideixin de nom a tots els grups, perquè es vegi com una sola persona.
 export async function updatePersonContactAction(data: { name: string; phone: string; email: string; instruments: string[] }) {
+  const { workspaceId } = await requireManagerAction();
   const pool = db();
   const name = (data.name || "").trim();
   if (!name) return;
@@ -63,7 +66,7 @@ export async function updatePersonContactAction(data: { name: string; phone: str
   const email = (data.email || "").trim();
   const instruments = (data.instruments || []).filter((i) => i && i.trim());
 
-  const { rows } = await pool.query("select id, members, crew from bands");
+  const { rows } = await pool.query("select id, members, crew from bands where workspace_id=$1", [workspaceId]);
   for (const row of rows) {
     let changed = false;
     const patch = (list: Person[]) => list.map((p) => {
@@ -78,7 +81,7 @@ export async function updatePersonContactAction(data: { name: string; phone: str
     }
   }
 
-  await syncBandPeopleToContacts([{ name, role: "", phone, email }]);
+  await syncBandPeopleToContacts(workspaceId, [{ name, role: "", phone, email }]);
 
   revalidatePath("/grups");
   revalidatePath("/contactes");

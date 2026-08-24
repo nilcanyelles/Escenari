@@ -1,10 +1,12 @@
 import GrupsView from "@/components/GrupsView";
 import { getBands, getConcerts } from "@/lib/data";
+import { requireManager } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function GrupsPage() {
-  const [bands, concerts] = await Promise.all([getBands(), getConcerts()]);
+  const { workspaceId } = await requireManager();
+  const [bands, concerts] = await Promise.all([getBands(workspaceId), getConcerts(workspaceId)]);
   const historyByBand: Record<string, number> = {};
   const concertCountByPerson: Record<string, number> = {};
   concerts.forEach((c) => {

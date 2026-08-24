@@ -44,8 +44,8 @@ async function main() {
     console.log(`Bands: ${BANDS.length}`);
     for (const b of BANDS) {
       await client.query(
-        `insert into bands (id, name, city, rate, contact, phone, tags, members, crew)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        `insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'ws_legacy', upper(substr(md5(random()::text || $1), 1, 6)))
          on conflict (id) do update set name=$2, city=$3, rate=$4, contact=$5, phone=$6, tags=$7, members=$8, crew=$9`,
         [b.id, b.name, b.city, b.rate, b.contact, b.phone, JSON.stringify(b.tags), JSON.stringify(b.members), JSON.stringify(b.crew)]
       );
@@ -54,8 +54,8 @@ async function main() {
     console.log(`Concerts: ${CONCERTS.length}`);
     for (const c of CONCERTS) {
       await client.query(
-        `insert into concerts (id, date, time, venue, city, band_id, band_name, tags, status, amount)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+        `insert into concerts (id, date, time, venue, city, band_id, band_name, tags, status, amount, workspace_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ws_legacy')
          on conflict (id) do update set date=$2, time=$3, venue=$4, city=$5, band_id=$6, band_name=$7, tags=$8, status=$9, amount=$10`,
         [c.id, c.date, c.time, c.venue, c.city, c.bandId, c.bandName, JSON.stringify(c.tags), c.status, c.amount]
       );
@@ -64,9 +64,9 @@ async function main() {
     console.log(`Invoices: ${INVOICES.length}`);
     for (const i of INVOICES) {
       await client.query(
-        `insert into invoices (id, concert_id, client, band_name, issue_date, due_date, amount, state)
-         values ($1,$2,$3,$4,$5,$6,$7,$8)
-         on conflict (id) do update set concert_id=$2, client=$3, band_name=$4, issue_date=$5, due_date=$6, amount=$7, state=$8`,
+        `insert into invoices (id, concert_id, client, band_name, issue_date, due_date, amount, state, workspace_id)
+         values ($1,$2,$3,$4,$5,$6,$7,$8,'ws_legacy')
+         on conflict (workspace_id, id) do update set concert_id=$2, client=$3, band_name=$4, issue_date=$5, due_date=$6, amount=$7, state=$8`,
         [i.id, i.concertId, i.client, i.bandName, i.issueDate, i.dueDate, i.amount, i.state]
       );
     }
@@ -82,9 +82,9 @@ async function main() {
     for (const name of clientNames) {
       const info = fictitiousClientInfo(name, cityByClient[name] || "");
       await client.query(
-        `insert into client_details (client_name, cif, nom, address)
-         values ($1,$2,$3,$4)
-         on conflict (client_name) do nothing`,
+        `insert into client_details (client_name, cif, nom, address, workspace_id)
+         values ($1,$2,$3,$4,'ws_legacy')
+         on conflict (workspace_id, client_name) do nothing`,
         [name, info.cif, info.nom, info.address]
       );
     }

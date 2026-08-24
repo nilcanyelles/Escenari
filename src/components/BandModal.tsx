@@ -74,7 +74,7 @@ export default function BandModal({
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal wide band-edit-modal" style={modalStyle} onClick={(e) => e.stopPropagation()}>
-        <div className="band-modal-head" style={{ backgroundImage: `linear-gradient(180deg, rgba(9,7,16,0.88) 0%, rgba(9,7,16,0.55) 45%, rgba(9,7,16,0.32) 100%), url("${bandPhotoDataUri(band)}")` }}>
+        <div className="band-modal-head" style={{ backgroundImage: `linear-gradient(180deg, rgba(9,7,16,0.88) 0%, rgba(9,7,16,0.55) 45%, rgba(9,7,16,0.32) 100%), url("${band.logo || bandPhotoDataUri(band)}")` }}>
           {isEditing ? (
             <div style={{ width: "100%" }}>
               <input className="field-input" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 17, fontWeight: 700, background: "oklch(1 0 0 / 0.12)", borderColor: "transparent", color: "#fff" }}
@@ -149,6 +149,17 @@ export default function BandModal({
           ) : (
             <div className="band-info-view">
               <div><span className="form-label">Catxet</span><div className="cf-view-value">{bf.rate} €</div></div>
+              {band.joinCode && (
+                <div>
+                  <span className="form-label">Codi d&apos;invitació</span>
+                  <div className="cf-view-value" style={{ fontFamily: "'Space Grotesk',monospace", letterSpacing: 3, fontWeight: 700 }}>
+                    {band.joinCode}
+                    <span style={{ display: "block", fontSize: 11.5, letterSpacing: 0, fontWeight: 400, color: "var(--text-muted)", marginTop: 2 }}>
+                      Comparteix-lo amb els músics perquè s&apos;uneixin al grup des del seu compte.
+                    </span>
+                  </div>
+                </div>
+              )}
               <div>
                 <label className="form-label">Músics{bf.members.length ? " · " + bf.members.length : ""}</label>
                 <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 6 }}>

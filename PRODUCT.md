@@ -8,7 +8,7 @@ web
 
 ## Users
 
-The primary user is whoever runs Escenari day to day for their own music collective/label — they manage a roster of in-house bands ("Grups") and everything about booking and running each gig ("bolo"): the calendar, the concert/venue details, band attendance and logistics, the invoice, and promotion. Today it's a single shared admin login; more user roles are planned for later (e.g. giving each band its own login to see its own calendar or route sheet).
+Two roles, each with their own Google (Clerk) login. **Managers** run a workspace: a roster of bands ("Grups") and everything about booking and running each gig ("bolo") — calendar, concert/venue details, attendance and logistics, invoicing, and promotion. **Artists** join bands via a manager invitation (matched by email) or a 6-character group code; they see the upcoming gigs of their bands and confirm/decline their own attendance. First sign-in goes through an onboarding flow: pick a role, then either fill an artist profile (name + instruments) or create a group (name, logo, colours, member invitations).
 
 ## Product Purpose
 
@@ -30,8 +30,8 @@ Unlike a spreadsheet or a generic booking CRM, Escenari's mechanism is that the 
 
 ## Capabilities and Constraints
 
-- Single shared admin login today (password-gated); per-role/per-band logins are a planned but not-yet-built direction — future work should leave room for it without building it prematurely.
-- Backend: Neon Postgres via server actions; no multi-tenancy currently — one collective's data per deployment.
+- Auth is Clerk (Google sign-in, Catalan-localized) — the old shared-password login is gone. Middleware protects everything except the landing page and the sign-in/sign-up routes; role/onboarding gating happens in the server layouts and `requireManager`/`requireArtist` helpers.
+- Multi-tenant: each manager owns a `workspace` and every data table is scoped by `workspace_id`. Pre-existing data lives in the `ws_legacy` workspace, claimed by the first manager who completes onboarding. Artists have no workspace; they reach concerts through `band_members`.
 - Catalan is the interface language throughout; not currently localized to other languages.
 
 ## Brand Commitments

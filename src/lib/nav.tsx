@@ -1,11 +1,9 @@
-export const USER_NAME = "Judit Marín";
-export const USER_ROLE = "Gestora";
-export const USER_INITIALS = "JM";
-
 export type PageKey = "resum" | "calendari" | "concerts" | "grups" | "contactes" | "facturacio" | "basedades";
 
-export const PAGES: { key: PageKey; href: string; label: string }[] = [
-  { key: "resum", href: "/", label: "Resum" },
+export type NavPage = { key: PageKey; href: string; label: string };
+
+export const PAGES: NavPage[] = [
+  { key: "resum", href: "/resum", label: "Resum" },
   { key: "calendari", href: "/calendari", label: "Calendari" },
   { key: "concerts", href: "/concerts", label: "Concerts" },
   { key: "grups", href: "/grups", label: "Grups" },
@@ -13,6 +11,22 @@ export const PAGES: { key: PageKey; href: string; label: string }[] = [
   { key: "facturacio", href: "/facturacio", label: "Facturació" },
   { key: "basedades", href: "/base-de-dades", label: "Base de dades" },
 ];
+
+// Navegació de l'àrea d'artista (reutilitza les icones existents).
+export const ARTIST_PAGES: NavPage[] = [
+  { key: "concerts", href: "/artista", label: "Els meus bolos" },
+  { key: "grups", href: "/els-meus-grups", label: "Els meus grups" },
+];
+
+export function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase() || "?";
+}
 
 export const NAV_ICON_PATHS: Record<PageKey, string> = {
   resum: '<line x1="4" y1="20" x2="4" y2="12"></line><line x1="12" y1="20" x2="12" y2="5"></line><line x1="20" y1="20" x2="20" y2="15"></line>',

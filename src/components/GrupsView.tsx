@@ -52,7 +52,7 @@ export default function GrupsView({ bands, historyByBand, concertCountByPerson }
         <div className="band-grid">
           {list.map((b) => (
             <div key={b.id} className="band-card" onClick={() => setOpenBandId(b.id)}>
-              <img className="band-photo" src={bandPhotoDataUri(b)} alt={b.name} />
+              <img className="band-photo" src={b.logo || bandPhotoDataUri(b)} alt={b.name} />
               <div className="band-card-top">
                 <div className="band-name">{b.name}</div>
                 <div style={{ display: "flex", gap: 4, flexWrap: "wrap", justifyContent: "flex-end" }}>

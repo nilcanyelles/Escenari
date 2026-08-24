@@ -1,26 +1,13 @@
-import { NextResponse, type NextRequest } from "next/server";
-import { SESSION_COOKIE, verifySessionToken } from "@/lib/auth";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-export async function middleware(request: NextRequest) {
-  const path = request.nextUrl.pathname;
-  const isPublic = path === "/login";
-  const authed = await verifySessionToken(request.cookies.get(SESSION_COOKIE)?.value);
+const isPublic = createRouteMatcher(["/", "/sign-in(.*)", "/sign-up(.*)"]);
 
-  if (!authed && !isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
-  }
-  if (authed && isPublic) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-  return NextResponse.next();
-}
+export default clerkMiddleware(async (auth, request) => {
+  if (!isPublic(request)) await auth.protect();
+});
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|logo.webp|logo-escenari.png).*)"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|icon.png|logo.webp|logo-escenari.png|instruments/).*)",
+  ],
 };

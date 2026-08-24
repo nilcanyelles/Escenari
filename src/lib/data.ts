@@ -6,8 +6,8 @@ function toDateStr(d: Date | string): string {
   return d.toISOString().slice(0, 10);
 }
 
-export async function getBands(): Promise<Band[]> {
-  const { rows } = await db().query("select * from bands order by name");
+export async function getBands(workspaceId: string): Promise<Band[]> {
+  const { rows } = await db().query("select * from bands where workspace_id=$1 order by name", [workspaceId]);
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -18,11 +18,15 @@ export async function getBands(): Promise<Band[]> {
     tags: r.tags,
     members: r.members,
     crew: r.crew,
+    joinCode: r.join_code,
+    logo: r.logo,
+    color1: r.color1,
+    color2: r.color2,
   }));
 }
 
-export async function getConcerts(): Promise<Concert[]> {
-  const { rows } = await db().query("select * from concerts order by date desc");
+export async function getConcerts(workspaceId: string): Promise<Concert[]> {
+  const { rows } = await db().query("select * from concerts where workspace_id=$1 order by date desc", [workspaceId]);
   return rows.map((r) => ({
     id: r.id,
     date: toDateStr(r.date),
@@ -42,20 +46,26 @@ export async function getConcerts(): Promise<Concert[]> {
   }));
 }
 
-export async function getClientDetails(): Promise<Record<string, ClientDetails>> {
-  const { rows } = await db().query("select client_name, cif, nom, address from client_details");
+export async function getClientDetails(workspaceId: string): Promise<Record<string, ClientDetails>> {
+  const { rows } = await db().query(
+    "select client_name, cif, nom, address from client_details where workspace_id=$1",
+    [workspaceId]
+  );
   const map: Record<string, ClientDetails> = {};
   rows.forEach((r) => { map[r.client_name] = { clientName: r.client_name, cif: r.cif, nom: r.nom, address: r.address }; });
   return map;
 }
 
-export async function getCompanyInfo(): Promise<CompanyInfo> {
-  const { rows } = await db().query("select nom, cif, address, iban from company_info where id = 1");
+export async function getCompanyInfo(workspaceId: string): Promise<CompanyInfo> {
+  const { rows } = await db().query(
+    "select nom, cif, address, iban from company_info where workspace_id=$1",
+    [workspaceId]
+  );
   return rows[0] || { nom: "Escenari", cif: "", address: "", iban: "" };
 }
 
-export async function getContacts(): Promise<Contact[]> {
-  const { rows } = await db().query("select * from contacts order by name");
+export async function getContacts(workspaceId: string): Promise<Contact[]> {
+  const { rows } = await db().query("select * from contacts where workspace_id=$1 order by name", [workspaceId]);
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -71,8 +81,8 @@ export async function getContacts(): Promise<Contact[]> {
   }));
 }
 
-export async function getInvoices(): Promise<Invoice[]> {
-  const { rows } = await db().query("select * from invoices order by issue_date desc");
+export async function getInvoices(workspaceId: string): Promise<Invoice[]> {
+  const { rows } = await db().query("select * from invoices where workspace_id=$1 order by issue_date desc", [workspaceId]);
   return rows.map((r) => ({
     id: r.id,
     concertId: r.concert_id,
