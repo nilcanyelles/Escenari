@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { INSTRUMENT_PRESETS, instrumentIconFor } from "@/lib/tags";
+import InstrumentPicker from "@/components/InstrumentPicker";
 import { completeArtistOnboardingAction, completeManagerOnboardingAction } from "./actions";
 
 type Step = "role" | "artist" | "manager" | "manager-done";
@@ -36,7 +36,6 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
   // Artista
   const [artistName, setArtistName] = useState(defaultName);
   const [instruments, setInstruments] = useState<string[]>([]);
-  const [instrumentInput, setInstrumentInput] = useState("");
 
   // Gestor
   const [managerName, setManagerName] = useState(defaultName);
@@ -47,15 +46,6 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
   const [invites, setInvites] = useState<{ email: string; name: string }[]>([{ email: "", name: "" }]);
   const [joinCode, setJoinCode] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
-
-  function addInstrument() {
-    const value = instrumentInput.trim();
-    if (!value) return;
-    if (!instruments.some((i) => i.toLowerCase() === value.toLowerCase())) {
-      setInstruments([...instruments, value]);
-    }
-    setInstrumentInput("");
-  }
 
   function onLogoFile(file: File | undefined) {
     if (!file) return;
@@ -155,34 +145,7 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
           </div>
           <div className="field-group">
             <label className="field-label">Instruments que toques</label>
-            {instruments.length > 0 && (
-              <div className="chip-row" style={{ marginBottom: 4 }}>
-                {instruments.map((inst) => {
-                  const icon = instrumentIconFor(inst);
-                  return (
-                    <span className="instrument-chip" key={inst}>
-                      {icon && <img src={icon} alt="" />}
-                      {inst}
-                      <button onClick={() => setInstruments(instruments.filter((i) => i !== inst))} aria-label={`Treu ${inst}`}>✕</button>
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-            <div className="invite-row">
-              <input
-                className="field-input"
-                list="instrument-presets"
-                value={instrumentInput}
-                onChange={(e) => setInstrumentInput(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addInstrument(); } }}
-                placeholder="Guitarra, veu, bateria..."
-              />
-              <datalist id="instrument-presets">
-                {INSTRUMENT_PRESETS.map((i) => <option key={i} value={i} />)}
-              </datalist>
-              <button className="btn-icon-ghost" onClick={addInstrument} type="button">+</button>
-            </div>
+            <InstrumentPicker value={instruments} onChange={setInstruments} />
           </div>
           <div className="onboarding-error">{error}</div>
           <button className="btn-primary" onClick={submitArtist} disabled={busy}>

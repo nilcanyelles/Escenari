@@ -1355,3 +1355,33 @@ button { font-family: inherit; }
 }
 .mobile-topbar .brand-mark { height: 22px; }
 .mobile-topbar .brand-name { font-size: 12px; }
+
+/* ---------- SELECTOR D'INSTRUMENTS ---------- */
+.instr-picker { display: flex; flex-direction: column; }
+.instr-panel {
+  margin-top: 8px; max-height: 264px; overflow-y: auto;
+  border: 1px solid var(--border-input); border-radius: 12px;
+  padding: 12px; display: flex; flex-direction: column; gap: 12px;
+  background: oklch(0.135 0.02 258 / 0.4);
+}
+.instr-cat-title {
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--text-faint); margin-bottom: 7px;
+}
+.instr-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.instr-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 500;
+  border: 1px solid var(--border-input); background: none; color: var(--text-muted);
+  cursor: pointer; transition: all .12s;
+}
+.instr-pill svg { color: var(--accent-text); opacity: 0.85; flex: none; }
+.instr-pill:hover { color: var(--text); border-color: oklch(0.68 0.19 290 / 0.55); }
+.instr-pill.active {
+  background: oklch(0.68 0.19 290 / 0.16); border-color: oklch(0.68 0.19 290 / 0.6);
+  color: var(--accent-strong);
+}
+.instr-pill.active svg { opacity: 1; }
+.instr-panel::-webkit-scrollbar { width: 8px; }
+.instr-panel::-webkit-scrollbar-thumb { background: oklch(0.68 0.19 290 / 0.3); border-radius: 999px; }
+.instr-panel::-webkit-scrollbar-track { background: transparent; }
