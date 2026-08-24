@@ -63,15 +63,21 @@ export async function completeManagerOnboardingAction(data: ManagerOnboardingInp
     await client.query("begin");
 
     // El workspace amb les dades que ja existien abans de l'era multi-compte
-    // el reclama el correu del propietari (LEGACY_OWNER_EMAIL); si la variable
-    // no està definida, el primer gestor que es doni d'alta.
-    const ownerEmail = (process.env.LEGACY_OWNER_EMAIL || "").trim().toLowerCase();
+    // és compartit: qualsevol correu de la llista LEGACY_OWNER_EMAIL (separats
+    // per comes) que es doni d'alta com a gestor hi entra com a co-gestor. Si
+    // la variable no està definida, el reclama el primer gestor que arribi.
+    const ownerEmails = (process.env.LEGACY_OWNER_EMAIL || "")
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
     const legacyTaken = (
       await client.query("select 1 from profiles where workspace_id = 'ws_legacy' limit 1")
     ).rows[0];
-    const canClaimLegacy = !legacyTaken && (!ownerEmail || email.toLowerCase() === ownerEmail);
+    const joinsLegacy = ownerEmails.length
+      ? ownerEmails.includes(email.toLowerCase())
+      : !legacyTaken;
     let wsId = "ws_legacy";
-    if (!canClaimLegacy) {
+    if (!joinsLegacy) {
       wsId = "ws" + Date.now();
       await client.query("insert into workspaces (id, name) values ($1, $2)", [wsId, groupName]);
       await client.query("insert into company_info (workspace_id) values ($1)", [wsId]);
