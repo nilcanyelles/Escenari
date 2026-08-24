@@ -7,7 +7,7 @@ import { formatDate, formatCurrency, statusColors, pad2, capitalize, MONTH_FULL,
 import { tagColors } from "@/lib/tags";
 import { deleteConcertAction } from "@/app/(app)/concerts/actions";
 import {
-  updateConcertFieldAction, cycleConcertStatusAction, updateBandFieldAction, upsertClientDetailsAction, resetSampleDataAction,
+  updateConcertFieldAction, cycleConcertStatusAction, updateBandFieldAction, upsertClientDetailsAction,
 } from "@/app/(app)/base-de-dades/actions";
 
 type View = "concerts" | "grups" | "clients";
@@ -124,11 +124,6 @@ export default function BaseDeDadesView({
         </div>
         <input className="input search" style={{ maxWidth: 340 }} type="text" placeholder="Cercar en tots els registres…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <div className="spacer"></div>
-        <button className="link-btn" onClick={async () => {
-          if (!confirm("Restaurar totes les dades d'exemple? Es perdran els canvis fets.")) return;
-          await resetSampleDataAction();
-          refresh();
-        }}>Restaurar dades d&apos;exemple</button>
         <div className="page-label">{countLabel}</div>
       </div>
 
