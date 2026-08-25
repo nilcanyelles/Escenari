@@ -1,10 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { Band } from "@/lib/types";
-import { personPhotoDataUri, personColorHue, bandColor, INSTRUMENT_PRESETS, instrumentIconFor, splitInstruments } from "@/lib/tags";
-import { updatePersonContactAction } from "@/app/(app)/grups/actions";
+import { personPhotoDataUri, personColorHue, bandColor, splitInstruments } from "@/lib/tags";
+import { instrumentIconKey } from "@/lib/instruments";
+import { updatePersonContactAction, updateMembershipRoleAction } from "@/app/(app)/grups/actions";
+import InstrumentPicker, { InstrumentIcon } from "@/components/InstrumentPicker";
+import { isValidEmail, isValidPhone } from "@/lib/validation";
+import { CrewRoleSvg, crewRoleIconKey } from "@/lib/crewRoles";
 
 function contactActions(phone: string) {
   const digits = phone.replace(/[^\d+]/g, "");
@@ -22,16 +26,18 @@ function contactActions(phone: string) {
 }
 
 export default function MemberProfileModal({
-  name, allBands, concertCountByPerson, onClose,
+  name, allBands, concertCountByPerson, onClose, onRenamed,
 }: {
   name: string;
   allBands: Band[];
   concertCountByPerson: Record<string, number>;
   onClose: () => void;
+  onRenamed?: (newName: string) => void;
 }) {
   const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [editName, setEditName] = useState(name);
 
   const memberships = useMemo(() => {
     const out: { bandId: string; bandName: string; role: string; listType: "members" | "crew" }[] = [];
@@ -59,6 +65,9 @@ export default function MemberProfileModal({
 
   const [phone, setPhone] = useState(initialPhone);
   const [email, setEmail] = useState(initialEmail);
+  const phoneValid = isValidPhone(phone);
+  const emailValid = isValidEmail(email);
+  const [showErrors, setShowErrors] = useState(false);
 
   const initialInstruments = useMemo(() => {
     for (const b of allBands) {
@@ -79,35 +88,43 @@ export default function MemberProfileModal({
 
   const [instruments, setInstruments] = useState(initialInstruments);
   const [pickerOpen, setPickerOpen] = useState(false);
-  const [pickerSearch, setPickerSearch] = useState("");
-  const [pickerPos, setPickerPos] = useState({ top: 0, left: 0 });
-  const pickerBtnRef = useRef<HTMLButtonElement>(null);
+  const [roleEdits, setRoleEdits] = useState<Record<string, string>>({});
 
-  function openPicker() {
-    const btn = pickerBtnRef.current;
-    if (btn) {
-      const r = btn.getBoundingClientRect();
-      const width = 240;
-      const left = Math.min(r.left, window.innerWidth - width - 12);
-      setPickerPos({ top: r.bottom + 6, left: Math.max(12, left) });
-    }
-    setPickerOpen(true);
+  const crewFunctions = useMemo(() => {
+    const seen: Record<string, boolean> = {};
+    const out: string[] = [];
+    memberships.filter((m) => m.listType === "crew" && m.role).forEach((m) => {
+      splitInstruments(m.role).forEach((fn) => {
+        const key = fn.toLowerCase();
+        if (!seen[key]) { seen[key] = true; out.push(fn); }
+      });
+    });
+    return out;
+  }, [memberships]);
+
+  const membershipsByBand = useMemo(() => {
+    const out: { bandId: string; bandName: string; entries: { listType: "members" | "crew"; role: string }[] }[] = [];
+    const byId: Record<string, (typeof out)[number]> = {};
+    memberships.forEach((m) => {
+      if (!byId[m.bandId]) {
+        byId[m.bandId] = { bandId: m.bandId, bandName: m.bandName, entries: [] };
+        out.push(byId[m.bandId]);
+      }
+      byId[m.bandId].entries.push({ listType: m.listType, role: m.role });
+    });
+    return out;
+  }, [memberships]);
+
+  function membershipKey(m: { bandId: string; listType: "members" | "crew" }) {
+    return m.bandId + "-" + m.listType;
   }
 
-  const pickerOptions = useMemo(() => {
-    const selected: Record<string, boolean> = {};
-    instruments.forEach((i) => { selected[i.toLowerCase()] = true; });
-    const q = pickerSearch.trim().toLowerCase();
-    return INSTRUMENT_PRESETS.filter((i) => !selected[i.toLowerCase()] && (!q || i.toLowerCase().includes(q)));
-  }, [instruments, pickerSearch]);
-
-  function addInstrument(instr: string) {
-    setInstruments((prev) => prev.concat([instr]));
-    setPickerSearch("");
-    setPickerOpen(false);
-  }
-  function removeInstrument(instr: string) {
-    setInstruments((prev) => prev.filter((i) => i !== instr));
+  function startEditing() {
+    const seed: Record<string, string> = {};
+    memberships.forEach((m) => { seed[membershipKey(m)] = m.role; });
+    setRoleEdits(seed);
+    setShowErrors(false);
+    setIsEditing(true);
   }
 
   const concertCount = concertCountByPerson[name] || 0;
@@ -115,11 +132,19 @@ export default function MemberProfileModal({
   const modalStyle = { background: `linear-gradient(160deg, oklch(0.32 0.1 ${hue} / 0.5) 0%, oklch(0.2 0.02 258) 55%), oklch(0.2 0.02 258)` };
 
   async function handleSave() {
+    const newName = editName.trim();
+    if (!newName) { setEditName(name); return; }
+    if (!phoneValid || !emailValid) { setShowErrors(true); return; }
     setSaving(true);
-    await updatePersonContactAction({ name, phone, email, instruments });
+    await updatePersonContactAction({ name, newName, phone, email, instruments });
+    const roleUpdates = memberships.filter((m) => (roleEdits[membershipKey(m)] ?? m.role) !== m.role);
+    await Promise.all(roleUpdates.map((m) =>
+      updateMembershipRoleAction({ bandId: m.bandId, listType: m.listType, name: newName, role: roleEdits[membershipKey(m)] ?? m.role })
+    ));
     router.refresh();
     setSaving(false);
     setIsEditing(false);
+    if (newName !== name) onRenamed?.(newName);
   }
 
   return (
@@ -128,7 +153,12 @@ export default function MemberProfileModal({
         <div style={{ display: "flex", alignItems: "flex-start", gap: 18, marginBottom: 24 }}>
           <img className="member-avatar" src={personPhotoDataUri(name)} alt={name} />
           <div style={{ flex: 1, minWidth: 0, paddingTop: 6 }}>
-            <div className="band-modal-name">{name}</div>
+            {isEditing ? (
+              <input className="field-input" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 17, fontWeight: 700 }}
+                type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
+            ) : (
+              <div className="band-modal-name">{name}</div>
+            )}
             <div style={{ fontSize: 13.5, color: "var(--text-faint)", marginTop: 6 }}>{concertCount} {concertCount === 1 ? "concert" : "concerts"} fets</div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "none" }}>
@@ -137,7 +167,7 @@ export default function MemberProfileModal({
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
             ) : (
-              <button type="button" className="modal-close" title="Editar contacte" aria-label="Editar contacte" onClick={() => setIsEditing(true)}>
+              <button type="button" className="modal-close" title="Editar contacte" aria-label="Editar contacte" onClick={startEditing}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
               </button>
             )}
@@ -147,8 +177,20 @@ export default function MemberProfileModal({
 
         {isEditing ? (
           <div className="form-row" style={{ marginBottom: 16 }}>
-            <div><label className="form-label">Telèfon</label><input className="field-input form-field" type="text" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
-            <div><label className="form-label">Correu electrònic</label><input className="field-input form-field" type="text" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
+            <div>
+              <label className="form-label">Telèfon</label>
+              <input className={"pill-input form-field" + (showErrors && !phoneValid ? " field-error-border" : "")}
+                type="tel" inputMode="tel" autoComplete="tel" placeholder="Ex. 612 345 678"
+                value={phone} onChange={(e) => setPhone(e.target.value)} />
+              {showErrors && !phoneValid && <div className="field-error">Aquest telèfon no sembla vàlid.</div>}
+            </div>
+            <div>
+              <label className="form-label">Correu electrònic</label>
+              <input className={"pill-input form-field" + (showErrors && !emailValid ? " field-error-border" : "")}
+                type="email" inputMode="email" autoComplete="email" placeholder="nom@exemple.com"
+                value={email} onChange={(e) => setEmail(e.target.value)} />
+              {showErrors && !emailValid && <div className="field-error">Aquest correu no sembla vàlid.</div>}
+            </div>
           </div>
         ) : (
           <div className="cf-view-grid" style={{ marginBottom: 16 }}>
@@ -163,57 +205,110 @@ export default function MemberProfileModal({
           </div>
         )}
 
-        {(instruments.length > 0 || isEditing) && (
+        {(instruments.length > 0 || crewFunctions.length > 0 || isEditing) && (
           <div style={{ marginBottom: 16 }}>
-            <label className="form-label">Instruments</label>
-            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 6 }}>
-              {instruments.map((instr, i) => {
-                const icon = instrumentIconFor(instr);
-                return isEditing ? (
-                  <span key={i} className="badge instrument-badge">
-                    {icon && <img className="instrument-badge-icon" src={icon} alt="" />}
-                    {instr}
-                    <button type="button" className="instrument-badge-x" title={"Elimina " + instr} onClick={() => removeInstrument(instr)}>
-                      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                  </span>
-                ) : (
-                  <span key={i} className="badge instrument-badge">
-                    {icon && <img className="instrument-badge-icon" src={icon} alt="" />}
-                    {instr}
-                  </span>
-                );
-              })}
-              {isEditing && (
-                <button ref={pickerBtnRef} type="button" className="rs-add-btn" style={{ marginTop: 0 }} onClick={() => (pickerOpen ? setPickerOpen(false) : openPicker())}>+ Instrument</button>
-              )}
-              {pickerOpen && (
-                <>
-                  <div className="year-picker-overlay" onClick={() => setPickerOpen(false)}></div>
-                  <div className="year-dropdown instrument-dropdown" style={{ position: "fixed", top: pickerPos.top, left: pickerPos.left }} onClick={(e) => e.stopPropagation()}>
-                    <input className="field-input instrument-search" type="text" placeholder="Cerca un instrument…" autoFocus
-                      value={pickerSearch} onChange={(e) => setPickerSearch(e.target.value)} />
-                    <div className="instrument-option-list">
-                      {pickerOptions.length ? pickerOptions.map((opt) => (
-                        <button key={opt} type="button" className="year-option" onClick={() => addInstrument(opt)}>{opt}</button>
-                      )) : <div className="cf-band-noresults">Cap instrument coincideix</div>}
-                    </div>
+            <label className="form-label">Instruments/funcions</label>
+            {isEditing ? (
+              <div style={{ marginTop: 6 }}>
+                {(instruments.length > 0 || crewFunctions.length > 0) && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8 }}>
+                    {instruments.map((instr, i) => (
+                      <span key={i} className="badge instrument-badge">
+                        <InstrumentIcon name={instr} icon={instrumentIconKey(instr)} />
+                        {instr}
+                      </span>
+                    ))}
+                    {crewFunctions.map((fn, i) => (
+                      <span key={i} className="badge instrument-badge">
+                        <CrewRoleSvg icon={crewRoleIconKey(fn)} />
+                        {fn}
+                      </span>
+                    ))}
                   </div>
-                </>
-              )}
-            </div>
+                )}
+                <button type="button" className="rs-add-btn" style={{ marginTop: 0 }} onClick={() => setPickerOpen((v) => !v)}>+ Instrument</button>
+                {pickerOpen && (
+                  <div style={{ marginTop: 8 }}>
+                    <InstrumentPicker value={instruments} onChange={setInstruments} />
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 6 }}>
+                {instruments.map((instr, i) => (
+                  <span key={i} className="badge instrument-badge">
+                    <InstrumentIcon name={instr} icon={instrumentIconKey(instr)} />
+                    {instr}
+                  </span>
+                ))}
+                {crewFunctions.map((fn, i) => (
+                  <span key={i} className="badge instrument-badge">
+                    <CrewRoleSvg icon={crewRoleIconKey(fn)} />
+                    {fn}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
         <div>
-          <label className="form-label">Grups{memberships.length ? " · " + memberships.length : ""}</label>
+          <label className="form-label">Grups{membershipsByBand.length ? " · " + membershipsByBand.length : ""}</label>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 6 }}>
-            {memberships.map((m, i) => {
-              const bc = bandColor(m.bandId);
+            {membershipsByBand.map((g) => {
+              const bc = bandColor(g.bandId);
               return (
-                <div key={i} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div key={g.bandId} style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ width: 8, height: 8, borderRadius: "50%", background: bc.color, flex: "none" }}></span>
-                  <span className="cf-view-value" style={{ marginTop: 0 }}>{m.bandName}{m.role && <span style={{ color: "var(--text-muted)", fontWeight: 500 }}> — {m.role}</span>}</span>
+                  <span className="cf-view-value" style={{ marginTop: 0, flex: "none" }}>{g.bandName}</span>
+                  {isEditing ? (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 160 }}>
+                      {g.entries.map((e, ei) => {
+                        if (e.listType === "members") {
+                          return instruments.length > 0 ? (
+                            <span key={ei} style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
+                              {instruments.map((instr, ii) => (
+                                <span key={ii} className="badge instrument-badge sm">
+                                  <InstrumentIcon name={instr} icon={instrumentIconKey(instr)} />
+                                  {instr}
+                                </span>
+                              ))}
+                            </span>
+                          ) : (
+                            <span key={ei} style={{ fontSize: 12.5, color: "var(--text-fainter)" }}>Cap instrument desat — afegeix-ne a dalt.</span>
+                          );
+                        }
+                        const key = g.bandId + "-" + e.listType;
+                        return (
+                          <input key={ei} className="pill-input" type="text"
+                            placeholder="Funcions (separades per comes)" value={roleEdits[key] ?? e.role}
+                            onChange={(ev) => setRoleEdits((prev) => ({ ...prev, [key]: ev.target.value }))} />
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <span style={{ display: "inline-flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      {g.entries.map((e, ei) => (
+                        e.listType === "crew" ? (
+                          splitInstruments(e.role).map((fn, fi) => (
+                            <span key={ei + "-" + fi} className="badge instrument-badge sm">
+                              <CrewRoleSvg icon={crewRoleIconKey(fn)} size={14} />
+                              {fn}
+                            </span>
+                          ))
+                        ) : instruments.length > 0 ? (
+                          instruments.map((instr, ii) => (
+                            <span key={ei + "-" + ii} className="badge instrument-badge sm">
+                              <InstrumentIcon name={instr} icon={instrumentIconKey(instr)} />
+                              {instr}
+                            </span>
+                          ))
+                        ) : e.role ? (
+                          <span key={ei} style={{ color: "var(--text-muted)", fontWeight: 500 }}>— {e.role}</span>
+                        ) : null
+                      ))}
+                    </span>
+                  )}
                 </div>
               );
             })}

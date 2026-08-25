@@ -6,3 +6,4 @@ tsconfig.tsbuildinfo
 .vercel
 next-env.d.ts
 .env*
+.clerk/

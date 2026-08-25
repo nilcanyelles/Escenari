@@ -62,7 +62,7 @@ export default function GrupsView({ bands, historyByBand, concertCountByPerson }
                   })}
                 </div>
               </div>
-              <div className="band-meta">{b.city} · {b.members.length} integrants</div>
+              <div className="band-meta">{(b.city || "").split(",")[0].trim()} · {b.members.length} integrants</div>
               <div className="band-foot">
                 <span className="band-foot-label">{historyByBand[b.id] || 0} actuacions</span>
                 <span className="t-strong">{formatCurrency(b.rate)}</span>

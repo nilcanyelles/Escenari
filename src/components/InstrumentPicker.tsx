@@ -2,6 +2,16 @@
 
 import { useMemo, useState } from "react";
 import { INSTRUMENT_CATEGORIES, InstrumentSvg, instrumentIconKey } from "@/lib/instruments";
+import { instrumentIconFor } from "@/lib/tags";
+import { normalize } from "@/lib/text";
+
+// Per als pocs instruments amb una imatge real pujada (public/instruments/),
+// es mostra aquesta abans que la icona vectorial genèrica.
+export function InstrumentIcon({ name, icon, size = 15 }: { name: string; icon: Parameters<typeof InstrumentSvg>[0]["icon"]; size?: number }) {
+  const photo = instrumentIconFor(name);
+  if (photo) return <img className="instr-photo-icon" src={photo} alt="" style={{ width: size, height: size }} />;
+  return <InstrumentSvg icon={icon} size={size} />;
+}
 
 // Selector d'instruments: cerca en viu, agrupat per família, selecció múltiple
 // amb un clic. Els que no són al catàleg es poden afegir com a text lliure.
@@ -13,7 +23,7 @@ export default function InstrumentPicker({
   onChange: (next: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
-  const q = query.trim().toLowerCase();
+  const q = normalize(query.trim());
 
   const selectedLower = useMemo(() => new Set(value.map((v) => v.toLowerCase())), [value]);
 
@@ -21,12 +31,12 @@ export default function InstrumentPicker({
     if (!q) return INSTRUMENT_CATEGORIES;
     return INSTRUMENT_CATEGORIES.map((c) => ({
       name: c.name,
-      items: c.items.filter((i) => i.name.toLowerCase().includes(q)),
+      items: c.items.filter((i) => normalize(i.name).includes(q)),
     })).filter((c) => c.items.length > 0);
   }, [q]);
 
   const exactMatch = useMemo(
-    () => INSTRUMENT_CATEGORIES.some((c) => c.items.some((i) => i.name.toLowerCase() === q)),
+    () => INSTRUMENT_CATEGORIES.some((c) => c.items.some((i) => normalize(i.name) === q)),
     [q]
   );
 
@@ -51,7 +61,7 @@ export default function InstrumentPicker({
         <div className="chip-row" style={{ marginBottom: 8 }}>
           {value.map((inst) => (
             <span className="instrument-chip" key={inst}>
-              <InstrumentSvg icon={instrumentIconKey(inst)} />
+              <InstrumentIcon name={inst} icon={instrumentIconKey(inst)} />
               {inst}
               <button type="button" onClick={() => toggle(inst)} aria-label={`Treu ${inst}`}>✕</button>
             </span>
@@ -87,7 +97,7 @@ export default function InstrumentPicker({
                     className={"instr-pill" + (active ? " active" : "")}
                     onClick={() => toggle(i.name)}
                   >
-                    <InstrumentSvg icon={i.icon} />
+                    <InstrumentIcon name={i.name} icon={i.icon} />
                     {i.name}
                   </button>
                 );

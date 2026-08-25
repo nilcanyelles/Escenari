@@ -57,11 +57,12 @@ export async function saveBandAction(data: SaveBandInput) {
 // persona pot aparèixer a diversos grups com a entrades independents amb el
 // mateix nom. Editar el seu contacte actualitza totes les entrades que
 // coincideixin de nom a tots els grups, perquè es vegi com una sola persona.
-export async function updatePersonContactAction(data: { name: string; phone: string; email: string; instruments: string[] }) {
+export async function updatePersonContactAction(data: { name: string; newName?: string; phone: string; email: string; instruments: string[] }) {
   const { workspaceId } = await requireManagerAction();
   const pool = db();
   const name = (data.name || "").trim();
   if (!name) return;
+  const newName = (data.newName || "").trim() || name;
   const phone = (data.phone || "").trim();
   const email = (data.email || "").trim();
   const instruments = (data.instruments || []).filter((i) => i && i.trim());
@@ -72,7 +73,7 @@ export async function updatePersonContactAction(data: { name: string; phone: str
     const patch = (list: Person[]) => list.map((p) => {
       if (p.name !== name) return p;
       changed = true;
-      return { ...p, phone, email, instruments };
+      return { ...p, name: newName, phone, email, instruments };
     });
     const members = patch(row.members || []);
     const crew = patch(row.crew || []);
@@ -81,8 +82,88 @@ export async function updatePersonContactAction(data: { name: string; phone: str
     }
   }
 
-  await syncBandPeopleToContacts(workspaceId, [{ name, role: "", phone, email }]);
+  await syncBandPeopleToContacts(workspaceId, [{ name: newName, role: "", phone, email }]);
 
   revalidatePath("/grups");
   revalidatePath("/contactes");
 }
+
+// Instrument/funció d'una persona dins d'UN grup concret (a diferència del
+// contacte i els instruments globals, el rol pot variar de grup a grup).
+export async function updateMembershipRoleAction(data: { bandId: string; listType: "members" | "crew"; name: string; role: string }) {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  const name = (data.name || "").trim();
+  if (!name || !data.bandId) return;
+  const role = (data.role || "").trim();
+  const column = data.listType === "crew" ? "crew" : "members";
+
+  const { rows } = await pool.query(`select ${column} as list from bands where id=$1 and workspace_id=$2`, [data.bandId, workspaceId]);
+  if (!rows.length) return;
+  const list: Person[] = rows[0].list || [];
+  const next = list.map((p) => (p.name === name ? { ...p, role } : p));
+  await pool.query(`update bands set ${column}=$1 where id=$2 and workspace_id=$3`, [JSON.stringify(next), data.bandId, workspaceId]);
+
+  revalidatePath("/grups");
+}
+
+// Sense caràcters ambigus (0/O, 1/I/L).
+const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+function generateJoinCode(): string {
+  let code = "";
+  for (let i = 0; i < 6; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  return code;
+}
+
+export async function generateJoinCodeAction(bandId: string): Promise<string | null> {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  let joinCode = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    joinCode = generateJoinCode();
+    const clash = (await pool.query("select 1 from bands where join_code=$1", [joinCode])).rows[0];
+    if (!clash) break;
+  }
+  const { rowCount } = await pool.query("update bands set join_code=$1, join_code_active=true where id=$2 and workspace_id=$3", [joinCode, bandId, workspaceId]);
+  if (!rowCount) return null;
+  revalidatePath("/grups");
+  return joinCode;
+}
+
+export async function revokeJoinCodeAction(bandId: string) {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  await pool.query("update bands set join_code_active=false where id=$1 and workspace_id=$2", [bandId, workspaceId]);
+  revalidatePath("/grups");
+}
+
+// Autocompletat de ciutat real via l'API de Google Places (Autocomplete),
+// restringit a localitats ("(cities)") de tot el món. Requereix
+// GOOGLE_MAPS_API_KEY a .env.local — sense la clau, torna una llista buida
+// (la UI ho tracta com "cap resultat", no com un error).
+export async function searchCitiesAction(query: string): Promise<{ description: string; placeId: string }[]> {
+  await requireManagerAction();
+  const q = (query || "").trim();
+  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
+  if (!q || q.length < 2 || !apiKey) return [];
+
+  const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
+  url.searchParams.set("input", q);
+  url.searchParams.set("types", "(cities)");
+  url.searchParams.set("language", "ca");
+  url.searchParams.set("key", apiKey);
+
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.status !== "OK") return [];
+    return (data.predictions || []).map((p: { description: string; place_id: string }) => ({
+      description: p.description,
+      placeId: p.place_id,
+    }));
+  } catch {
+    return [];
+  }
+}
+

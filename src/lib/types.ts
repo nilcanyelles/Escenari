@@ -11,6 +11,7 @@ export type Band = {
   members: Person[];
   crew: Person[];
   joinCode?: string;
+  joinCodeActive?: boolean;
   logo?: string;
   color1?: string;
   color2?: string;

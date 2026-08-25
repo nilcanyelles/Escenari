@@ -62,7 +62,7 @@ export async function joinByCodeAction(code: string) {
   const profile = await requireArtistAction();
   const cleaned = (code || "").trim().toUpperCase();
   if (!cleaned) return { ok: false as const, error: "Escriu un codi." };
-  const band = (await db().query("select id, name from bands where upper(join_code)=$1", [cleaned])).rows[0];
+  const band = (await db().query("select id, name from bands where upper(join_code)=$1 and join_code_active", [cleaned])).rows[0];
   if (!band) return { ok: false as const, error: "No hi ha cap grup amb aquest codi." };
   await addMembership(band.id, profile);
   revalidateArtist();

@@ -81,7 +81,7 @@ export default async function LandingPage() {
         </div>
         <div className="landing-roles">
           <div className="landing-role-card">
-            <div className="landing-role-title">Per a gestors</div>
+            <div className="landing-role-title">Per a agències</div>
             <p>Crea el teu grup, convida els músics i porta el calendari, la facturació i la logística de cada bolo.</p>
           </div>
           <div className="landing-role-card">

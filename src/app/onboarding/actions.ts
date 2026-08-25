@@ -96,8 +96,8 @@ export async function completeManagerOnboardingAction(data: ManagerOnboardingInp
       if (!clash) break;
     }
     await client.query(
-      `insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code, logo, color1, color2)
-       values ($1, $2, '', 0, $3, '', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $4, $5, $6, $7, $8)`,
+      `insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code, join_code_active, logo, color1, color2)
+       values ($1, $2, '', 0, $3, '', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $4, $5, true, $6, $7, $8)`,
       [bandId, groupName, managerName, wsId, joinCode, logo, data.color1 || "", data.color2 || ""]
     );
 

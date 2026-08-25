@@ -19,6 +19,7 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     members: r.members,
     crew: r.crew,
     joinCode: r.join_code,
+    joinCodeActive: r.join_code_active,
     logo: r.logo,
     color1: r.color1,
     color2: r.color2,
