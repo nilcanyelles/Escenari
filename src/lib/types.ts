@@ -19,6 +19,7 @@ export type Band = {
   color2?: string;
   backups?: BackupPerson[];
   showFees?: boolean;
+  coverUrl?: string;
 };
 
 export type Concert = {

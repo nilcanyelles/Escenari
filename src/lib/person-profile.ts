@@ -33,6 +33,7 @@ export type ProfileSong = {
   bandId: string;
   bandName: string;
   bandColor: string;
+  bandLogo: string;
   coverUrl: string;
   audioFileId: string | null;
 };
@@ -150,6 +151,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
       return {
         id: s.id, title: s.title, artist: s.artist, duration: s.duration, songKey: s.song_key,
         bandId: s.band_id, bandName: band?.name || "", bandColor: band?.color1 || "#8b7bff",
+        bandLogo: band?.logo || "",
         coverUrl: s.cover_url || "",
         audioFileId: s.audio_id || null,
       };

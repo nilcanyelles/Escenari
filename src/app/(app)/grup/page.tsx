@@ -4,6 +4,8 @@ import { getBands, getConcerts } from "@/lib/data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getRiders, getSetlists, getBandEditors } from "@/lib/material-data";
 import { getSongs, getBandFiles } from "@/lib/songs";
+import { db } from "@/lib/db";
+import { normalize } from "@/lib/text";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
@@ -42,6 +44,14 @@ export default async function GrupPage() {
     getBandFiles(bandId),
   ]);
 
+  // Fotos de perfil pujades (perquè les targetes de l'equip les mostrin).
+  const photoRows = (await db().query(
+    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+    [workspaceId]
+  )).rows;
+  const photosByName: Record<string, string> = {};
+  photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+
   return (
     <GroupHomeView
       band={band}
@@ -55,6 +65,7 @@ export default async function GrupPage() {
       editors={editors}
       songs={songs}
       files={files}
+      photosByName={photosByName}
       today={today()}
     />
   );

@@ -9,8 +9,8 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColo
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, setShowFeesAction, type BackupPerson } from "@/app/(app)/grup/actions";
-import BandModal from "@/components/BandModal";
+import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
 import FilesPanel from "@/components/FilesPanel";
@@ -23,13 +23,31 @@ import { openPersonProfileAction } from "@/app/p/profile-actions";
 
 // Targetes "chroma" per a l'equip: colors del grup, nom, instrument i @ estil
 // Instagram; el clic obre la pàgina de perfil del músic.
-function personChromaItem(p: Person, concertCount: number | null, band: Band, onOpen: (name: string) => void): ChromaItem {
+function personChromaItem(
+  p: Person,
+  concertCount: number | null,
+  band: Band,
+  onOpen: (name: string) => void,
+  photosByName: Record<string, string>,
+  linked: boolean,
+  onInvite?: (name: string) => void,
+): ChromaItem {
   const handle = "@" + normalize(p.name).replace(/\s+/g, "");
   const inss = instrumentsFor(p);
   const c1 = band.color1 || bandColor(band.id).color;
   const c2 = band.color2 || bandColor(band.id + "x").color;
+  const photoId = photosByName[normalize(p.name)];
+
+  const actions: ChromaItem["actions"] = [];
+  if (p.phone) {
+    actions.push({ icon: "📞", title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` });
+    actions.push({ icon: "💬", title: "WhatsApp", href: `https://wa.me/${p.phone.replace(/[^\d]/g, "")}` });
+  }
+  if (p.email) actions.push({ icon: "✉️", title: `Escriu a ${p.email}`, href: `mailto:${p.email}` });
+  if (!linked && onInvite) actions.push({ icon: "🔗", title: "Convida a reclamar aquest perfil", onClick: () => onInvite(p.name) });
+
   return {
-    image: personPhotoDataUriColored(p.name, c1, c2),
+    image: photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(p.name, c1, c2),
     title: p.name,
     subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
     handle,
@@ -37,6 +55,7 @@ function personChromaItem(p: Person, concertCount: number | null, band: Band, on
     borderColor: c1,
     gradient: `linear-gradient(150deg, ${c1}, ${c2})`,
     onClick: () => onOpen(p.name),
+    actions,
   };
 }
 
@@ -57,7 +76,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, today }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, today }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -69,12 +88,16 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   editors: BandEditor[];
   songs: Song[];
   files: BandFile[];
+  photosByName?: Record<string, string>;
   today: string;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists" | "fitxers">("inici");
   const [editOpen, setEditOpen] = useState(false);
-  const [showFees, setShowFees] = useState(!!band.showFees);
+  const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
+  const [addForm, setAddForm] = useState({ name: "", instruments: "", role: "", phone: "", email: "" });
+  const [addSaving, setAddSaving] = useState(false);
+  const [joinCopied, setJoinCopied] = useState(false);
   const [backups, setBackups] = useState<BackupPerson[]>(() =>
     ((band as unknown as { backups?: BackupPerson[] }).backups || []).map((b) => ({ name: b.name || "", instruments: b.instruments || [], phone: b.phone || "", email: b.email || "" }))
   );
@@ -102,6 +125,39 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     router.push(`/p/${token}`);
   }
 
+  // Convida algú (per correu) a reclamar un perfil creat a mà.
+  async function handleInvite(name: string) {
+    const email = window.prompt(`Correu de ${name} perquè reclami aquest perfil quan es registri a Escenari:`);
+    if (!email) return;
+    const res = await invitePersonAction(band.id, name, email);
+    alert(res.ok ? `Invitació creada: quan ${email} es registri i l'accepti, quedarà vinculat a "${name}".` : res.error);
+    router.refresh();
+  }
+
+  async function handleAddPerson() {
+    if (!addForm.name.trim() || !addKind) return;
+    setAddSaving(true);
+    try {
+      await addBandPersonAction(band.id, addKind, {
+        name: addForm.name,
+        role: addForm.role,
+        instruments: addForm.instruments.split(",").map((s) => s.trim()).filter(Boolean),
+        phone: addForm.phone,
+        email: addForm.email,
+      });
+      setAddForm({ name: "", instruments: "", role: "", phone: "", email: "" });
+      setAddKind(null);
+      router.refresh();
+    } catch (err) {
+      alert(String(err instanceof Error ? err.message : err));
+    }
+    setAddSaving(false);
+  }
+
+  const memberEmails = band.members.map((m) => m.email).filter(Boolean) as string[];
+  const joinMsg = (rol: "membre" | "tècnic") =>
+    `Uneix-te a ${band.name} a Escenari com a ${rol}: registra't a escenari i introdueix el codi ${band.joinCode} a "Els meus grups".`;
+
   async function persistBackups(next: BackupPerson[]) {
     setSavingBackups(true);
     setBackups(next);
@@ -114,34 +170,30 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <div className="glow-blooms" aria-hidden="true"></div>
 
-      {/* Capçalera del grup */}
-      <div className="group-hero" style={band.color1 ? { ["--band-accent" as string]: band.color1 } : undefined}>
-        <img className="group-hero-photo" src={band.logo || bandPhotoDataUri(band)} alt={band.name} />
-        <div className="group-hero-main">
-          <div className="group-hero-name">{band.name}</div>
-          <div className="group-hero-meta">
-            {(band.city || "").split(",")[0]}{band.rate ? ` · ${formatCurrency(band.rate)} per bolo` : ""}
+      {/* Capçalera estil LinkedIn: portada ampla + logo superposat */}
+      <div className="group-hero-li" style={{ ["--band-accent" as string]: band.color1 || "#8b7bff" }}>
+        <div
+          className="group-cover"
+          style={{
+            backgroundImage: band.coverUrl
+              ? `url(${band.coverUrl})`
+              : `linear-gradient(120deg, ${band.color1 || "#8b7bff"}, ${band.color2 || "#3b3358"})`,
+          }}
+        ></div>
+        <div className="group-hero-li-row">
+          <img className="group-hero-li-logo" src={band.logo || bandPhotoDataUri(band)} alt={band.name} />
+          <div className="group-hero-li-main">
+            <div className="group-hero-name">{band.name}</div>
+            <div className="group-hero-tags">
+              {(band.tags || []).map((t) => {
+                const tc = tagColors(t);
+                return <span key={t} className="badge" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
+              })}
+            </div>
           </div>
-          <div className="group-hero-tags">
-            {(band.tags || []).map((t) => {
-              const tc = tagColors(t);
-              return <span key={t} className="badge" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
-            })}
+          <div className="group-hero-actions">
+            <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>
           </div>
-        </div>
-        <div className="group-hero-actions">
-          <label className="show-fees-toggle" title="Si està activat, els membres veuen el caixet de cada bolo a la seva àrea d'artista">
-            <input
-              type="checkbox" checked={showFees}
-              onChange={async (e) => {
-                setShowFees(e.target.checked);
-                await setShowFeesAction(band.id, e.target.checked);
-                router.refresh();
-              }}
-            />
-            Els membres veuen el caixet
-          </label>
-          <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>
         </div>
       </div>
 
@@ -170,7 +222,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 <div className="bento-chroma">
                   <ChromaGrid
                     className="chroma-compact"
-                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null, band, openProfile))}
+                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null, band, openProfile, photosByName, !!linkedByName[m.name]))}
                     columns={4}
                     cardWidth={104}
                     radius={150}
@@ -251,31 +303,108 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
       {/* Membres */}
       <div className="panel">
-        <div className="panel-title" style={{ marginBottom: 14 }}>Membres</div>
-        {band.members.length === 0 ? (
-          <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té membres — edita el grup per afegir-n&apos;hi.</div>
+        <div className="panel-header-row" style={{ marginBottom: 14 }}>
+          <div className="panel-title">Membres</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {memberEmails.length > 0 && (
+              <a className="btn-outline" style={{ textDecoration: "none" }} title={`Correu a tot el grup (${memberEmails.length} adreces)`}
+                href={`mailto:?bcc=${encodeURIComponent(memberEmails.join(","))}&subject=${encodeURIComponent(band.name)}`}>
+                ✉️ Correu a tot el grup
+              </a>
+            )}
+            {addKind !== "member" && <button type="button" className="btn-outline" onClick={() => setAddKind("member")}>+ Afegeix membre</button>}
+          </div>
+        </div>
+        {band.members.length === 0 && addKind !== "member" ? (
+          <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té membres — afegeix-ne amb el botó de dalt.</div>
         ) : (
-          <ChromaGrid
-            items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0, band, openProfile))}
-            columns={4}
-            cardWidth={190}
-            radius={240}
-          />
+          band.members.length > 0 && (
+            <ChromaGrid
+              items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, !!linkedByName[m.name], handleInvite))}
+              columns={4}
+              cardWidth={190}
+              radius={240}
+            />
+          )
+        )}
+        {addKind === "member" && (
+          <div className="fin-form" style={{ marginTop: 14 }}>
+            <div className="fin-form-grid">
+              <input className="field-input compact-field" placeholder="Nom *" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+              <input className="field-input compact-field" placeholder="Instruments (separats per comes)" value={addForm.instruments} onChange={(e) => setAddForm({ ...addForm, instruments: e.target.value })} />
+              <input className="field-input compact-field" placeholder="Telèfon" value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} />
+              <input className="field-input compact-field" type="email" placeholder="Correu" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn-outline" onClick={() => setAddKind(null)}>Cancel·la</button>
+              <button type="button" className="btn-save" disabled={addSaving || !addForm.name.trim()} onClick={handleAddPerson}>{addSaving ? "Desant…" : "Afegeix membre"}</button>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* Crew */}
-      {band.crew.length > 0 && (
-        <div className="panel">
-          <div className="panel-title" style={{ marginBottom: 14 }}>Equip tècnic</div>
-          <ChromaGrid
-            items={band.crew.map((m) => personChromaItem(m, null, band, openProfile))}
-            columns={4}
-            cardWidth={190}
-            radius={240}
-          />
+      {/* Equip tècnic */}
+      <div className="panel">
+        <div className="panel-header-row" style={{ marginBottom: 14 }}>
+          <div className="panel-title">Equip tècnic</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {band.crew.some((c) => c.email) && (
+              <a className="btn-outline" style={{ textDecoration: "none" }} title="Correu a tot l'equip tècnic"
+                href={`mailto:?bcc=${encodeURIComponent(band.crew.map((c) => c.email).filter(Boolean).join(","))}&subject=${encodeURIComponent(band.name)}`}>
+                ✉️ Correu al tècnic
+              </a>
+            )}
+            {addKind !== "crew" && <button type="button" className="btn-outline" onClick={() => setAddKind("crew")}>+ Afegeix tècnic</button>}
+          </div>
         </div>
-      )}
+        {band.crew.length === 0 && addKind !== "crew" ? (
+          <div className="t-dim" style={{ fontSize: 13 }}>Sense equip tècnic encara.</div>
+        ) : (
+          band.crew.length > 0 && (
+            <ChromaGrid
+              items={band.crew.map((m) => personChromaItem(m, null, band, openProfile, photosByName, !!linkedByName[m.name], handleInvite))}
+              columns={4}
+              cardWidth={190}
+              radius={240}
+            />
+          )
+        )}
+        {addKind === "crew" && (
+          <div className="fin-form" style={{ marginTop: 14 }}>
+            <div className="fin-form-grid">
+              <input className="field-input compact-field" placeholder="Nom *" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
+              <input className="field-input compact-field" placeholder="Funció (so, llums, backliner…)" value={addForm.role} onChange={(e) => setAddForm({ ...addForm, role: e.target.value })} />
+              <input className="field-input compact-field" placeholder="Telèfon" value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} />
+              <input className="field-input compact-field" type="email" placeholder="Correu" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} />
+            </div>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button type="button" className="btn-outline" onClick={() => setAddKind(null)}>Cancel·la</button>
+              <button type="button" className="btn-save" disabled={addSaving || !addForm.name.trim()} onClick={handleAddPerson}>{addSaving ? "Desant…" : "Afegeix tècnic"}</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Uneix-te al grup */}
+      <div className="panel">
+        <div className="panel-title" style={{ marginBottom: 10 }}>Uneix-te al grup</div>
+        <div className="t-dim" style={{ fontSize: 13, marginBottom: 12 }}>
+          Comparteix el codi: qui es registri a Escenari i l&apos;introdueixi a &ldquo;Els meus grups&rdquo; quedarà
+          vinculat a aquest grup, com a músic o com a tècnic de so segons el que triï en unir-s&apos;hi.
+          Si la persona ja existeix aquí creada a mà, usa el botó 🔗 de la seva targeta per convidar-la a reclamar el perfil.
+        </div>
+        <div className="join-box">
+          <span className="join-code">{band.joinCode || "—"}</span>
+          <button type="button" className="btn-outline"
+            onClick={async () => {
+              await navigator.clipboard.writeText(joinMsg("membre"));
+              setJoinCopied(true);
+              window.setTimeout(() => setJoinCopied(false), 1600);
+            }}>{joinCopied ? "Copiat ✓" : "Copia el missatge"}</button>
+          <button type="button" className="btn-outline cd-wa-btn"
+            onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
+        </div>
+      </div>
 
       {/* Suplents */}
       <div className="panel">
@@ -384,34 +513,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         </div>
       )}
 
-      {/* Pròxims bolos del grup */}
-      <div className="panel">
-        <div className="panel-title" style={{ marginBottom: 14 }}>Pròxims bolos</div>
-        {upcoming.length === 0 ? (
-          <div className="t-dim" style={{ fontSize: 13 }}>Cap bolo a la vista.</div>
-        ) : (
-          <div className="group-upcoming-list">
-            {upcoming.slice(0, 6).map((c) => (
-              <Link key={c.id} href={`/concerts/${c.id}`} className="group-upcoming-row">
-                <span className="t-strong">{formatDate(c.date)}</span>
-                <span className="t-dim">{c.city || "—"}</span>
-                <span className="t-dim">{c.venue || "—"}</span>
-                <span className="badge" style={{ marginLeft: "auto" }}>{c.status}</span>
-              </Link>
-            ))}
-          </div>
-        )}
-      </div>
       </>)}
 
       {editOpen && (
-        <BandModal
-          key={band.id}
-          band={band}
-          allBands={allBands}
-          concertCountByPerson={concertCountByPerson}
-          onClose={() => setEditOpen(false)}
-        />
+        <GroupAppearanceModal key={band.id} band={band} onClose={() => setEditOpen(false)} />
       )}
     </div>
   );

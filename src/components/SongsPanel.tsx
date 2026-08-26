@@ -337,8 +337,8 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
                       <span className="sp-num">{i + 1}</span>
                     )}
                   </span>
-                  {s.coverUrl ? (
-                    <img className="sp-cover sp-cover-img" src={s.coverUrl} alt="" loading="lazy" />
+                  {s.coverUrl || band.logo ? (
+                    <img className="sp-cover sp-cover-img" src={s.coverUrl || band.logo} alt="" loading="lazy" />
                   ) : (
                     <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${coverColor}, #17141f)` }}>♪</span>
                   )}

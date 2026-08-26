@@ -6,6 +6,13 @@
 import { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 
+export type ChromaAction = {
+  icon: string;
+  title: string;
+  href?: string;
+  onClick?: () => void;
+};
+
 export type ChromaItem = {
   image: string;
   title: string;
@@ -16,6 +23,7 @@ export type ChromaItem = {
   gradient?: string;
   url?: string;
   onClick?: () => void;
+  actions?: ChromaAction[];
 };
 
 export default function ChromaGrid({
@@ -123,6 +131,17 @@ export default function ChromaGrid({
             <p className="role">{c.subtitle}</p>
             {c.location && <span className="location">{c.location}</span>}
           </footer>
+          {c.actions && c.actions.length > 0 && (
+            <div className="chroma-actions" onClick={(e) => e.stopPropagation()}>
+              {c.actions.map((a, j) =>
+                a.href ? (
+                  <a key={j} className="chroma-action" href={a.href} title={a.title} target={a.href.startsWith("http") ? "_blank" : undefined} rel="noreferrer">{a.icon}</a>
+                ) : (
+                  <button key={j} type="button" className="chroma-action" title={a.title} onClick={a.onClick}>{a.icon}</button>
+                )
+              )}
+            </div>
+          )}
         </article>
       ))}
       <div className="chroma-overlay" />

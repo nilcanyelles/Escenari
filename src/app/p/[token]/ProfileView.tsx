@@ -246,8 +246,8 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                         <span className="sp-num">{i + 1}</span>
                       )}
                     </span>
-                    {s.coverUrl ? (
-                      <img className="sp-cover sp-cover-img" src={s.coverUrl} alt="" loading="lazy" />
+                    {s.coverUrl || s.bandLogo ? (
+                      <img className="sp-cover sp-cover-img" src={s.coverUrl || s.bandLogo} alt="" loading="lazy" />
                     ) : (
                       <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${s.bandColor}, #17141f)` }}>♪</span>
                     )}

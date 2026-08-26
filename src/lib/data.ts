@@ -25,6 +25,7 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     color2: r.color2,
     backups: r.backups || [],
     showFees: !!r.show_fees,
+    coverUrl: r.cover_url || "",
   }));
 }
 

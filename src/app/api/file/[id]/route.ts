@@ -13,11 +13,17 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const row = (await db().query("select * from files where id=$1", [id])).rows[0];
   if (!row) return new NextResponse("No trobat", { status: 404 });
 
-  const isProfilePhoto = (await db().query(
-    "select 1 from person_profiles where photo_file_id=$1", [id]
+  // Imatges públiques per disseny: fotos de perfil de músic i logos/portades
+  // de grup (surten a pàgines compartibles).
+  const isPublicImage = (await db().query(
+    `select 1 from person_profiles where photo_file_id=$1
+     union all
+     select 1 from bands where logo=$2 or cover_url=$2
+     limit 1`,
+    [id, `/api/file/${id}`]
   )).rows.length > 0;
 
-  if (!isProfilePhoto) {
+  if (!isPublicImage) {
     const profile = await getProfile();
     if (!profile) return new NextResponse("No autoritzat", { status: 401 });
     let allowed = profile.role === "manager" && profile.workspaceId === row.workspace_id;

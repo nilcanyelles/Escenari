@@ -4162,3 +4162,132 @@ button { font-family: inherit; }
   .song-editor-cols { grid-template-columns: 1fr; }
   .song-lyrics-big { min-height: 32vh; }
 }
+
+/* ============ Grup: capcalera estil LinkedIn + editor d'aparenca ============ */
+.group-hero-li {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.group-cover {
+  height: 170px;
+  background-size: cover;
+  background-position: center;
+}
+.group-hero-li-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  padding: 0 24px 18px;
+  margin-top: -42px;
+  flex-wrap: wrap;
+}
+.group-hero-li-logo {
+  width: 96px;
+  height: 96px;
+  border-radius: 20px;
+  object-fit: cover;
+  border: 4px solid var(--bg-card);
+  background: var(--bg-card);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.group-hero-li-main { display: flex; flex-direction: column; gap: 6px; padding-bottom: 2px; }
+.group-hero-li .group-hero-actions { margin-left: auto; padding-bottom: 6px; }
+
+.ga-modal { max-width: 620px; width: min(620px, 94vw); }
+.ga-body { display: flex; flex-direction: column; gap: 18px; }
+.ga-preview { position: relative; }
+.ga-cover {
+  height: 150px;
+  border-radius: 14px;
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+.ga-cover-hint {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  background: rgba(6, 5, 12, 0.72);
+  color: white;
+  font-size: 11.5px;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+.ga-logo-wrap {
+  position: absolute;
+  left: 20px;
+  bottom: -26px;
+  cursor: pointer;
+}
+.ga-logo {
+  width: 76px;
+  height: 76px;
+  border-radius: 18px;
+  object-fit: cover;
+  border: 4px solid var(--bg-card);
+  display: block;
+}
+.ga-logo-hint {
+  position: absolute;
+  right: -6px;
+  bottom: -4px;
+  background: var(--accent);
+  border-radius: 50%;
+  width: 26px; height: 26px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+}
+.ga-colors { display: flex; gap: 18px; align-items: center; margin-top: 26px; flex-wrap: wrap; }
+.ga-color { display: flex; flex-direction: column; gap: 5px; font-size: 11.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-muted); }
+.ga-color input[type="color"] {
+  width: 64px; height: 38px;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  background: transparent;
+  cursor: pointer;
+  padding: 3px;
+}
+.ga-swatch { flex: 1; min-width: 120px; height: 38px; border-radius: 10px; align-self: flex-end; }
+
+/* Codi per unir-se al grup */
+.join-box { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.join-code {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: 0.25em;
+  background: oklch(0.68 0.19 290 / 0.12);
+  border: 1px dashed oklch(0.68 0.19 290 / 0.5);
+  color: var(--accent-text);
+  border-radius: 12px;
+  padding: 8px 18px;
+}
+
+/* Accions a les targetes chroma (trucar, WhatsApp, correu, reclamar) */
+.chroma-actions {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  gap: 6px;
+  padding: 0 0.7rem 0.7rem;
+}
+.chroma-action {
+  width: 30px; height: 30px;
+  border-radius: 9px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.3);
+  color: white;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background 0.15s, transform 0.1s;
+}
+.chroma-action:hover { background: rgba(255, 255, 255, 0.16); transform: translateY(-1px); }
+.chroma-compact .chroma-actions { display: none; }

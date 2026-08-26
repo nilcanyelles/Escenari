@@ -16,28 +16,53 @@ function revalidateArtist() {
 }
 
 // Alta d'un artista en un grup: fila a band_members + entrada al jsonb de
-// members del grup (que és la clau amb què es porta l'assistència).
-async function addMembership(bandId: string, profile: Profile) {
+// members (o crew) del grup. Si `claimName` coincideix amb un membre creat a
+// mà, la persona el "reclama": mateixa identitat, mateix historial.
+async function addMembership(bandId: string, profile: Profile, opts?: { claimName?: string; asCrew?: boolean }) {
   const pool = db();
+  const band = (await pool.query("select members, crew from bands where id=$1", [bandId])).rows[0];
+  if (!band) return;
+
+  const members: Person[] = band.members || [];
+  const crew: Person[] = band.crew || [];
+  const claim = (opts?.claimName || "").trim().toLowerCase();
+  const existingMember = claim
+    ? members.find((m) => (m.name || "").trim().toLowerCase() === claim) ||
+      crew.find((m) => (m.name || "").trim().toLowerCase() === claim)
+    : members.find((m) => (m.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase()) ||
+      crew.find((m) => (m.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase());
+
+  const memberName = existingMember?.name || profile.name;
+
   await pool.query(
     `insert into band_members (band_id, clerk_user_id, member_name)
      values ($1, $2, $3)
-     on conflict (band_id, clerk_user_id) do nothing`,
-    [bandId, profile.clerkUserId, profile.name]
+     on conflict (band_id, clerk_user_id) do update set member_name = excluded.member_name`,
+    [bandId, profile.clerkUserId, memberName]
   );
 
-  const band = (await pool.query("select members from bands where id=$1", [bandId])).rows[0];
-  if (!band) return;
-  const members: Person[] = band.members || [];
-  const exists = members.some((m) => (m.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase());
-  if (!exists) {
-    members.push({
-      name: profile.name,
-      role: profile.instruments.join(", "),
-      email: profile.email,
-      instruments: profile.instruments,
-    });
-    await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
+  if (!existingMember) {
+    if (opts?.asCrew) {
+      crew.push({ name: profile.name, role: "Tècnic de so", email: profile.email });
+      await pool.query("update bands set crew=$1 where id=$2", [JSON.stringify(crew), bandId]);
+    } else {
+      members.push({
+        name: profile.name,
+        role: profile.instruments.join(", "),
+        email: profile.email,
+        instruments: profile.instruments,
+      });
+      await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
+    }
+  }
+
+  // Vincula també el perfil públic si existia (creat pel gestor).
+  const ws = (await pool.query("select workspace_id from bands where id=$1", [bandId])).rows[0];
+  if (ws) {
+    await pool.query(
+      "update person_profiles set clerk_user_id=$1 where workspace_id=$2 and lower(person_name)=lower($3) and clerk_user_id is null",
+      [profile.clerkUserId, ws.workspace_id, memberName]
+    );
   }
 }
 
@@ -46,25 +71,25 @@ export async function respondInvitationAction(invitationId: string, accept: bool
   const pool = db();
   const invitation = (
     await pool.query(
-      "select id, band_id from invitations where id=$1 and lower(email)=lower($2) and status='pendent'",
+      "select id, band_id, name from invitations where id=$1 and lower(email)=lower($2) and status='pendent'",
       [invitationId, profile.email]
     )
   ).rows[0];
   if (!invitation) return { ok: false as const, error: "La invitació ja no és vàlida." };
 
   await pool.query("update invitations set status=$1 where id=$2", [accept ? "acceptada" : "rebutjada", invitationId]);
-  if (accept) await addMembership(invitation.band_id, profile);
+  if (accept) await addMembership(invitation.band_id, profile, { claimName: invitation.name || undefined });
   revalidateArtist();
   return { ok: true as const };
 }
 
-export async function joinByCodeAction(code: string) {
+export async function joinByCodeAction(code: string, asCrew = false) {
   const profile = await requireArtistAction();
   const cleaned = (code || "").trim().toUpperCase();
   if (!cleaned) return { ok: false as const, error: "Escriu un codi." };
   const band = (await db().query("select id, name from bands where upper(join_code)=$1 and join_code_active", [cleaned])).rows[0];
   if (!band) return { ok: false as const, error: "No hi ha cap grup amb aquest codi." };
-  await addMembership(band.id, profile);
+  await addMembership(band.id, profile, { asCrew });
   revalidateArtist();
   return { ok: true as const, bandName: band.name as string };
 }
