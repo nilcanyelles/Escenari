@@ -288,6 +288,7 @@ button { font-family: inherit; }
   background: var(--bg-card); border: 1px solid var(--border-input); border-radius: 10px;
   padding: 6px; display: flex; flex-direction: column;
   box-shadow: 0 16px 40px -10px rgba(0,0,0,0.5);
+  overscroll-behavior: contain;
 }
 .year-option {
   all: unset; cursor: pointer; padding: 8px 12px; border-radius: 6px;
@@ -323,7 +324,7 @@ button { font-family: inherit; }
 .cf-dp-day.empty { visibility: hidden; cursor: default; }
 .cf-dp-day.today { border-color: var(--border-input); }
 .cf-dp-day.selected { background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-strong); font-weight: 600; }
-.band-dropdown { max-height: 320px; overflow-y: auto; min-width: 220px; }
+.band-dropdown { max-height: 320px; overflow-y: auto; min-width: 220px; overscroll-behavior: contain; }
 .band-check { display: inline-block; width: 16px; flex: none; color: var(--accent-strong); font-weight: 700; }
 
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
@@ -427,7 +428,7 @@ button { font-family: inherit; }
 .instrument-badge-x:hover { opacity: 1; background: oklch(1 0 0 / 0.15); }
 .instrument-dropdown { width: 240px; padding: 8px; }
 .instrument-search { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
-.instrument-option-list { max-height: 220px; overflow-y: auto; }
+.instrument-option-list { max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }
 .status-cycle-btn {
   all: unset; font-size: 12px; font-weight: 600; padding: 8px 14px; border-radius: 20px;
   cursor: pointer; text-transform: capitalize; text-align: center; box-sizing: border-box;
@@ -678,11 +679,13 @@ button { font-family: inherit; }
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 40;
   display: flex; align-items: center; justify-content: center; gap: 18px; padding: 20px;
+  overscroll-behavior: contain;
 }
 .modal {
   width: 420px; max-width: 100%; max-height: 88vh; overflow: auto;
   background: oklch(0.2 0.02 258); border: 1px solid var(--border-input);
   border-radius: 14px; padding: 24px; color: var(--text);
+  overscroll-behavior: contain;
 }
 .modal.wide { width: 440px; }
 .cf-confirm-overlay { z-index: 55; }
@@ -800,7 +803,7 @@ button { font-family: inherit; }
   box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 15px;
 }
 .rs-doc-icon-btn:hover { background: oklch(1 0 0); }
-.rs-doc-scroll { flex: 1; min-height: 0; overflow-y: auto; background: oklch(0.13 0.015 258); padding: 28px; }
+.rs-doc-scroll { flex: 1; min-height: 0; overflow-y: auto; background: oklch(0.13 0.015 258); padding: 28px; overscroll-behavior: contain; }
 .rs-doc { width: 210mm; min-height: 297mm; box-sizing: border-box; margin: 0 auto; box-shadow: 0 6px 24px rgba(0,0,0,0.4); }
 
 @media print {
@@ -1399,6 +1402,7 @@ button { font-family: inherit; }
   border: 1px solid var(--border-input); border-radius: 12px;
   padding: 12px; display: flex; flex-direction: column; gap: 12px;
   background: oklch(0.135 0.02 258 / 0.4);
+  overscroll-behavior: contain;
 }
 .instr-cat-title {
   font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
