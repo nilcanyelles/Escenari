@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
 import { uniqueTags, bandColor } from "@/lib/tags";
+import { normalize } from "@/lib/text";
+import { importConcertsAction } from "@/app/(app)/concerts/actions";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
@@ -13,7 +15,7 @@ import InvoicePreview from "@/components/InvoicePreview";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 
-const STATUS_CYCLE = ["cancel·lat", "pendent", "confirmat"];
+const STATUS_CYCLE = ["cancel·lat", "pendent", "reservat", "confirmat"];
 function nextStatus(status: string): string {
   const i = STATUS_CYCLE.indexOf(status);
   return STATUS_CYCLE[(i === -1 ? 0 : i + 1) % STATUS_CYCLE.length];
@@ -60,6 +62,9 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
 export default function ConcertsView({ bands, concerts, invoices, companyInfo, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; today: string }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importing, setImporting] = useState(false);
   const [statusFilter, setStatusFilter] = useState("tots");
   const [tagFilter, setTagFilter] = useState("tots");
   const [modal, setModal] = useState<{ concertId: string } | null>(null);
@@ -104,11 +109,12 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
     });
   }, [concerts]);
 
-  const searchL = search.toLowerCase();
+  // Cerca sense distingir accents ni majúscules (Sant Adrià = sant adria).
+  const searchL = normalize(search);
   const list = concerts.filter((c) =>
     (statusFilter === "tots" || c.status === statusFilter) &&
     (tagFilter === "tots" || (c.tags && c.tags.indexOf(tagFilter) !== -1)) &&
-    (!searchL || c.bandName.toLowerCase().includes(searchL) || c.venue.toLowerCase().includes(searchL) || c.city.toLowerCase().includes(searchL))
+    (!searchL || normalize(c.bandName).includes(searchL) || normalize(c.venue).includes(searchL) || normalize(c.city).includes(searchL) || normalize(c.festaEntitat || "").includes(searchL))
   );
   const upcomingList = list.filter((c) => c.date >= today).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
   const pastList = list.filter((c) => c.date < today).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
@@ -156,6 +162,11 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
     const isSelected = modal?.concertId === c.id;
     const cityColor = bandColor("city:" + (c.city || "?"));
     const venueColor = bandColor("venue:" + (c.venue || "?"));
+    // Recompte d'assistència dels membres del grup (per a bolos futurs).
+    const rowBand = bands.find((b) => b.id === c.bandId);
+    const attTotal = rowBand?.members.length || 0;
+    const attYes = rowBand ? rowBand.members.filter((m) => (c.attendance || {})[m.name] === "yes").length : 0;
+    const showAtt = c.date >= today && attTotal > 0 && c.status !== "cancel·lat";
     return (
       <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`/concerts/${c.id}`)}>
         <div className="t-dim">{formatDate(c.date)}</div>
@@ -163,7 +174,13 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
         <div>{c.city ? <span className="loc-chip" style={{ background: cityColor.bg, color: cityColor.color }}>{c.city.split(",")[0]}</span> : <span className="t-dim">—</span>}</div>
         <div>{c.venue ? <span className="loc-chip" style={{ background: venueColor.bg, color: venueColor.color }}>{c.venue}</span> : <span className="t-dim">—</span>}</div>
         <div className="t-dim">{c.festaEntitat || "—"}</div>
-        <div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {showAtt && (
+            <span
+              className={"att-badge" + (attYes === attTotal ? " full" : "")}
+              title={`${attYes} de ${attTotal} membres han confirmat assistència`}
+            >{attYes}/{attTotal}</span>
+          )}
           <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
             title="Canvia l'estat" aria-label="Canvia l'estat"
             onClick={(e) => {
@@ -239,6 +256,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
         <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="tots">Tots els estats</option>
           <option value="confirmat">Confirmat</option>
+          <option value="reservat">Reservat</option>
           <option value="pendent">Pendent</option>
           <option value="cancel·lat">Cancel·lat</option>
         </select>
@@ -246,8 +264,29 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
+        <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>
         <button className="glow-cta" onClick={handleNewConcert}>+ Nou concert</button>
       </div>
+
+      {importOpen && (
+        <div className="import-box">
+          <div className="t-dim" style={{ fontSize: 12 }}>
+            Un concert per línia: <code>data; grup; població; ubicació; festa; import; estat</code> — data com a <code>2025-07-12</code> o <code>12/07/2025</code>; els grups que no existeixin es crearan.
+          </div>
+          <textarea className="field-input rider-textarea" rows={5} value={importText} onChange={(e) => setImportText(e.target.value)}
+            placeholder={"12/07/2025; Arrels de Bosc; Reus; Plaça Mercadal; Festa Major; 1800; confirmat\n2025-08-02; Trencadansa; Olot; ; ; 1500"} />
+          <button type="button" className="btn-save" style={{ alignSelf: "flex-start" }} disabled={importing}
+            onClick={async () => {
+              setImporting(true);
+              const { imported, errors } = await importConcertsAction(importText);
+              setImporting(false);
+              setImportText("");
+              setImportOpen(false);
+              router.refresh();
+              alert(`${imported} concerts importats${errors ? ` (${errors} línies amb error)` : ""}.`);
+            }}>{importing ? "Important…" : "Importa"}</button>
+        </div>
+      )}
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>

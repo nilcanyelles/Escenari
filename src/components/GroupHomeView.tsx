@@ -9,11 +9,12 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, instrumentsFor, instru
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, setShowFeesAction, type BackupPerson } from "@/app/(app)/grup/actions";
 import BandModal from "@/components/BandModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
 import FilesPanel from "@/components/FilesPanel";
+import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 
 function InstrumentChips({ items }: { items: string[] }) {
   return (
@@ -47,8 +48,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   today: string;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"equip" | "cancons" | "riders" | "setlists" | "fitxers">("equip");
+  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists" | "fitxers">("inici");
   const [editOpen, setEditOpen] = useState(false);
+  const [showFees, setShowFees] = useState(!!band.showFees);
   const [backups, setBackups] = useState<BackupPerson[]>(() =>
     ((band as unknown as { backups?: BackupPerson[] }).backups || []).map((b) => ({ name: b.name || "", instruments: b.instruments || [], phone: b.phone || "", email: b.email || "" }))
   );
@@ -92,18 +94,115 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           </div>
         </div>
         <div className="group-hero-actions">
+          <label className="show-fees-toggle" title="Si està activat, els membres veuen el caixet de cada bolo a la seva àrea d'artista">
+            <input
+              type="checkbox" checked={showFees}
+              onChange={async (e) => {
+                setShowFees(e.target.checked);
+                await setShowFeesAction(band.id, e.target.checked);
+                router.refresh();
+              }}
+            />
+            Els membres veuen el caixet
+          </label>
           <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>
         </div>
       </div>
 
       {/* Subtabs */}
       <div className="stats-tabs group-tabs">
+        <button className={"stats-tab" + (tab === "inici" ? " active" : "")} onClick={() => setTab("inici")}>Inici</button>
         <button className={"stats-tab" + (tab === "equip" ? " active" : "")} onClick={() => setTab("equip")}>Equip</button>
         <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
         <button className={"stats-tab" + (tab === "riders" ? " active" : "")} onClick={() => setTab("riders")}>Riders</button>
         <button className={"stats-tab" + (tab === "setlists" ? " active" : "")} onClick={() => setTab("setlists")}>Setlists</button>
         <button className={"stats-tab" + (tab === "fitxers" ? " active" : "")} onClick={() => setTab("fitxers")}>Fitxers</button>
       </div>
+
+      {tab === "inici" && (
+        <BentoGrid
+          cards={([
+            {
+              key: "membres",
+              label: "Equip",
+              title: `${band.members.length} integrants`,
+              description: `${linkedMembers.length} amb compte d'Escenari${band.crew.length ? ` · ${band.crew.length} crew` : ""}`,
+              colSpan: 2,
+              rowSpan: 2,
+              onClick: () => setTab("equip"),
+              content: (
+                <div className="bento-members">
+                  {band.members.slice(0, 8).map((m) => {
+                    const ins = instrumentsFor(m)[0] || "";
+                    const icon = ins ? instrumentIconFor(ins) : null;
+                    const linked = !!linkedByName[m.name];
+                    return (
+                      <div key={m.name} className={"bento-member" + (linked ? " linked" : "")} title={`${m.name}${ins ? " — " + ins : ""}`}>
+                        <div className="bento-member-avatar">
+                          <img src={personPhotoDataUri(m.name)} alt="" />
+                          {icon && <span className="bento-member-instr"><img src={icon} alt="" /></span>}
+                        </div>
+                        <span className="bento-member-name">{m.name.split(" ")[0]}</span>
+                        {ins && <span className="bento-member-role">{ins}</span>}
+                      </div>
+                    );
+                  })}
+                  {band.members.length > 8 && <div className="bento-member-more">+{band.members.length - 8}</div>}
+                </div>
+              ),
+            },
+            {
+              key: "bolos",
+              label: "Agenda",
+              title: `${upcoming.length} bolos a la vista`,
+              description: `${total} concerts en total`,
+              colSpan: 2,
+              rowSpan: 2,
+              onClick: () => router.push("/agenda"),
+              content: (
+                <div className="bento-gigs">
+                  {upcoming.slice(0, 5).map((c) => (
+                    <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); router.push(`/concerts/${c.id}`); }}>
+                      <span className="bento-gig-date">{formatDate(c.date)}</span>
+                      <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
+                      <span className="badge" style={{ marginLeft: "auto" }}>{c.status}</span>
+                    </div>
+                  ))}
+                  {upcoming.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap bolo programat.</span>}
+                </div>
+              ),
+            },
+            {
+              key: "cancons",
+              label: "Repertori",
+              title: `${songs.length} cançons`,
+              description: "Lletres, acords i gravacions",
+              onClick: () => setTab("cancons"),
+            },
+            {
+              key: "riders",
+              label: "Tècnica",
+              title: `${riders.length} riders`,
+              description: "Plànol d'escenari i aprovacions",
+              onClick: () => setTab("riders"),
+            },
+            {
+              key: "setlists",
+              label: "Directe",
+              title: `${setlists.length} setlists`,
+              description: "Amb mode escenari",
+              onClick: () => setTab("setlists"),
+            },
+            {
+              key: "fitxers",
+              label: "Arxiu",
+              title: `${files.filter((f) => !f.songId).length} fitxers`,
+              description: "Contractes, cartells, àudios",
+              onClick: () => setTab("fitxers"),
+            },
+          ] as BentoCard[])}
+        />
+      )}
 
       {tab === "cancons" && <SongsPanel band={band} songs={songs} canEdit={true} />}
       {tab === "fitxers" && <FilesPanel band={band} files={files} canEdit={true} />}

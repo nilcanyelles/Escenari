@@ -1,15 +1,16 @@
 import { requireArtist } from "@/lib/current-user";
-import { getArtistGigs } from "@/lib/artist-data";
-import { today, MONTH_ABBR, statusColors } from "@/lib/format";
+import { getArtistGigs, getFeedToken } from "@/lib/artist-data";
+import { today, MONTH_ABBR, statusColors, formatCurrency } from "@/lib/format";
 import { bandPhotoDataUri } from "@/lib/tags";
 import Link from "next/link";
 import AttendanceButtons from "./AttendanceButtons";
+import FeedSubscribe from "./FeedSubscribe";
 
 export const dynamic = "force-dynamic";
 
 export default async function ArtistHomePage() {
   const profile = await requireArtist();
-  const gigs = await getArtistGigs(profile.clerkUserId);
+  const [gigs, feedToken] = await Promise.all([getArtistGigs(profile.clerkUserId), getFeedToken(profile.clerkUserId)]);
   const todayStr = today();
   const upcoming = gigs.filter((g) => g.date >= todayStr);
   const past = gigs.filter((g) => g.date < todayStr).reverse().slice(0, 8);
@@ -30,6 +31,7 @@ export default async function ArtistHomePage() {
           <div className="artist-gig-meta">
             {gig.time} h{gig.festaEntitat ? ` · ${gig.festaEntitat}` : ""} ·{" "}
             <span style={{ color: sc.color }}>{gig.status}</span>
+            {gig.amount !== null && <> · <span style={{ color: "oklch(0.78 0.15 155)" }}>{formatCurrency(gig.amount)}</span></>}
           </div>
         </div>
         <span className="artist-gig-band" style={{ background: `${bandColor}26`, color: bandColor }}>
@@ -51,7 +53,10 @@ export default async function ArtistHomePage() {
 
   return (
     <div>
-      <div className="artist-section-title">Pròxims bolos</div>
+      <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+        <div className="artist-section-title">Pròxims bolos</div>
+        {feedToken && <FeedSubscribe token={feedToken} />}
+      </div>
       {upcoming.length === 0 ? (
         <div className="artist-empty">
           Encara no tens cap bolo a la vista.{" "}

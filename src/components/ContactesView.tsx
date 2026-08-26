@@ -12,6 +12,7 @@ import ContactModal from "@/components/ContactModal";
 import MemberProfileModal from "@/components/MemberProfileModal";
 import ContactFollowups from "@/components/ContactFollowups";
 import type { ContactInteraction } from "@/lib/contacts-data";
+import { normalize } from "@/lib/text";
 
 const PAGE_SIZE = 50;
 
@@ -92,7 +93,8 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
     return map;
   }, [contacts, allBands]);
 
-  const q = search.trim().toLowerCase();
+  // Cerca sense distingir accents ni majúscules.
+  const q = normalize(search.trim());
   const list = contacts.filter((c) => {
     if (kindFilter !== "tots" && !c.kinds.includes(kindFilter)) return false;
     if (!q) return true;
@@ -101,15 +103,15 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
       ? [info?.isMusician && "artista", info?.isCrew && "crew"].filter(Boolean).join(" ")
       : c.kinds.map((k) => KIND_META[k]?.label || k).join(" ");
     return (
-      c.name.toLowerCase().includes(q) ||
-      c.company.toLowerCase().includes(q) ||
-      c.phone.toLowerCase().includes(q) ||
-      c.email.toLowerCase().includes(q) ||
-      c.role.toLowerCase().includes(q) ||
-      typeLabels.toLowerCase().includes(q) ||
-      (info?.instruments.some((i) => i.toLowerCase().includes(q)) ?? false) ||
-      (info?.functions.some((f) => f.toLowerCase().includes(q)) ?? false) ||
-      (info?.bandNames.some((b) => b.toLowerCase().includes(q)) ?? false)
+      normalize(c.name).includes(q) ||
+      normalize(c.company).includes(q) ||
+      normalize(c.phone).includes(q) ||
+      normalize(c.email).includes(q) ||
+      normalize(c.role).includes(q) ||
+      normalize(typeLabels).includes(q) ||
+      (info?.instruments.some((i) => normalize(i).includes(q)) ?? false) ||
+      (info?.functions.some((f) => normalize(f).includes(q)) ?? false) ||
+      (info?.bandNames.some((b) => normalize(b).includes(q)) ?? false)
     );
   });
 
@@ -192,7 +194,13 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
                   <div className="t-dim" onClick={(e) => e.stopPropagation()}>
                     {c.email ? <a className="quick-link" href={`mailto:${c.email}`} title="Escriu un correu">{c.email}</a> : "—"}
                   </div>
-                  <div onClick={(e) => e.stopPropagation()}><DeleteContactBtn id={c.id} /></div>
+                  <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {c.address && (
+                      <a className="row-rs-btn" style={{ textDecoration: "none" }} title={`Mapa: ${c.address}`}
+                        href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}`} target="_blank" rel="noreferrer">🗺</a>
+                    )}
+                    <DeleteContactBtn id={c.id} />
+                  </div>
                 </div>
               );
             })}

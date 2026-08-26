@@ -10,6 +10,7 @@ export type Transaction = {
   member: string;
   fund: string;
   notes: string;
+  receiptFileId: string | null;
 };
 
 export const INCOME_CATEGORIES = ["Caixet", "Propines", "Marxandatge", "Subvenció", "Altres ingressos"];
@@ -35,5 +36,6 @@ export async function getTransactions(workspaceId: string): Promise<Transaction[
     member: r.member,
     fund: r.fund,
     notes: r.notes,
+    receiptFileId: r.receipt_file_id || null,
   }));
 }

@@ -16,6 +16,14 @@ export async function saveBandBackupsAction(bandId: string, backups: BackupPerso
   revalidatePath("/grup");
 }
 
+// Visibilitat del caixet per als membres del grup (àrea d'artista).
+export async function setShowFeesAction(bandId: string, show: boolean) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update bands set show_fees=$1 where id=$2 and workspace_id=$3", [show, bandId, workspaceId]);
+  revalidatePath("/grup");
+  revalidatePath("/artista");
+}
+
 // Publica una cerca de suplent per a un concert (visible a la borsa de músics).
 export async function publishBackupRequestAction(input: {
   bandId: string;

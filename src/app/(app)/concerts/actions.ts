@@ -121,6 +121,80 @@ export async function saveRouteSheetAction(concertId: string, routeSheet: unknow
   revalidatePath("/contactes");
 }
 
+// Recordatori d'assistència: correu als membres vinculats que encara no han
+// dit ni sí ni no a un bolo.
+export async function nudgeAttendanceAction(concertId: string): Promise<{ ok: boolean; sent?: number; error?: string }> {
+  const { workspaceId } = await requireManagerAction();
+  const { emailConfigured, sendEmail } = await import("@/lib/email");
+  if (!emailConfigured()) return { ok: false, error: "Configura RESEND_API_KEY per enviar correus" };
+  const { rows } = await db().query(
+    `select c.date, c.time, c.city, c.venue, c.band_name, c.attendance, bm.member_name, p.email
+     from concerts c
+     join band_members bm on bm.band_id = c.band_id
+     join profiles p on p.clerk_user_id = bm.clerk_user_id
+     where c.id=$1 and c.workspace_id=$2 and p.email <> ''`,
+    [concertId, workspaceId]
+  );
+  let sent = 0;
+  for (const r of rows) {
+    const answer = (r.attendance || {})[r.member_name];
+    if (answer === "yes" || answer === "no") continue;
+    const dateStr = typeof r.date === "string" ? r.date.slice(0, 10) : r.date.toISOString().slice(0, 10);
+    const res = await sendEmail({
+      to: r.email,
+      subject: `Pots venir al bolo de ${r.band_name} el ${dateStr}?`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; background: #12101f; color: #f5f4fa; padding: 28px; border-radius: 16px;">
+          <div style="letter-spacing: 4px; font-size: 12px; color: #a99df5; margin-bottom: 18px;">ESCENARI</div>
+          <h2 style="margin: 0 0 6px; font-size: 18px;">Encara no has confirmat</h2>
+          <p style="color: #b9b5cc; margin: 0 0 16px;">${r.band_name} · ${dateStr}${r.time ? " · " + r.time + "h" : ""}${r.city ? " · " + r.city : ""}</p>
+          <p style="color: #d9d6e8;">Entra a Escenari i digues si hi seràs — el gestor necessita tancar la formació.</p>
+        </div>`,
+    });
+    if (res.ok) sent++;
+  }
+  return { ok: true, sent };
+}
+
+// Importació ràpida de bolos passats o futurs: una línia per concert,
+// "data; grup; població; ubicació; festa; import; estat".
+export async function importConcertsAction(raw: string): Promise<{ imported: number; errors: number }> {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  let imported = 0, errors = 0;
+  for (const line of (raw || "").split("\n")) {
+    const parts = line.split(/[;\t]/).map((p) => p.trim());
+    const dateRaw = parts[0];
+    const bandName = parts[1];
+    if (!dateRaw || !bandName) { if (line.trim()) errors++; continue; }
+    // Accepta aaaa-mm-dd o dd/mm/aaaa.
+    let date = dateRaw;
+    const dm = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (dm) date = `${dm[3]}-${dm[2].padStart(2, "0")}-${dm[1].padStart(2, "0")}`;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors++; continue; }
+
+    let bandRow = (await pool.query("select id, name, tags from bands where lower(name)=$1 and workspace_id=$2", [bandName.toLowerCase(), workspaceId])).rows[0];
+    if (!bandRow) {
+      const newId = "b" + Date.now() + imported;
+      await pool.query(
+        "insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code) values ($1,$2,$3,0,'','','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$4,$5)",
+        [newId, bandName, parts[2] || "—", workspaceId, generateJoinCode()]
+      );
+      bandRow = { id: newId, name: bandName, tags: [] };
+    }
+    const status = ["confirmat", "pendent", "reservat", "cancel·lat"].includes(parts[6]) ? parts[6] : "confirmat";
+    await pool.query(
+      `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, workspace_id)
+       values ($1,$2,'21:00',$3,$4,$5,$6,$7,$8,$9,$10,'{}','{}','{}',$11)`,
+      ["c" + Date.now() + imported, date, parts[3] || "", parts[2] || "", parts[4] || "", bandRow.id, bandRow.name,
+        JSON.stringify(bandRow.tags || []), status, parseInt(parts[5], 10) || 0, workspaceId]
+    );
+    imported++;
+  }
+  revalidateAll();
+  return { imported, errors };
+}
+
 // Tipus d'esdeveniment del calendari (bolo, assaig, reunió, altre).
 export async function setConcertKindAction(id: string, kind: "bolo" | "assaig" | "reunio" | "altre") {
   const { workspaceId } = await requireManagerAction();

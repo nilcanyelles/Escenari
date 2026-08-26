@@ -178,7 +178,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
   const invoicedIds: Record<string, boolean> = {};
   invoices.forEach((i) => { invoicedIds[i.concertId] = true; });
   const projected = pool
-    .filter((c) => (c.status === "confirmat" || c.status === "pendent") && !invoicedIds[c.id])
+    .filter((c) => (c.status === "confirmat" || c.status === "pendent" || c.status === "reservat") && !invoicedIds[c.id])
     .reduce((s, c) => s + Math.round(c.amount * 1.21), 0);
 
   const selectorLabel = range === "all" ? "Tots els temps" : String(year);
@@ -248,7 +248,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
 
   if (tab === "concerts") {
     const done = pool.filter((c) => c.status !== "pendent" && c.date < today).length;
-    const pending = pool.filter((c) => c.status === "pendent").length;
+    const pending = pool.filter((c) => c.status === "pendent" || c.status === "reservat").length;
     const future = pool.length - done - pending;
     const cancelled = concerts.filter((c) => inPeriod(c.date) && c.status === "cancel·lat").length;
     const confirmRate = pool.length + cancelled > 0 ? Math.round((pool.length / (pool.length + cancelled)) * 100) : 0;
@@ -302,7 +302,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
       if (c) revByBand[c.bandId] = (revByBand[c.bandId] || 0) + i.amount;
     });
     pool.forEach((c) => {
-      if ((c.status === "confirmat" || c.status === "pendent") && !invoicedIds[c.id]) {
+      if ((c.status === "confirmat" || c.status === "pendent" || c.status === "reservat") && !invoicedIds[c.id]) {
         revByBand[c.bandId] = (revByBand[c.bandId] || 0) + Math.round(c.amount * 1.21);
       }
     });
@@ -381,7 +381,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
 
       {ranks}
 
-      {tab === "diners" && <FinancePanel transactions={transactions} bands={bands} concerts={concerts} />}
+      {tab === "diners" && <FinancePanel transactions={transactions} bands={bands} concerts={concerts} invoices={invoices} />}
     </div>
   );
 }

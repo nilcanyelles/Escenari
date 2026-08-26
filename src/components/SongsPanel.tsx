@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import type { Song } from "@/lib/songs";
 import { transposeChord, parseChordLine, hasChords } from "@/lib/songs";
+import { normalize } from "@/lib/text";
 import { saveSongAction, deleteSongAction, importSongsAction, uploadFileAction, deleteFileAction } from "@/app/(app)/grup/songs-actions";
 import SpecularButton from "@/components/SpecularButton";
 
@@ -213,8 +214,8 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
 
-  const q = search.trim().toLowerCase();
-  const list = songs.filter((s) => !q || s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q));
+  const q = normalize(search.trim());
+  const list = songs.filter((s) => !q || normalize(s.title).includes(q) || normalize(s.artist).includes(q));
   const editingSong = editing?.song ? songs.find((s) => s.id === editing.song!.id) || editing.song : null;
 
   return (

@@ -3040,3 +3040,724 @@ button { font-family: inherit; }
 /* Agenda: iCal */
 .ics-row { display: flex; gap: 12px; align-items: center; font-size: 12.5px; flex-wrap: wrap; }
 .stage-mode-btn { color: var(--accent-text); border-color: oklch(0.68 0.19 290 / 0.4); }
+
+/* ============ Correccions backstage ============ */
+
+/* Avís de conflicte de dates */
+.clash-banner {
+  background: oklch(0.78 0.15 80 / 0.1);
+  border: 1px solid oklch(0.78 0.15 80 / 0.45);
+  color: oklch(0.85 0.12 80);
+  border-radius: var(--radius-sm);
+  padding: 12px 16px;
+  font-size: 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Recompte d'assistència a la llista de concerts */
+.att-badge {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border-radius: 999px;
+  padding: 2px 8px;
+  background: oklch(0.78 0.15 80 / 0.16);
+  color: oklch(0.82 0.15 80);
+  white-space: nowrap;
+}
+.att-badge.full { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); }
+
+/* Edició de factura + recordatoris */
+.cd-invoice-edit {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 10px;
+}
+.cd-invoice-edit label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+.cd-reminder-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  border-top: 1px dashed var(--border-soft);
+  padding-top: 10px;
+}
+.cd-margin-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 13px;
+  background: var(--bg-card-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  margin-top: 12px;
+}
+.cd-history { display: flex; flex-direction: column; gap: 4px; }
+.cd-history-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12.5px;
+  border-bottom: 1px solid var(--border-soft);
+  padding: 6px 2px;
+}
+.cd-history-row:last-child { border-bottom: none; }
+
+/* Interruptor de visibilitat del caixet */
+.show-fees-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-right: 14px;
+}
+
+/* Vista dia de bolo (mòbil) */
+.dia {
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 30px;
+}
+.dia-top { display: flex; justify-content: space-between; align-items: center; }
+.dia-hero {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.dia-date { font-family: "Space Grotesk", sans-serif; font-size: 21px; font-weight: 700; }
+.dia-place { font-size: 15px; color: var(--text-dim); }
+.dia-fee { font-family: "Space Grotesk", sans-serif; font-size: 19px; font-weight: 700; color: oklch(0.78 0.15 155); margin-top: 6px; }
+.dia-maps {
+  display: block;
+  text-align: center;
+  background: oklch(0.68 0.19 290 / 0.14);
+  border: 1px solid oklch(0.68 0.19 290 / 0.4);
+  color: var(--accent-text);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+.dia-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dia-card-title {
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  font-weight: 700;
+}
+.dia-sched-row { display: flex; gap: 12px; align-items: baseline; font-size: 14px; flex-wrap: wrap; }
+.dia-sched-time { font-variant-numeric: tabular-nums; font-weight: 700; color: var(--accent-text); min-width: 96px; }
+.dia-contact-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.dia-call {
+  background: oklch(0.72 0.15 155 / 0.14);
+  color: oklch(0.78 0.15 155);
+  border-radius: 999px;
+  padding: 8px 15px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 13.5px;
+  white-space: nowrap;
+}
+.dia-members { display: flex; gap: 6px; flex-wrap: wrap; }
+.dia-member {
+  font-size: 12.5px;
+  border-radius: 999px;
+  padding: 5px 12px;
+  background: oklch(1 0 0 / 0.06);
+  color: var(--text-muted);
+}
+.dia-member.yes { background: oklch(0.72 0.15 155 / 0.14); color: oklch(0.78 0.15 155); }
+.dia-member.no { background: oklch(0.68 0.18 25 / 0.14); color: oklch(0.74 0.18 25); }
+
+/* ============ Landing "escenari" (focus de llum, sense scroll) ============ */
+.light-rays-container {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  pointer-events: none;
+  z-index: 3;
+  overflow: hidden;
+}
+
+.stage-landing {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 110%, #16121f 0%, #0b0a12 45%, #060509 100%);
+  display: flex;
+  flex-direction: column;
+  color: var(--text);
+}
+
+.stage-rays {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.stage-rays-side { opacity: 0.55; mix-blend-mode: screen; }
+
+/* Terra de l'escenari: taulons de fusta en perspectiva + focus al terra */
+.stage-floor {
+  position: absolute;
+  left: -12%;
+  right: -12%;
+  bottom: 0;
+  height: 26vh;
+  z-index: 2;
+  /* Escenari negre: taulons foscos amb un reflex mínim */
+  background:
+    linear-gradient(180deg, rgba(6, 6, 9, 0.55), rgba(4, 4, 7, 0.94) 45%, #010102 100%),
+    repeating-linear-gradient(90deg, #101014 0 90px, #0a0a0e 90px 92px, #131318 92px 180px, #0b0b10 180px 182px);
+  transform: perspective(520px) rotateX(48deg);
+  transform-origin: 50% 0%;
+  border-top: 1px solid rgba(200, 190, 255, 0.12);
+}
+.stage-floor-spot {
+  position: absolute;
+  left: 50%;
+  top: 6%;
+  width: 58%;
+  height: 66%;
+  transform: translateX(-50%);
+  background: radial-gradient(ellipse at center, rgba(205, 180, 255, 0.4), rgba(205, 180, 255, 0.12) 55%, transparent 75%);
+  filter: blur(6px);
+}
+
+/* Capçalera amb pestanyes */
+.stage-header {
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 20px 32px;
+  /* Vel fosc perquè el focus no mengi la navegació */
+  background: linear-gradient(180deg, rgba(4, 3, 8, 0.72), rgba(4, 3, 8, 0.28) 70%, transparent);
+}
+.stage-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 auto;
+  background: rgba(8, 6, 14, 0.78);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 999px;
+  padding: 4px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.55);
+}
+.stage-tab {
+  border: none;
+  background: transparent;
+  color: rgba(240, 237, 250, 0.85);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 8px 22px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.8);
+}
+.stage-tab:hover { color: #ffffff; }
+.stage-tab.active { background: oklch(0.68 0.19 290 / 0.55); color: white; text-shadow: none; }
+.stage-header-cta { min-width: 130px; display: flex; justify-content: flex-end; }
+
+/* Contingut central */
+.stage-main {
+  position: relative;
+  z-index: 5;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px 12vh;
+}
+
+.stage-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  text-align: center;
+  animation: stage-fade 0.5s ease both;
+}
+.stage-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: clamp(3rem, 10vw, 7rem);
+  letter-spacing: 0.14em;
+  margin: 0;
+  color: #f4f1ff;
+  text-shadow:
+    0 0 32px rgba(180, 150, 255, 0.55),
+    0 0 90px rgba(140, 110, 255, 0.35);
+}
+.stage-tagline {
+  margin: 0;
+  color: var(--text-dim);
+  font-size: clamp(0.95rem, 2vw, 1.15rem);
+  max-width: 46ch;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.6);
+}
+.stage-ctas { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; margin-top: 12px; }
+
+/* Funcionalitats: dos panells de vidre sota el focus */
+.stage-features {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+  width: min(920px, 100%);
+  max-height: 100%;
+  animation: stage-fade 0.4s ease both;
+}
+.stage-feature-panel {
+  background: rgba(16, 13, 26, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 18px;
+  padding: 22px 26px;
+  backdrop-filter: blur(14px);
+  overflow-y: auto;
+  max-height: 58vh;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+.stage-feature-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--accent-text);
+  margin-bottom: 14px;
+  letter-spacing: 0.02em;
+}
+.stage-feature-panel ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; }
+.stage-feature-panel li {
+  font-size: 13.5px;
+  color: var(--text-dim);
+  padding-left: 22px;
+  position: relative;
+  line-height: 1.45;
+}
+.stage-feature-panel li::before {
+  content: "✦";
+  position: absolute;
+  left: 0;
+  color: oklch(0.68 0.19 290 / 0.8);
+  font-size: 11px;
+}
+
+.stage-contact {
+  text-align: center;
+  animation: stage-fade 0.4s ease both;
+}
+.stage-contact-title {
+  font-family: "Space Grotesk", sans-serif;
+  font-size: clamp(1.6rem, 4vw, 2.4rem);
+  margin: 0;
+  color: #f4f1ff;
+  text-shadow: 0 0 28px rgba(180, 150, 255, 0.45);
+}
+
+.stage-footer {
+  position: relative;
+  z-index: 5;
+  text-align: center;
+  padding: 0 0 18px;
+  font-size: 11.5px;
+  color: rgba(230, 225, 250, 0.35);
+}
+
+@keyframes stage-fade {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (max-width: 760px) {
+  .stage-header { flex-wrap: wrap; justify-content: center; padding: 14px 16px; gap: 12px; }
+  .stage-header-cta { min-width: 0; }
+  .stage-features { grid-template-columns: 1fr; overflow-y: auto; max-height: 100%; }
+  .stage-feature-panel { max-height: none; overflow: visible; }
+  .stage-main { padding-bottom: 16vh; align-items: flex-start; overflow-y: auto; }
+}
+
+/* ============ Magic Bento (pàgina de grup) ============ */
+.brand-link { text-decoration: none; cursor: pointer; transition: opacity 0.15s; }
+.brand-link:hover { opacity: 0.8; }
+
+.card-grid {
+  display: grid;
+  gap: 12px;
+  width: 100%;
+}
+.bento-section { position: relative; user-select: none; }
+
+.magic-bento-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  min-height: 150px;
+  width: 100%;
+  max-width: 100%;
+  padding: 18px 20px;
+  border-radius: 18px;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  overflow: hidden;
+  transition: all 0.3s ease;
+
+  --glow-x: 50%;
+  --glow-y: 50%;
+  --glow-intensity: 0;
+  --glow-radius: 200px;
+  --glow-color: 139, 123, 255;
+}
+.magic-bento-card.clickable { cursor: pointer; }
+.magic-bento-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
+}
+
+.magic-bento-card__header,
+.magic-bento-card__content {
+  display: flex;
+  position: relative;
+  color: var(--text);
+  z-index: 2;
+}
+.magic-bento-card__header { gap: 0.75em; justify-content: space-between; }
+.magic-bento-card__content { flex-direction: column; margin-top: auto; }
+.magic-bento-card__body { position: relative; z-index: 2; flex: 1; display: flex; align-items: center; padding: 10px 0; min-height: 0; }
+
+.magic-bento-card__label {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  font-weight: 700;
+}
+.magic-bento-card__title {
+  font-family: "Space Grotesk", sans-serif;
+  font-weight: 700;
+  font-size: 17px;
+  margin: 0 0 0.25em;
+  color: var(--text);
+}
+.magic-bento-card__description {
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 0;
+  color: var(--text-muted);
+}
+
+@media (max-width: 599px) {
+  .card-grid { grid-template-columns: 1fr; }
+  .magic-bento-card { min-height: 130px; }
+  /* En mòbil, cap targeta ocupa més d'una columna */
+  .magic-bento-card { grid-column: auto !important; grid-row: auto !important; }
+}
+@media (min-width: 600px) {
+  .card-grid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (min-width: 1024px) {
+  .card-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+/* Vora amb glow que segueix el ratolí */
+.magic-bento-card--border-glow::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 6px;
+  background: radial-gradient(
+    var(--glow-radius) circle at var(--glow-x) var(--glow-y),
+    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.8)) 0%,
+    rgba(var(--glow-color), calc(var(--glow-intensity) * 0.4)) 30%,
+    transparent 60%
+  );
+  border-radius: inherit;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+  z-index: 1;
+}
+.magic-bento-card--border-glow:hover {
+  box-shadow:
+    0 4px 20px rgba(20, 12, 50, 0.45),
+    0 0 30px rgba(var(--glow-color), 0.2);
+}
+
+.particle-container { position: relative; overflow: hidden; }
+.particle::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  background: rgba(139, 123, 255, 0.2);
+  border-radius: 50%;
+  z-index: -1;
+}
+
+.global-spotlight {
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+  z-index: 200 !important;
+  pointer-events: none;
+}
+
+/* Contingut de les targetes del grup */
+.bento-members {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-content: flex-start;
+}
+.bento-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 58px;
+}
+.bento-member img {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  object-fit: cover;
+}
+.bento-member span {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bento-member-more {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: oklch(1 0 0 / 0.07);
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+.bento-gigs { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+.bento-gig {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12.5px;
+  background: oklch(1 0 0 / 0.04);
+  border-radius: 9px;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.bento-gig:hover { background: oklch(1 0 0 / 0.08); }
+.bento-gig-date { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
+.bento-gig-place { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ============ Landing mòbil: la llum s'encén amb l'scroll ============ */
+.stage-landing-mobile { background: #030305; }
+.stage-mheader {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 16px;
+  background: linear-gradient(180deg, rgba(3, 3, 6, 0.85), rgba(3, 3, 6, 0.4) 75%, transparent);
+}
+.stage-mheader-cta { display: flex; gap: 8px; align-items: center; }
+.stage-mcta-primary {
+  background: var(--accent);
+  color: white;
+  text-decoration: none;
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 8px 14px;
+  white-space: nowrap;
+}
+.stage-mscroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+}
+.stage-mscroll::-webkit-scrollbar { display: none; }
+.stage-mtrack { height: 260vh; }
+.stage-msticky {
+  position: sticky;
+  top: 0;
+  height: 100dvh;
+  overflow: hidden;
+}
+.stage-mmain {
+  position: absolute;
+  inset: 0;
+  padding: 70px 18px 18vh;
+}
+.stage-mhint {
+  position: absolute;
+  bottom: 96px;
+  left: 0; right: 0;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  color: rgba(230, 225, 250, 0.55);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  animation: stage-fade 1s ease 0.5s both;
+  pointer-events: none;
+}
+.stage-mhint-arrow { animation: mhint-bounce 1.6s infinite; font-size: 16px; }
+@keyframes mhint-bounce { 50% { transform: translateY(6px); } }
+
+.stage-mtabs {
+  position: fixed;
+  left: 50%;
+  bottom: calc(14px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 30;
+  margin: 0;
+}
+.stage-mtabs .stage-tab { padding: 9px 16px; font-size: 12.5px; }
+
+.stage-mpanel {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.stage-mpanel-content {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  overflow-y: auto;
+  padding: 76px 16px calc(90px + env(safe-area-inset-bottom));
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+.stage-mpanel .stage-features { grid-template-columns: 1fr; }
+.stage-mpanel .stage-feature-panel { max-height: none; overflow: visible; }
+
+/* ============ Bento: targeta d'equip més cuidada ============ */
+.bento-members {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px 8px;
+  width: 100%;
+  align-content: center;
+}
+.bento-member {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  min-width: 0;
+}
+.bento-member-avatar {
+  position: relative;
+  width: 54px;
+  height: 54px;
+}
+.bento-member-avatar > img {
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 2px solid oklch(1 0 0 / 0.1);
+  transition: border-color 0.2s, transform 0.2s;
+}
+.bento-member.linked .bento-member-avatar > img {
+  border-color: oklch(0.68 0.19 290 / 0.75);
+  box-shadow: 0 0 14px oklch(0.68 0.19 290 / 0.3);
+}
+.magic-bento-card:hover .bento-member-avatar > img { transform: scale(1.04); }
+.bento-member-instr {
+  position: absolute;
+  bottom: -5px;
+  right: -7px;
+  width: 22px;
+  height: 22px;
+  border-radius: 8px;
+  background: var(--bg-card-2);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.bento-member-instr img { width: 14px; height: 14px; object-fit: contain; }
+.bento-member-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-dim);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bento-member-role {
+  font-size: 9.5px;
+  color: var(--text-ghost);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bento-member-more {
+  align-self: center;
+  justify-self: center;
+}
+@media (max-width: 900px) {
+  .bento-members { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}

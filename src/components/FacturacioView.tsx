@@ -68,6 +68,18 @@ export default function FacturacioView({ concerts, invoices, companyInfo }: { co
             <label className="form-label">Número de compte</label>
             <input className="field-input form-field compact-field" type="text" placeholder="ES00 0000 0000 0000 0000 0000" value={company.iban} onChange={(e) => setCompany((p) => ({ ...p, iban: e.target.value }))} onBlur={saveCompany} />
           </div>
+          <div style={{ display: "flex", flexDirection: "column", width: 110 }}>
+            <label className="form-label">IVA %</label>
+            <select className="field-input form-field compact-field" value={company.ivaRate} onChange={(e) => { const v = parseFloat(e.target.value); setCompany((p) => ({ ...p, ivaRate: v })); }} onBlur={saveCompany}>
+              <option value={21}>21</option><option value={10}>10</option><option value={0}>0</option>
+            </select>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", width: 110 }}>
+            <label className="form-label">IRPF %</label>
+            <select className="field-input form-field compact-field" value={company.irpfRate} onChange={(e) => { const v = parseFloat(e.target.value); setCompany((p) => ({ ...p, irpfRate: v })); }} onBlur={saveCompany}>
+              <option value={0}>0</option><option value={7}>7</option><option value={15}>15</option>
+            </select>
+          </div>
         </div>
         {companySaving && <div className="t-dim" style={{ fontSize: 11, marginTop: 6 }}>Desant…</div>}
       </div>

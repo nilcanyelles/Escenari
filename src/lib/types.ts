@@ -18,6 +18,7 @@ export type Band = {
   color1?: string;
   color2?: string;
   backups?: BackupPerson[];
+  showFees?: boolean;
 };
 
 export type Concert = {
@@ -30,7 +31,7 @@ export type Concert = {
   bandId: string;
   bandName: string;
   tags: string[];
-  status: "confirmat" | "pendent" | "cancel·lat";
+  status: "confirmat" | "pendent" | "reservat" | "cancel·lat";
   amount: number;
   attendance: Record<string, "yes" | "no">;
   substitutes: Record<string, string>;
@@ -51,6 +52,12 @@ export type Invoice = {
   dueDate: string;
   amount: number;
   state: "pagada" | "pendent" | "vençuda";
+  baseAmount: number;
+  ivaRate: number;
+  irpfRate: number;
+  depositAmount: number;
+  depositPaid: boolean;
+  hash: string;
 };
 
 export type ClientDetails = {
@@ -65,6 +72,8 @@ export type CompanyInfo = {
   cif: string;
   address: string;
   iban: string;
+  ivaRate: number;
+  irpfRate: number;
 };
 
 export type ContactKind = "grup" | "ruta" | "empresa";

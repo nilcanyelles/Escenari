@@ -11,7 +11,7 @@ export function computeMonthAgg(concerts: Concert[], yearFilter: number, today: 
     if (c.status === "cancel·lat") return;
     const m2 = parseInt(c.date.slice(5, 7), 10) - 1;
     agg[m2].count += 1;
-    if (c.status === "pendent") agg[m2].pendingCount += 1;
+    if (c.status === "pendent" || c.status === "reservat") agg[m2].pendingCount += 1;
     else if (c.date < today) agg[m2].pastCount += 1;
     else agg[m2].futureCount += 1;
   });
@@ -25,7 +25,7 @@ export function computeYearAgg(concerts: Concert[], years: number[], today: stri
     const y = Number(c.date.slice(0, 4));
     if (!(y in agg) || c.status === "cancel·lat") return;
     agg[y].count += 1;
-    if (c.status === "pendent") agg[y].pendingCount += 1;
+    if (c.status === "pendent" || c.status === "reservat") agg[y].pendingCount += 1;
     else if (c.date < today) agg[y].pastCount += 1;
     else agg[y].futureCount += 1;
   });
@@ -49,7 +49,7 @@ export function computeProjectedMonthAgg(concerts: Concert[], invoicedIds: Recor
   for (let m = 0; m < 12; m++) agg[m] = 0;
   concerts.forEach((c) => {
     if (yearFilter && c.date.slice(0, 4) !== String(yearFilter)) return;
-    if (c.status !== "confirmat" && c.status !== "pendent") return;
+    if (c.status !== "confirmat" && c.status !== "pendent" && c.status !== "reservat") return;
     if (invoicedIds[c.id]) return;
     const m2 = parseInt(c.date.slice(5, 7), 10) - 1;
     agg[m2] += Math.round(c.amount * 1.21);
@@ -75,7 +75,7 @@ export function computeProjectedYearAgg(concerts: Concert[], invoicedIds: Record
   concerts.forEach((c) => {
     const y = Number(c.date.slice(0, 4));
     if (!(y in agg)) return;
-    if (c.status !== "confirmat" && c.status !== "pendent") return;
+    if (c.status !== "confirmat" && c.status !== "pendent" && c.status !== "reservat") return;
     if (invoicedIds[c.id]) return;
     agg[y] += Math.round(c.amount * 1.21);
   });

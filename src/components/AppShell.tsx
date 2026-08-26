@@ -63,7 +63,17 @@ export default function AppShell({
   function selectBand(id: string) {
     setLocalBand(id);
     setBandCookie(id);
-    startTransition(() => router.refresh());
+    startTransition(() => {
+      if (id) {
+        // Triar un grup porta directament a la seva pàgina.
+        router.push("/grup");
+        router.refresh();
+      } else {
+        // "Tots els grups" no té pàgina de grup: cap a l'agenda.
+        if (pathname.startsWith("/grup")) router.push("/agenda");
+        router.refresh();
+      }
+    });
   }
 
   function ProfileButton() {
@@ -135,10 +145,10 @@ export default function AppShell({
       {bandRail}
       <div className="main-col">
         <div className="mobile-topbar mobile-only">
-          <span className="brand-lockup">
+          <Link href="/resum" className="brand-lockup brand-link" title="Torna a l'inici">
             <img className="brand-mark" src="/logo-mark.png" alt="" />
             <span className="brand-name">ESCENARI</span>
-          </span>
+          </Link>
           <div className="spacer"></div>
           <ProfileButton />
         </div>
@@ -146,10 +156,10 @@ export default function AppShell({
 
         <div className="page-header desktop-only">
           <div className="page-header-brand">
-            <span className="brand-lockup">
+            <Link href="/resum" className="brand-lockup brand-link" title="Torna a l'inici">
               <img className="brand-mark" src="/logo-mark.png" alt="" />
               <span className="brand-name">ESCENARI</span>
-            </span>
+            </Link>
           </div>
           <div className="topnav" ref={topnavRef}>
             <div

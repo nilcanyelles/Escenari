@@ -6,6 +6,9 @@ import { getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
 import { getChecklists } from "@/lib/checklists";
+import { getTransactions } from "@/lib/finance";
+import { normalize } from "@/lib/text";
+import { daysBetween } from "@/lib/format";
 import { emailConfigured } from "@/lib/email";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
@@ -31,6 +34,45 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
     getRiderApprovals(workspaceId, id),
     getChecklists(workspaceId, id),
   ]);
+  const transactions = await getTransactions(workspaceId);
+  const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
+
+  // Conflictes: mateix grup el mateix dia, o un membre compromès amb un altre
+  // grup el mateix dia (grups que comparteixen el mateix nom de músic).
+  const clashes: string[] = [];
+  if (concert.status !== "cancel·lat") {
+    const memberNames = new Set((band?.members || []).map((m) => m.name.toLowerCase()));
+    concerts.forEach((o) => {
+      if (o.id === id || o.date !== concert.date || o.status === "cancel·lat") return;
+      if (o.bandId === concert.bandId) {
+        clashes.push(`${concert.bandName} ja té un altre esdeveniment aquest dia: ${o.city || o.venue || o.id} (${o.status}).`);
+        return;
+      }
+      const otherBand = bands.find((b) => b.id === o.bandId);
+      const shared = (otherBand?.members || []).filter((m) => memberNames.has(m.name.toLowerCase())).map((m) => m.name);
+      if (shared.length) {
+        clashes.push(`${shared.join(", ")} també ${shared.length === 1 ? "toca" : "toquen"} amb ${o.bandName} aquest dia (${o.city || o.venue || "—"}).`);
+      }
+    });
+  }
+
+  // Historial del client/recinte: què s'hi ha cobrat i com han pagat.
+  const venueKey = normalize(concert.venue);
+  const venueHistory = venueKey
+    ? concerts
+        .filter((c) => c.id !== id && normalize(c.venue) === venueKey && c.status !== "cancel·lat")
+        .sort((a, b) => b.date.localeCompare(a.date))
+        .slice(0, 8)
+        .map((c) => {
+          const inv = invoices.find((i) => i.concertId === c.id) || null;
+          return {
+            date: c.date,
+            amount: c.amount,
+            invoiceState: inv?.state || null,
+            daysToPay: inv && inv.state === "pagada" ? Math.max(0, daysBetween(inv.issueDate, inv.dueDate)) : null,
+          };
+        })
+    : [];
 
   return (
     <ConcertDetailView
@@ -47,6 +89,9 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       setlists={setlists}
       riderApprovals={riderApprovals}
       checklists={checklists}
+      clashes={clashes}
+      venueHistory={venueHistory}
+      concertExpenses={concertExpenses.reduce((s, t) => s + t.amount, 0)}
       emailReady={emailConfigured()}
       today={today()}
     />

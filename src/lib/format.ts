@@ -50,5 +50,13 @@ export function formatCurrency(n: number): string {
 export function statusColors(status: string): { bg: string; color: string } {
   if (status === "confirmat" || status === "pagada") return { bg: "oklch(0.72 0.15 155 / 0.16)", color: "oklch(0.78 0.15 155)" };
   if (status === "pendent") return { bg: "oklch(0.78 0.15 80 / 0.16)", color: "oklch(0.82 0.15 80)" };
+  if (status === "reservat") return { bg: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" };
   return { bg: "oklch(0.68 0.18 25 / 0.16)", color: "oklch(0.74 0.18 25)" };
+}
+
+// Dies transcorreguts entre dues dates (aaaa-mm-dd).
+export function daysBetween(a: string, b: string): number {
+  const pa = a.split("-").map(Number), pb = b.split("-").map(Number);
+  const da = new Date(pa[0], pa[1] - 1, pa[2]), dbb = new Date(pb[0], pb[1] - 1, pb[2]);
+  return Math.round((dbb.getTime() - da.getTime()) / 86400000);
 }

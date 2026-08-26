@@ -1,4 +1,4 @@
-import GrupsView from "@/components/GrupsView";
+import { redirect } from "next/navigation";
 import GroupHomeView from "@/components/GroupHomeView";
 import { getBands, getConcerts } from "@/lib/data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
@@ -10,8 +10,7 @@ import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 
 export const dynamic = "force-dynamic";
 
-// Pàgina principal del grup: si hi ha un grup seleccionat a la barra lateral,
-// mostra la seva fitxa (membres, suplents, bolos); si no, la graella de grups.
+// Pàgina principal del grup seleccionat (membres, suplents, material, bolos).
 export default async function GrupPage() {
   const { workspaceId } = await requireManager();
   const [bands, concerts, selectedRaw] = await Promise.all([
@@ -28,9 +27,9 @@ export default async function GrupPage() {
     });
   });
 
-  if (!bandId) {
-    return <GrupsView bands={bands} historyByBand={historyByBand} concertCountByPerson={concertCountByPerson} />;
-  }
+  // Sense grup seleccionat no hi ha pàgina de grup: l'agenda és la vista de
+  // "tots els grups".
+  if (!bandId) redirect("/agenda");
 
   const band = bands.find((b) => b.id === bandId)!;
   const [linkedMembers, backupRequests, riders, setlists, editors, songs, files] = await Promise.all([

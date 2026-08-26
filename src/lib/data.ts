@@ -24,6 +24,7 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     color1: r.color1,
     color2: r.color2,
     backups: r.backups || [],
+    showFees: !!r.show_fees,
   }));
 }
 
@@ -64,10 +65,12 @@ export async function getClientDetails(workspaceId: string): Promise<Record<stri
 
 export async function getCompanyInfo(workspaceId: string): Promise<CompanyInfo> {
   const { rows } = await db().query(
-    "select nom, cif, address, iban from company_info where workspace_id=$1",
+    "select nom, cif, address, iban, iva_rate, irpf_rate from company_info where workspace_id=$1",
     [workspaceId]
   );
-  return rows[0] || { nom: "Escenari", cif: "", address: "", iban: "" };
+  const r = rows[0];
+  if (!r) return { nom: "Escenari", cif: "", address: "", iban: "", ivaRate: 21, irpfRate: 0 };
+  return { nom: r.nom, cif: r.cif, address: r.address, iban: r.iban, ivaRate: Number(r.iva_rate) || 21, irpfRate: Number(r.irpf_rate) || 0 };
 }
 
 export async function getContacts(workspaceId: string): Promise<Contact[]> {
@@ -98,5 +101,11 @@ export async function getInvoices(workspaceId: string): Promise<Invoice[]> {
     dueDate: toDateStr(r.due_date),
     amount: r.amount,
     state: r.state,
+    baseAmount: r.base_amount || Math.round(r.amount / 1.21),
+    ivaRate: Number(r.iva_rate) || 21,
+    irpfRate: Number(r.irpf_rate) || 0,
+    depositAmount: r.deposit_amount || 0,
+    depositPaid: !!r.deposit_paid,
+    hash: r.hash || "",
   }));
 }

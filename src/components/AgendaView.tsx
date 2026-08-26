@@ -15,7 +15,7 @@ export default function AgendaView({ bands, concerts, invoices, icsToken = "", t
 
   const active = concerts.filter((c) => c.status !== "cancel·lat");
   const monthConcerts = active.filter((c) => c.date.slice(0, 7) === ym);
-  const monthPending = monthConcerts.filter((c) => c.status === "pendent").length;
+  const monthPending = monthConcerts.filter((c) => c.status === "pendent" || c.status === "reservat").length;
 
   const next = active
     .filter((c) => c.date >= today)
@@ -32,7 +32,7 @@ export default function AgendaView({ bands, concerts, invoices, icsToken = "", t
     if (c.date.slice(0, 7) === ym) monthRevenue += i.amount;
   });
   monthConcerts.forEach((c) => {
-    if ((c.status === "confirmat" || c.status === "pendent") && !invoicedIds[c.id]) monthRevenue += Math.round(c.amount * 1.21);
+    if ((c.status === "confirmat" || c.status === "pendent" || c.status === "reservat") && !invoicedIds[c.id]) monthRevenue += Math.round(c.amount * 1.21);
   });
 
   const monthLabel = monthWithPrep(MONTH_FULL[monthIdx]);

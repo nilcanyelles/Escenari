@@ -1,14 +1,26 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, Concert } from "@/lib/types";
+import type { Band, Concert, Invoice } from "@/lib/types";
 import { formatCurrency, formatDate, today } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, type Transaction } from "@/lib/finance";
-import { saveTransactionAction, deleteTransactionAction } from "@/app/(app)/estadistiques/finance-actions";
+import { saveTransactionAction, deleteTransactionAction, uploadReceiptAction } from "@/app/(app)/estadistiques/finance-actions";
+
+// CSV per al gestor/comptable, amb BOM perquè l'Excel l'obri bé.
+function downloadCsv(name: string, headers: string[], rows: (string | number)[][]) {
+  const esc = (v: string | number) => `"${String(v).replace(/"/g, '""')}"`;
+  const csv = "﻿" + [headers, ...rows].map((r) => r.map(esc).join(";")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 // Moviments econòmics + repartiment pendent per músic + fons d'estalvi.
-export default function FinancePanel({ transactions, bands, concerts }: { transactions: Transaction[]; bands: Band[]; concerts: Concert[] }) {
+export default function FinancePanel({ transactions, bands, concerts, invoices = [] }: { transactions: Transaction[]; bands: Band[]; concerts: Concert[]; invoices?: Invoice[] }) {
   const router = useRouter();
   const [formOpen, setFormOpen] = useState(false);
   const [form, setForm] = useState({
@@ -23,6 +35,19 @@ export default function FinancePanel({ transactions, bands, concerts }: { transa
   });
   const [saving, setSaving] = useState(false);
   const [visible, setVisible] = useState(15);
+  const receiptInput = useRef<HTMLInputElement>(null);
+  const receiptForRef = useRef<string | null>(null);
+
+  async function handleReceipt(file: File) {
+    const txId = receiptForRef.current;
+    if (!txId) return;
+    const fd = new FormData();
+    fd.set("transactionId", txId);
+    fd.set("file", file);
+    const res = await uploadReceiptAction(fd);
+    if (!res.ok) alert(res.error);
+    router.refresh();
+  }
 
   const memberNames = useMemo(() => {
     const seen: Record<string, boolean> = {};
@@ -92,9 +117,29 @@ export default function FinancePanel({ transactions, bands, concerts }: { transa
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 12 }}>
           <div className="panel-title">Moviments (ingressos i despeses)</div>
-          {!formOpen && <button type="button" className="glow-cta" onClick={() => setFormOpen(true)}>+ Nou moviment</button>}
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              type="button" className="btn-outline" title="Exporta les factures en CSV per al gestor"
+              onClick={() => downloadCsv(
+                "factures-escenari.csv",
+                ["Factura", "Client", "Grup", "Emissió", "Venciment", "Base", "IVA %", "IRPF %", "Total", "Estat"],
+                invoices.map((i) => [i.id, i.client, i.bandName, i.issueDate, i.dueDate, i.baseAmount, i.ivaRate, i.irpfRate, i.amount, i.state])
+              )}
+            >Factures CSV</button>
+            <button
+              type="button" className="btn-outline" title="Exporta els moviments en CSV"
+              onClick={() => downloadCsv(
+                "moviments-escenari.csv",
+                ["Data", "Tipus", "Categoria", "Import", "Membre", "Fons", "Notes"],
+                transactions.map((t) => [t.date, t.kind, t.category, (t.kind === "despesa" ? -1 : 1) * t.amount, t.member, t.fund, t.notes])
+              )}
+            >Moviments CSV</button>
+            {!formOpen && <button type="button" className="glow-cta" onClick={() => setFormOpen(true)}>+ Nou moviment</button>}
+          </div>
         </div>
 
+        <input ref={receiptInput} type="file" hidden accept="image/*,.pdf"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleReceipt(f); e.target.value = ""; }} />
         <div className="fin-summary">
           <span>Ingressos: <strong className="fin-pos">{formatCurrency(income)}</strong></span>
           <span>Despeses: <strong className="fin-neg">{formatCurrency(expenses)}</strong></span>
@@ -151,6 +196,12 @@ export default function FinancePanel({ transactions, bands, concerts }: { transa
                         {formatDate(t.date)}{c ? ` · ${c.city || c.venue}` : ""}{t.fund ? ` · fons: ${t.fund}` : ""}{t.notes ? ` · ${t.notes}` : ""}
                       </span>
                     </div>
+                    {t.receiptFileId ? (
+                      <a className="btn-outline" style={{ fontSize: 11.5, textDecoration: "none" }} href={`/api/file/${t.receiptFileId}`} target="_blank" rel="noreferrer" title="Obre el rebut">🧾</a>
+                    ) : (
+                      <button type="button" className="btn-outline" style={{ fontSize: 11.5 }} title="Adjunta el rebut (foto del tiquet, PDF)"
+                        onClick={() => { receiptForRef.current = t.id; receiptInput.current?.click(); }}>+🧾</button>
+                    )}
                     <button type="button" className="row-delete-btn" onClick={async () => { await deleteTransactionAction(t.id); router.refresh(); }}>✕</button>
                   </div>
                 );

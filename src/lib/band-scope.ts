@@ -11,8 +11,10 @@ export async function getSelectedBandId(): Promise<string> {
 }
 
 // Valida la selecció contra els grups reals del workspace (una cookie envellida
-// no ha de deixar la vista buida).
+// no ha de deixar la vista buida). Amb un sol grup, sempre queda seleccionat:
+// no té sentit l'estat "tots els grups".
 export function resolveBandScope(bands: Band[], selectedBandId: string): string {
+  if (bands.length === 1) return bands[0].id;
   if (!selectedBandId) return "";
   return bands.some((b) => b.id === selectedBandId) ? selectedBandId : "";
 }

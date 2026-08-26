@@ -11,8 +11,10 @@ export default function InvoicePreview({
   companyInfo: CompanyInfo;
   onClose: () => void;
 }) {
-  const subtotal = concert ? concert.amount : Math.round(invoice.amount / 1.21);
-  const vat = invoice.amount - subtotal;
+  // Model espanyol: base + IVA − retenció d'IRPF (si escau).
+  const subtotal = invoice.baseAmount || (concert ? concert.amount : Math.round(invoice.amount / 1.21));
+  const vat = Math.round((subtotal * (invoice.ivaRate ?? 21)) / 100);
+  const irpf = Math.round((subtotal * (invoice.irpfRate ?? 0)) / 100);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -80,10 +82,23 @@ export default function InvoicePreview({
             </table>
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <div style={{ width: 240, display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "oklch(0.4 0.01 258)" }}><span>Subtotal</span><span>{formatCurrency(subtotal)}</span></div>
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "oklch(0.4 0.01 258)" }}><span>IVA (21%)</span><span>{formatCurrency(vat)}</span></div>
+              <div style={{ width: 260, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "oklch(0.4 0.01 258)" }}><span>Base imposable</span><span>{formatCurrency(subtotal)}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "oklch(0.4 0.01 258)" }}><span>IVA ({invoice.ivaRate ?? 21}%)</span><span>{formatCurrency(vat)}</span></div>
+                {(invoice.irpfRate ?? 0) > 0 && (
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, color: "oklch(0.45 0.13 25)" }}><span>Retenció IRPF ({invoice.irpfRate}%)</span><span>−{formatCurrency(irpf)}</span></div>
+                )}
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 17, fontWeight: 700, borderTop: "1.5px solid oklch(0.2 0.01 258)", paddingTop: 10, marginTop: 2 }}><span>Total</span><span>{formatCurrency(invoice.amount)}</span></div>
+                {(invoice.depositAmount ?? 0) > 0 && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "oklch(0.4 0.01 258)" }}>
+                      <span>Bestreta{invoice.depositPaid ? " (cobrada)" : ""}</span><span>{invoice.depositPaid ? "−" : ""}{formatCurrency(invoice.depositAmount)}</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, fontWeight: 600 }}>
+                      <span>Resta a pagar</span><span>{formatCurrency(invoice.amount - (invoice.depositPaid ? invoice.depositAmount : 0))}</span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -97,6 +112,7 @@ export default function InvoicePreview({
               </div>
               <div style={{ fontSize: 11, color: "oklch(0.5 0.01 258)", textAlign: "right", lineHeight: 1.6 }}>
                 Estat: {invoice.state}.<br />Gràcies per confiar en Escenari.
+                {invoice.hash && <><br /><span style={{ fontSize: 8.5, fontFamily: "monospace", color: "oklch(0.65 0.005 258)" }}>Registre: {invoice.hash.slice(0, 16)}…</span></>}
               </div>
             </div>
 

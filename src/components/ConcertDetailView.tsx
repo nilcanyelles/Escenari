@@ -4,9 +4,10 @@ import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails } from "@/lib/types";
-import { formatCurrency, formatDateFull, capitalize, statusColors } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateFull, capitalize, statusColors } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { rsCompletionPercent } from "@/lib/route-sheet";
+import { normalize } from "@/lib/text";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, RiderApproval } from "@/lib/material-types";
 import type { ShareLink } from "@/lib/share-data";
@@ -14,7 +15,9 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, repeatConcertAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, repeatConcertAction, nudgeAttendanceAction } from "@/app/(app)/concerts/actions";
+import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
+import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import type { Checklist } from "@/lib/checklists";
 import ChecklistSection from "@/components/ChecklistSection";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
@@ -25,7 +28,7 @@ import RouteSheetEditor from "@/components/RouteSheetEditor";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
 
-const STATUS_CYCLE = ["pendent", "confirmat", "cancel·lat"];
+const STATUS_CYCLE = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
 // Mateixa escala que el ConcertModal: vermell → groc → verd.
 function progressColor(percent: number, alpha = 1): string {
@@ -90,7 +93,7 @@ function rsMissingList(c: Concert): string[] {
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, emailReady, today,
+  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses, emailReady, today,
 }: {
   concert: Concert;
   band: Band | null;
@@ -105,6 +108,9 @@ export default function ConcertDetailView({
   setlists: Setlist[];
   riderApprovals: RiderApproval[];
   checklists: Checklist[];
+  clashes: string[];
+  venueHistory: { date: string; amount: number; invoiceState: string | null; daysToPay: number | null }[];
+  concertExpenses: number;
   emailReady: boolean;
   today: string;
 }) {
@@ -117,6 +123,8 @@ export default function ConcertDetailView({
   const [substitutes, setSubstitutes] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
   const [noSubstitute, setNoSubstitute] = useState<Record<string, boolean>>({ ...(concert.noSubstitute || {}) });
   const [saving, setSaving] = useState(false);
+  const [nudging, setNudging] = useState(false);
+  const [nudgeResult, setNudgeResult] = useState<string | null>(null);
   const [kind, setKind] = useState<string>(concert.kind || "bolo");
   const [repeatWeeks, setRepeatWeeks] = useState(4);
   const [repeating, setRepeating] = useState(false);
@@ -148,7 +156,7 @@ export default function ConcertDetailView({
   const [riderPickerOpen, setRiderPickerOpen] = useState(false);
   const selectedRider = riders.find((r) => r.id === riderId) || null;
   const selectedSetlist = setlists.find((s) => s.id === setlistId) || null;
-  const riderMatches = riders.filter((r) => !riderSearch.trim() || r.name.toLowerCase().includes(riderSearch.trim().toLowerCase()));
+  const riderMatches = riders.filter((r) => !riderSearch.trim() || normalize(r.name).includes(normalize(riderSearch.trim())));
 
   // ---- Aprovació del rider ----
   const [apName, setApName] = useState("");
@@ -291,6 +299,13 @@ export default function ConcertDetailView({
   const payoutNames = Object.keys(payouts).length ? Object.keys(payouts) : attendingNames;
 
   // ---- Facturació ----
+  const [invEditOpen, setInvEditOpen] = useState(false);
+  const [invEdit, setInvEdit] = useState({ base: "", iva: "21", irpf: "0", deposit: "0" });
+  const [reminderEmail, setReminderEmail] = useState("");
+  const [reminding, setReminding] = useState(false);
+  const [reminderStatus, setReminderStatus] = useState<string | null>(null);
+  const invTotals = invoice ? computeInvoiceTotals(invoice.baseAmount, invoice.ivaRate, invoice.irpfRate) : { iva: 0, irpf: 0, total: 0 };
+  const daysOut = invoice ? Math.max(0, Math.round((new Date(today).getTime() - new Date(invoice.issueDate).getTime()) / 86400000)) : 0;
   const clientKey = concert.venue;
   const cd = clientDetails[clientKey] || { clientName: clientKey, cif: "", nom: "", address: "" };
   const [clientForm, setClientForm] = useState({ nom: cd.nom, cif: cd.cif, address: cd.address });
@@ -345,8 +360,18 @@ export default function ConcertDetailView({
       {/* Capçalera */}
       <div className="cd-topbar">
         <Link href="/concerts" className="cd-back">← Concerts</Link>
-        {saving && <span className="t-dim" style={{ fontSize: 12 }}>Desant…</span>}
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          {saving && <span className="t-dim" style={{ fontSize: 12 }}>Desant…</span>}
+          <Link href={`/concerts/${concert.id}/dia`} className="cd-back" title="Tota la info del dia del bolo en una sola pantalla de mòbil">📱 Vista dia de bolo</Link>
+        </div>
       </div>
+
+      {clashes.length > 0 && (
+        <div className="clash-banner">
+          <strong>⚠ Possible conflicte de dates</strong>
+          {clashes.map((c, i) => <div key={i}>{c}</div>)}
+        </div>
+      )}
 
       <div className="cd-hero">
         <div className="cd-hero-main">
@@ -454,8 +479,22 @@ export default function ConcertDetailView({
       <div className="panel cd-section" id="cd-assistencia">
         <div className="panel-header-row cd-section-title">
           <div className="panel-title">Assistència</div>
-          <div className="t-dim" style={{ fontSize: 12 }}>
-            {members.filter((m) => attendance[m.name] === "yes").length}/{members.length} confirmats
+          <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+            {linkedMembers.some((lm) => attendance[lm.memberName] !== "yes" && attendance[lm.memberName] !== "no") && (
+              <button
+                type="button" className="btn-outline" disabled={!emailReady || nudging}
+                title={emailReady ? "Correu als membres amb compte que encara no han respost" : "Configura RESEND_API_KEY per enviar correus"}
+                onClick={async () => {
+                  setNudging(true);
+                  const res = await nudgeAttendanceAction(concert.id);
+                  setNudgeResult(res.ok ? `${res.sent} recordatoris enviats ✓` : res.error || "error");
+                  setNudging(false);
+                }}
+              >{nudgeResult || (nudging ? "Enviant…" : "Recorda-ho als pendents")}</button>
+            )}
+            <div className="t-dim" style={{ fontSize: 12 }}>
+              {members.filter((m) => attendance[m.name] === "yes").length}/{members.length} confirmats
+            </div>
           </div>
         </div>
         {members.length === 0 ? (
@@ -712,29 +751,105 @@ export default function ConcertDetailView({
               <div className="cd-invoice-card">
                 <div className="cd-invoice-head">
                   <button type="button" className="link-btn t-strong" onClick={() => setInvoicePreviewOpen(true)}>{invoice.id}</button>
-                  <select
-                    className="field-input compact-field"
-                    value={invoice.state}
-                    onChange={async (e) => { await setInvoiceStateAction(invoice.id, e.target.value as "pagada" | "pendent" | "vençuda"); router.refresh(); }}
-                  >
-                    <option value="pendent">pendent</option>
-                    <option value="pagada">pagada</option>
-                    <option value="vençuda">vençuda</option>
-                  </select>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    {invoice.state !== "pagada" && (
+                      <span className={"t-dim" + (daysOut > 30 ? " fin-neg" : "")} style={{ fontSize: 11.5 }} title="Dies des de l'emissió">
+                        {daysOut} dies
+                      </span>
+                    )}
+                    <select
+                      className="field-input compact-field"
+                      value={invoice.state}
+                      onChange={async (e) => { await setInvoiceStateAction(invoice.id, e.target.value as "pagada" | "pendent" | "vençuda"); router.refresh(); }}
+                    >
+                      <option value="pendent">pendent</option>
+                      <option value="pagada">pagada</option>
+                      <option value="vençuda">vençuda</option>
+                    </select>
+                  </div>
                 </div>
-                <div className="cd-invoice-rows">
-                  <div><span className="t-dim">Base</span><span>{formatCurrency(amountNum)}</span></div>
-                  <div><span className="t-dim">IVA 21%</span><span>{formatCurrency(invoice.amount - amountNum)}</span></div>
-                  <div className="t-strong"><span>Total</span><span>{formatCurrency(invoice.amount)}</span></div>
+
+                {invEditOpen ? (
+                  <div className="cd-invoice-edit">
+                    <label>Base<input type="number" className="field-input compact-field" value={invEdit.base} onChange={(e) => setInvEdit({ ...invEdit, base: e.target.value })} /></label>
+                    <label>IVA %<select className="field-input compact-field" value={invEdit.iva} onChange={(e) => setInvEdit({ ...invEdit, iva: e.target.value })}><option>21</option><option>10</option><option>0</option></select></label>
+                    <label>IRPF %<select className="field-input compact-field" value={invEdit.irpf} onChange={(e) => setInvEdit({ ...invEdit, irpf: e.target.value })}><option>0</option><option>7</option><option>15</option></select></label>
+                    <label>Bestreta<input type="number" className="field-input compact-field" value={invEdit.deposit} onChange={(e) => setInvEdit({ ...invEdit, deposit: e.target.value })} /></label>
+                    <div style={{ display: "flex", gap: 8, gridColumn: "1 / -1" }}>
+                      <button type="button" className="btn-outline" onClick={() => setInvEditOpen(false)}>Cancel·la</button>
+                      <button type="button" className="btn-save" onClick={async () => {
+                        await editInvoiceAction({
+                          id: invoice.id, client: invoice.client, issueDate: invoice.issueDate, dueDate: invoice.dueDate,
+                          baseAmount: parseInt(invEdit.base, 10) || 0, ivaRate: parseFloat(invEdit.iva) || 0,
+                          irpfRate: parseFloat(invEdit.irpf) || 0, depositAmount: parseInt(invEdit.deposit, 10) || 0,
+                          depositPaid: invoice.depositPaid,
+                        });
+                        setInvEditOpen(false);
+                        router.refresh();
+                      }}>Desa</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="cd-invoice-rows">
+                    <div><span className="t-dim">Base imposable</span><span>{formatCurrency(invoice.baseAmount)}</span></div>
+                    <div><span className="t-dim">IVA {invoice.ivaRate}%</span><span>{formatCurrency(invTotals.iva)}</span></div>
+                    {invoice.irpfRate > 0 && <div><span className="t-dim">Retenció IRPF {invoice.irpfRate}%</span><span className="fin-neg">−{formatCurrency(invTotals.irpf)}</span></div>}
+                    <div className="t-strong"><span>Total</span><span>{formatCurrency(invoice.amount)}</span></div>
+                    {invoice.depositAmount > 0 && (
+                      <>
+                        <div>
+                          <span className="t-dim">Bestreta</span>
+                          <span>
+                            {formatCurrency(invoice.depositAmount)}{" "}
+                            <button type="button" className="link-btn" style={{ fontSize: 11 }}
+                              onClick={async () => {
+                                await editInvoiceAction({
+                                  id: invoice.id, client: invoice.client, issueDate: invoice.issueDate, dueDate: invoice.dueDate,
+                                  baseAmount: invoice.baseAmount, ivaRate: invoice.ivaRate, irpfRate: invoice.irpfRate,
+                                  depositAmount: invoice.depositAmount, depositPaid: !invoice.depositPaid,
+                                });
+                                router.refresh();
+                              }}
+                            >{invoice.depositPaid ? "cobrada ✓" : "marca cobrada"}</button>
+                          </span>
+                        </div>
+                        <div><span className="t-dim">Resta pendent</span><span>{formatCurrency(invoice.amount - (invoice.depositPaid ? invoice.depositAmount : 0))}</span></div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <button type="button" className="btn-outline" onClick={() => setInvoicePreviewOpen(true)}>Visualitza / PDF</button>
+                  {!invEditOpen && <button type="button" className="btn-outline" onClick={() => {
+                    setInvEdit({ base: String(invoice.baseAmount), iva: String(invoice.ivaRate), irpf: String(invoice.irpfRate), deposit: String(invoice.depositAmount) });
+                    setInvEditOpen(true);
+                  }}>Edita</button>}
                 </div>
-                <button type="button" className="btn-outline" onClick={() => setInvoicePreviewOpen(true)}>Visualitza / descarrega</button>
+
+                {invoice.state !== "pagada" && (
+                  <div className="cd-reminder-row">
+                    <input className="field-input compact-field" type="email" placeholder="correu del client…" value={reminderEmail} onChange={(e) => setReminderEmail(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
+                    <button
+                      type="button" className="btn-outline" disabled={!emailReady || !reminderEmail || reminding}
+                      title={emailReady ? "Envia un recordatori amb el detall de la factura" : "Configura RESEND_API_KEY per enviar correus"}
+                      onClick={async () => {
+                        setReminding(true);
+                        const res = await sendInvoiceReminderAction(invoice.id, reminderEmail);
+                        setReminderStatus(res.ok ? "enviat ✓" : res.error || "error");
+                        setReminding(false);
+                      }}
+                    >{reminderStatus || (reminding ? "Enviant…" : "Recordatori de cobrament")}</button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="cd-invoice-card">
                 <div className="cd-invoice-rows">
-                  <div><span className="t-dim">Base</span><span>{formatCurrency(amountNum)}</span></div>
-                  <div><span className="t-dim">IVA 21%</span><span>{formatCurrency(Math.round(amountNum * 0.21))}</span></div>
-                  <div className="t-strong"><span>Total factura</span><span>{formatCurrency(Math.round(amountNum * 1.21))}</span></div>
+                  <div><span className="t-dim">Base imposable</span><span>{formatCurrency(amountNum)}</span></div>
+                  <div><span className="t-dim">IVA {companyInfo.ivaRate}%</span><span>{formatCurrency(Math.round((amountNum * companyInfo.ivaRate) / 100))}</span></div>
+                  {companyInfo.irpfRate > 0 && <div><span className="t-dim">Retenció IRPF {companyInfo.irpfRate}%</span><span className="fin-neg">−{formatCurrency(Math.round((amountNum * companyInfo.irpfRate) / 100))}</span></div>}
+                  <div className="t-strong"><span>Total factura</span><span>{formatCurrency(computeInvoiceTotals(amountNum, companyInfo.ivaRate, companyInfo.irpfRate).total)}</span></div>
                 </div>
                 {cf.status === "confirmat" ? (
                   <button type="button" className="btn-save" disabled={generating} onClick={handleGenerateInvoice}>
@@ -743,6 +858,32 @@ export default function ConcertDetailView({
                 ) : (
                   <div className="t-dim" style={{ fontSize: 12 }}>Confirma el concert per generar la factura.</div>
                 )}
+              </div>
+            )}
+
+            {concertExpenses > 0 && (
+              <div className="cd-margin-row">
+                <span className="t-dim">Marge net del bolo</span>
+                <span>
+                  {formatCurrency(amountNum)} − {formatCurrency(concertExpenses)} despeses ={" "}
+                  <strong className={amountNum - concertExpenses >= 0 ? "fin-pos" : "fin-neg"}>{formatCurrency(amountNum - concertExpenses)}</strong>
+                </span>
+              </div>
+            )}
+
+            {venueHistory.length > 0 && (
+              <div className="cd-history">
+                <div className="cd-subtitle" style={{ marginTop: 14 }}>Historial amb {clientKey}</div>
+                {venueHistory.map((h, i) => (
+                  <div key={i} className="cd-history-row">
+                    <span className="t-dim">{formatDate(h.date)}</span>
+                    <span>{formatCurrency(h.amount)}</span>
+                    <span className={"badge"} style={h.invoiceState ? { background: statusColors(h.invoiceState).bg, color: statusColors(h.invoiceState).color } : {}}>
+                      {h.invoiceState || "sense factura"}
+                    </span>
+                    {h.daysToPay !== null && <span className="t-dim" style={{ fontSize: 11 }}>{h.daysToPay}d termini</span>}
+                  </div>
+                ))}
               </div>
             )}
           </div>

@@ -28,6 +28,7 @@ export type ArtistGig = {
   mySubstitute: string;
   myNoSubstitute: boolean;
   bandBackups: { name: string; instruments: string[] }[];
+  amount: number | null; // només si el gestor ha activat "els membres veuen el caixet"
 };
 
 export type PendingInvitation = {
@@ -70,8 +71,8 @@ export async function getArtistBands(clerkUserId: string): Promise<ArtistBand[]>
 export async function getArtistGigs(clerkUserId: string): Promise<ArtistGig[]> {
   const { rows } = await db().query(
     `select c.id, c.date, c.time, c.venue, c.city, c.festa_entitat, c.status,
-            c.attendance, c.substitutes, c.no_substitute, bm.member_name,
-            b.id as band_id, b.name as band_name, b.logo, b.color1, b.color2, b.backups
+            c.attendance, c.substitutes, c.no_substitute, c.amount, bm.member_name,
+            b.id as band_id, b.name as band_name, b.logo, b.color1, b.color2, b.backups, b.show_fees
      from concerts c
      join band_members bm on bm.band_id = c.band_id and bm.clerk_user_id = $1
      join bands b on b.id = c.band_id
@@ -98,8 +99,15 @@ export async function getArtistGigs(clerkUserId: string): Promise<ArtistGig[]> {
       mySubstitute: (r.substitutes || {})[r.member_name] || "",
       myNoSubstitute: !!(r.no_substitute || {})[r.member_name],
       bandBackups: (r.backups || []).map((b: { name?: string; instruments?: string[] }) => ({ name: b.name || "", instruments: b.instruments || [] })),
+      amount: r.show_fees ? r.amount : null,
     };
   });
+}
+
+// Token del feed iCal personal de l'usuari.
+export async function getFeedToken(clerkUserId: string): Promise<string> {
+  const { rows } = await db().query("select feed_token from profiles where clerk_user_id=$1", [clerkUserId]);
+  return rows[0]?.feed_token || "";
 }
 
 export type OpenBackupSearch = {
