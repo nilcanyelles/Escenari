@@ -39,6 +39,7 @@ export type SaveSongInput = {
   notes: string;
   lyrics: string;
   coverUrl?: string;
+  instruments?: string[];
 };
 
 export async function saveSongAction(input: SaveSongInput): Promise<{ id: string }> {
@@ -46,20 +47,22 @@ export async function saveSongAction(input: SaveSongInput): Promise<{ id: string
   const pool = db();
   if (input.id) {
     await pool.query(
-      `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7, cover_url=$8
-       where id=$9 and band_id=$10`,
+      `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7, cover_url=$8, instruments=$9
+       where id=$10 and band_id=$11`,
       [(input.title || "Sense títol").trim(), input.artist || "", input.tempo || 0, input.songKey || "",
-        input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "", input.id, input.bandId]
+        input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "",
+        JSON.stringify(input.instruments || []), input.id, input.bandId]
     );
     revalidateSongs(input.bandId);
     return { id: input.id };
   }
   const id = "sg" + Date.now() + Math.floor(Math.random() * 1000);
   await pool.query(
-    `insert into songs (id, workspace_id, band_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    `insert into songs (id, workspace_id, band_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url, instruments)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
     [id, workspaceId, input.bandId, (input.title || "Sense títol").trim(), input.artist || "",
-      input.tempo || 0, input.songKey || "", input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || ""]
+      input.tempo || 0, input.songKey || "", input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "",
+      JSON.stringify(input.instruments || [])]
   );
   revalidateSongs(input.bandId);
   return { id };
@@ -176,6 +179,7 @@ export async function importSongsAction(bandId: string, raw: string): Promise<{ 
 export async function uploadFileAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const bandId = String(formData.get("bandId") || "");
   const songId = String(formData.get("songId") || "") || null;
+  const instrument = String(formData.get("instrument") || "");
   const file = formData.get("file") as File | null;
   if (!bandId || !file) return { ok: false, error: "Falta el fitxer" };
   const { workspaceId, who } = await requireBandAccess(bandId);
@@ -183,9 +187,9 @@ export async function uploadFileAction(formData: FormData): Promise<{ ok: boolea
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
   await db().query(
-    `insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-    [id, workspaceId, bandId, songId, file.name || "fitxer", file.type || "application/octet-stream", file.size, buf, who]
+    `insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, instrument)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    [id, workspaceId, bandId, songId, file.name || "fitxer", file.type || "application/octet-stream", file.size, buf, who, instrument]
   );
   revalidateSongs(bandId);
   return { ok: true };

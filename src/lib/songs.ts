@@ -5,6 +5,7 @@ export type SongFile = {
   name: string;
   mime: string;
   size: number;
+  instrument: string; // partitura etiquetada per instrument ("" = general)
   createdAt: string;
 };
 
@@ -20,6 +21,7 @@ export type Song = {
   notes: string;
   lyrics: string; // format ChordPro: acords [Am] dins de la lletra
   coverUrl: string;
+  instruments: string[]; // quins instruments sonen en aquesta cançó
   files: SongFile[];
   updatedAt: string;
 };
@@ -31,7 +33,7 @@ function iso(v: Date | string): string {
 export async function getSongs(bandId: string): Promise<Song[]> {
   const { rows } = await db().query(
     `select s.*, coalesce(json_agg(json_build_object(
-        'id', f.id, 'name', f.name, 'mime', f.mime, 'size', f.size, 'createdAt', f.created_at
+        'id', f.id, 'name', f.name, 'mime', f.mime, 'size', f.size, 'instrument', f.instrument, 'createdAt', f.created_at
       ) order by f.created_at) filter (where f.id is not null), '[]') as file_list
      from songs s
      left join files f on f.song_id = s.id
@@ -52,7 +54,8 @@ export async function getSongs(bandId: string): Promise<Song[]> {
     notes: r.notes,
     lyrics: r.lyrics,
     coverUrl: r.cover_url || "",
-    files: (r.file_list || []).map((f: Record<string, unknown>) => ({ ...f, createdAt: String(f.createdAt) })) as SongFile[],
+    instruments: r.instruments || [],
+    files: (r.file_list || []).map((f: Record<string, unknown>) => ({ ...f, instrument: f.instrument || "", createdAt: String(f.createdAt) })) as SongFile[],
     updatedAt: iso(r.updated_at),
   }));
 }
@@ -61,7 +64,7 @@ export type BandFile = SongFile & { songId: string | null; uploadedBy: string };
 
 export async function getBandFiles(bandId: string): Promise<BandFile[]> {
   const { rows } = await db().query(
-    "select id, name, mime, size, song_id, uploaded_by, created_at from files where band_id=$1 order by created_at desc",
+    "select id, name, mime, size, song_id, uploaded_by, instrument, created_at from files where band_id=$1 order by created_at desc",
     [bandId]
   );
   return rows.map((r) => ({
@@ -69,6 +72,7 @@ export async function getBandFiles(bandId: string): Promise<BandFile[]> {
     name: r.name,
     mime: r.mime,
     size: r.size,
+    instrument: r.instrument || "",
     songId: r.song_id,
     uploadedBy: r.uploaded_by,
     createdAt: iso(r.created_at),

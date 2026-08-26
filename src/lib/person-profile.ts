@@ -46,6 +46,8 @@ export type PersonProfileData = {
   photoFileId: string | null;
   bio: string;
   igHandle: string;
+  phone: string;
+  email: string;
   hiddenBands: string[];
   bands: ProfileBand[];        // només les visibles
   allBandIds: { id: string; name: string }[]; // totes (per a l'editor de visibilitat)
@@ -101,6 +103,16 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
   );
   const allBandIds = memberBands.map((b) => ({ id: b.id, name: b.name }));
   const visible = memberBands.filter((b) => !hiddenBands.includes(b.id));
+
+  // Telèfon i correu: primera dada no buida entre tots els grups.
+  let phone = "";
+  let email = "";
+  memberBands.forEach((b) => {
+    const me = (b.members || []).find((m: { name: string }) => normalize(m.name) === nameKey) ||
+      (b.crew || []).find((m: { name: string }) => normalize(m.name) === nameKey);
+    if (me?.phone && !phone) phone = me.phone;
+    if (me?.email && !email) email = me.email;
+  });
 
   const instruments: string[] = [];
   const seenIns: Record<string, boolean> = {};
@@ -167,6 +179,8 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     photoFileId: row.photo_file_id,
     bio: row.bio || "",
     igHandle: row.ig_handle || "",
+    phone,
+    email,
     hiddenBands,
     bands,
     allBandIds,

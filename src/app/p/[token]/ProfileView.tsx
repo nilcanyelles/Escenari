@@ -88,6 +88,8 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
     instruments: data.instruments.join(", "),
     bio: data.bio,
     igHandle: data.igHandle,
+    phone: data.phone,
+    email: data.email,
     hidden: new Set(data.hiddenBands),
   });
   const [saving, setSaving] = useState(false);
@@ -108,6 +110,8 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
       await updatePersonAction(data.token, {
         name: form.name,
         instruments: form.instruments.split(",").map((s) => s.trim()).filter(Boolean),
+        phone: form.phone,
+        email: form.email,
       });
     }
     if (isOwner || (isManager && !data.clerkUserId)) {
@@ -182,6 +186,14 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
             <a className="pv-ig" href={`https://instagram.com/${data.igHandle}`} target="_blank" rel="noreferrer">@{data.igHandle}</a>
           )}
           {data.bio && <p className="pv-bio">{data.bio}</p>}
+
+          {(data.phone || data.email) && (
+            <div className="pv-contact">
+              {data.phone && <a className="pv-contact-btn" href={`tel:${data.phone.replace(/\s/g, "")}`} title={data.phone}>📞 Truca</a>}
+              {data.phone && <a className="pv-contact-btn" href={`https://wa.me/${data.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
+              {data.email && <a className="pv-contact-btn" href={`mailto:${data.email}`} title={data.email}>✉️ Correu</a>}
+            </div>
+          )}
 
           <div className="pv-stats">
             <div className="pv-stat"><span className="pv-stat-n">{data.totalConcerts}</span><span>concerts fets</span></div>
@@ -280,6 +292,12 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                     <input className="field-input form-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
                   <div><label className="form-label">Instruments (separats per comes)</label>
                     <input className="field-input form-field" value={form.instruments} onChange={(e) => setForm({ ...form, instruments: e.target.value })} /></div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div><label className="form-label">Telèfon (trucades i WhatsApp)</label>
+                      <input className="field-input form-field" placeholder="+34 600 000 000" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
+                    <div><label className="form-label">Correu</label>
+                      <input className="field-input form-field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+                  </div>
                 </>
               ) : (
                 <div className="t-dim" style={{ fontSize: 12.5 }}>

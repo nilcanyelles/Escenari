@@ -79,9 +79,10 @@ export async function uploadProfilePhotoAction(formData: FormData): Promise<{ ok
   return { ok: true };
 }
 
-// Nom i instruments: el gestor (quan el músic no té compte) o el mateix músic.
-// Actualitza les entrades de members de tots els grups del workspace.
-export async function updatePersonAction(token: string, input: { name: string; instruments: string[] }) {
+// Nom, instruments i contacte (telèfon/correu): el gestor (quan el músic no
+// té compte) o el mateix músic. Actualitza les entrades de members i crew de
+// tots els grups del workspace.
+export async function updatePersonAction(token: string, input: { name: string; instruments: string[]; phone?: string; email?: string }) {
   const { row, isOwner, isManager } = await accessFor(token);
   if (!isOwner && !isManager) throw new Error("Sense permís");
   if (row.clerk_user_id && !isOwner) throw new Error("Aquest músic gestiona el seu propi perfil");
@@ -89,15 +90,28 @@ export async function updatePersonAction(token: string, input: { name: string; i
   const pool = db();
   const newName = (input.name || String(row.person_name)).trim();
   const oldKey = normalize(String(row.person_name));
-  const bands = (await pool.query("select id, members from bands where workspace_id=$1", [row.workspace_id])).rows;
+  const patchPerson = (m: { name: string; role: string; instruments?: string[]; phone?: string; email?: string }, isMember: boolean) => ({
+    ...m,
+    name: newName,
+    instruments: isMember ? input.instruments : m.instruments,
+    role: isMember ? (input.instruments.join(", ") || m.role) : m.role,
+    phone: input.phone !== undefined ? input.phone : m.phone,
+    email: input.email !== undefined ? input.email : m.email,
+  });
+  const bands = (await pool.query("select id, members, crew from bands where workspace_id=$1", [row.workspace_id])).rows;
   for (const b of bands) {
     let changed = false;
-    const members = (b.members || []).map((m: { name: string; role: string; instruments?: string[] }) => {
+    const members = (b.members || []).map((m: { name: string; role: string }) => {
       if (normalize(m.name) !== oldKey) return m;
       changed = true;
-      return { ...m, name: newName, instruments: input.instruments, role: input.instruments.join(", ") || m.role };
+      return patchPerson(m, true);
     });
-    if (changed) await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), b.id]);
+    const crew = (b.crew || []).map((m: { name: string; role: string }) => {
+      if (normalize(m.name) !== oldKey) return m;
+      changed = true;
+      return patchPerson(m, false);
+    });
+    if (changed) await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), b.id]);
   }
   await pool.query("update person_profiles set person_name=$1 where id=$2", [newName, token]);
   revalidatePath(`/p/${token}`);

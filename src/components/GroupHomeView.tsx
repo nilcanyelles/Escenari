@@ -13,7 +13,7 @@ import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupAppli
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
-import FilesPanel from "@/components/FilesPanel";
+
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
 import { normalize } from "@/lib/text";
@@ -38,12 +38,23 @@ function personChromaItem(
   const c2 = band.color2 || bandColor(band.id + "x").color;
   const photoId = photosByName[normalize(p.name)];
 
-  const actions: ChromaItem["actions"] = [];
-  if (p.phone) {
-    actions.push({ icon: "📞", title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` });
-    actions.push({ icon: "💬", title: "WhatsApp", href: `https://wa.me/${p.phone.replace(/[^\d]/g, "")}` });
-  }
-  if (p.email) actions.push({ icon: "✉️", title: `Escriu a ${p.email}`, href: `mailto:${p.email}` });
+  // Trucar, WhatsApp i correu sempre visibles; sense dades, porten al perfil
+  // (on el gestor o el músic poden afegir-les).
+  const missing = (what: string) => () => {
+    alert(`${p.name} encara no té ${what} desat — afegeix-lo des del seu perfil (Edita el perfil).`);
+    onOpen(p.name);
+  };
+  const actions: ChromaItem["actions"] = [
+    p.phone
+      ? { icon: "📞", title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` }
+      : { icon: "📞", title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
+    p.phone
+      ? { icon: "💬", title: "WhatsApp", href: `https://wa.me/${p.phone.replace(/[^\d]/g, "")}` }
+      : { icon: "💬", title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
+    p.email
+      ? { icon: "✉️", title: `Escriu a ${p.email}`, href: `mailto:${p.email}` }
+      : { icon: "✉️", title: "Sense correu — afegeix-lo al perfil", onClick: missing("el correu") },
+  ];
   if (!linked && onInvite) actions.push({ icon: "🔗", title: "Convida a reclamar aquest perfil", onClick: () => onInvite(p.name) });
 
   return {
@@ -92,7 +103,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   today: string;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists" | "fitxers">("inici");
+  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists">("inici");
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
   const [addForm, setAddForm] = useState({ name: "", instruments: "", role: "", phone: "", email: "" });
@@ -204,7 +215,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
         <button className={"stats-tab" + (tab === "riders" ? " active" : "")} onClick={() => setTab("riders")}>Riders</button>
         <button className={"stats-tab" + (tab === "setlists" ? " active" : "")} onClick={() => setTab("setlists")}>Setlists</button>
-        <button className={"stats-tab" + (tab === "fitxers" ? " active" : "")} onClick={() => setTab("fitxers")}>Fitxers</button>
+
       </div>
 
       {tab === "inici" && (
@@ -284,7 +295,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "cancons" && <SongsPanel band={band} songs={songs} canEdit={true} />}
-      {tab === "fitxers" && <FilesPanel band={band} files={files} canEdit={true} />}
+
       {tab === "riders" && (
         <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={true} isManager={true} />
       )}
