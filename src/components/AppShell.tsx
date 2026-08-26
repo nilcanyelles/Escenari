@@ -28,12 +28,17 @@ function setBandCookie(id: string) {
   document.cookie = `${BAND_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
 }
 
+export type RailLink = { href: string; label: string; emoji: string };
+
 export default function AppShell({
   todayLabel,
   pages,
   user,
   bands,
   selectedBandId,
+  railLinks,
+  routeBase = "",
+  homeHref = "/resum",
   children,
 }: {
   todayLabel: string;
@@ -41,6 +46,9 @@ export default function AppShell({
   user: ShellUser;
   bands?: ShellBand[];
   selectedBandId?: string;
+  railLinks?: RailLink[];   // enllaços fixos a dalt de la barra (Perfil, Suplències…)
+  routeBase?: string;       // "" per al gestor, "/artista" per als músics
+  homeHref?: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -77,11 +85,11 @@ export default function AppShell({
     startTransition(() => {
       if (id) {
         // Triar un grup porta directament a la seva pàgina.
-        router.push("/grup");
+        router.push(routeBase + "/grup");
         router.refresh();
       } else {
         // "Tots els grups" no té pàgina de grup: cap a l'agenda.
-        if (pathname.startsWith("/grup")) router.push("/agenda");
+        if (pathname.startsWith(routeBase + "/grup")) router.push(routeBase + "/agenda");
         router.refresh();
       }
     });
@@ -115,6 +123,18 @@ export default function AppShell({
 
   const bandRail = hasRail && (
     <aside className="band-rail desktop-only">
+      {railLinks && railLinks.length > 0 && (
+        <>
+          {railLinks.map((l) => (
+            <Link key={l.href} href={l.href}
+              className={"band-rail-item band-rail-link" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
+              <span className="band-rail-avatar band-rail-avatar-all">{l.emoji}</span>
+              <span className="band-rail-name">{l.label}</span>
+            </Link>
+          ))}
+          <div className="band-rail-sep"></div>
+        </>
+      )}
       <div className="band-rail-title">Els teus grups</div>
       <button
         type="button"
@@ -138,6 +158,11 @@ export default function AppShell({
 
   const bandChips = hasRail && (
     <div className="band-chips mobile-only">
+      {(railLinks || []).map((l) => (
+        <Link key={l.href} href={l.href} className={"band-chip" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
+          {l.emoji} {l.label}
+        </Link>
+      ))}
       <button type="button" className={"band-chip" + (activeBand === "" ? " active" : "")} onClick={() => selectBand("")}>Tots</button>
       {(bands || []).map((b) => (
         <button
@@ -158,7 +183,7 @@ export default function AppShell({
       {bandRail}
       <div className="main-col">
         <div className="mobile-topbar mobile-only">
-          <Link href="/resum" className="brand-lockup brand-link" title="Torna a l'inici">
+          <Link href={homeHref} className="brand-lockup brand-link" title="Torna a l'inici">
             <img className="brand-mark" src="/logo-mark.png" alt="" />
             <span className="brand-name">ESCENARI</span>
           </Link>
@@ -169,7 +194,7 @@ export default function AppShell({
 
         <div className="page-header desktop-only">
           <div className="page-header-brand">
-            <Link href="/resum" className="brand-lockup brand-link" title="Torna a l'inici">
+            <Link href={homeHref} className="brand-lockup brand-link" title="Torna a l'inici">
               <img className="brand-mark" src="/logo-mark.png" alt="" />
               <span className="brand-name">ESCENARI</span>
             </Link>

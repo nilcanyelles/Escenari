@@ -62,7 +62,8 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, invoices, companyInfo, selectedBandId = "", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; selectedBandId?: string; today: string }) {
+export default function ConcertsView({ bands, concerts, invoices, companyInfo, selectedBandId = "", viewer = "manager", canCreate = true, detailBase = "/concerts", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; detailBase?: string; today: string }) {
+  const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
   const router = useRouter();
@@ -171,7 +172,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
     const attYes = rowBand ? rowBand.members.filter((m) => (c.attendance || {})[m.name] === "yes").length : 0;
     const rsPct = rsCompletionPercent(c);
     return (
-      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`/concerts/${c.id}`)}>
+      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`${detailBase}/${c.id}`)}>
         <div className="t-dim">{formatDate(c.date)}{c.time ? <span className="cc-time"> · {c.time}</span> : ""}</div>
         <div>
           {(() => {
@@ -190,18 +191,22 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
           ) : <span className="t-dim">—</span>}
         </div>
         <div>
-          <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
-            title="Canvia l'estat" aria-label="Canvia l'estat"
-            onClick={(e) => {
-              e.stopPropagation();
-              const next = nextStatus(displayStatus);
-              setStatusOverrides((prev) => ({ ...prev, [c.id]: next }));
-              if (statusSaveTimers.current[c.id]) window.clearTimeout(statusSaveTimers.current[c.id]);
-              statusSaveTimers.current[c.id] = window.setTimeout(async () => {
-                await setConcertStatusAction(c.id, next);
-                router.refresh();
-              }, 400);
-            }}>{displayStatus}</button>
+          {isMgr ? (
+            <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
+              title="Canvia l'estat" aria-label="Canvia l'estat"
+              onClick={(e) => {
+                e.stopPropagation();
+                const next = nextStatus(displayStatus);
+                setStatusOverrides((prev) => ({ ...prev, [c.id]: next }));
+                if (statusSaveTimers.current[c.id]) window.clearTimeout(statusSaveTimers.current[c.id]);
+                statusSaveTimers.current[c.id] = window.setTimeout(async () => {
+                  await setConcertStatusAction(c.id, next);
+                  router.refresh();
+                }, 400);
+              }}>{displayStatus}</button>
+          ) : (
+            <span className="badge" style={{ background: sc.bg, color: sc.color }}>{displayStatus}</span>
+          )}
         </div>
         <div className="cc-fdr">
           <span className="cc-fdr-pct" style={{ color: rsPct >= 100 ? "oklch(0.75 0.15 155)" : rsPct >= 50 ? "oklch(0.82 0.15 80)" : "var(--text-faint)" }}>{rsPct}%</span>
@@ -211,8 +216,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
             </svg>
           </button>
         </div>
-        <div style={{ textAlign: "center" }}>{invoiceCell}</div>
-        <div onClick={(e) => e.stopPropagation()}><DeleteConcertBtn id={c.id} /></div>
+        <div style={{ textAlign: "center" }}>{isMgr ? invoiceCell : <span className="t-dim">—</span>}</div>
+        <div onClick={(e) => e.stopPropagation()}>{isMgr && <DeleteConcertBtn id={c.id} />}</div>
       </div>
     );
   }
@@ -280,8 +285,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>
-        <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} defaultDate={today} />
+        {isMgr && <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>}
+        {canCreate && <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
       </div>
 
       {importOpen && (

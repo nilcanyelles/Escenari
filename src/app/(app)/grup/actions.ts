@@ -3,6 +3,9 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireBandAccess } from "@/lib/band-access";
+import { normalize } from "@/lib/text";
+import type { MemberPerms } from "@/lib/types";
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
 
@@ -55,8 +58,9 @@ export async function saveBandAppearanceAction(bandId: string, input: { color1: 
 // ---------- Alta de membres i tècnics des de la pàgina del grup ----------
 
 export async function addBandPersonAction(bandId: string, kind: "member" | "crew", person: { name: string; role: string; instruments: string[]; phone: string; email: string }) {
-  const { workspaceId } = await requireManagerAction();
-  const band = (await db().query("select members, crew from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  // Gestor, o membre amb el permís "Afegir gent".
+  await requireBandAccess(bandId, "members");
+  const band = (await db().query("select members, crew from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
   const entry = {
     name: person.name.trim(),
@@ -84,6 +88,20 @@ export async function removeBandPersonAction(bandId: string, kind: "member" | "c
     (p: { name: string }) => p.name.trim().toLowerCase() !== name.trim().toLowerCase()
   );
   await db().query(`update bands set ${col}=$1 where id=$2`, [JSON.stringify(list), bandId]);
+  revalidatePath("/grup");
+}
+
+// ---------- Permisos per membre (el gestor decideix què pot fer) ----------
+
+export async function setMemberPermAction(bandId: string, memberName: string, key: keyof MemberPerms, on: boolean) {
+  const { workspaceId } = await requireManagerAction();
+  const band = (await db().query("select members from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  if (!band) throw new Error("Grup no trobat");
+  const members = (band.members || []).map((m: { name: string; perms?: Partial<MemberPerms> }) => {
+    if (normalize(m.name) !== normalize(memberName)) return m;
+    return { ...m, perms: { ...(m.perms || {}), [key]: on } };
+  });
+  await db().query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
   revalidatePath("/grup");
 }
 

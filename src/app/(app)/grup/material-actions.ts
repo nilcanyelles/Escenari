@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { getProfile } from "@/lib/current-user";
+import { requireBandAccess as requireBandPerm } from "@/lib/band-access";
 import type { RiderContent, Song } from "@/lib/material-types";
 
 // Autorització dual: el gestor del workspace del grup, o un artista del grup
@@ -21,8 +22,14 @@ async function requireMaterialAccess(bandId: string, kind: "riders" | "setlists"
     `select 1 from band_editors where band_id=$1 and clerk_user_id=$2 and ${col}`,
     [bandId, profile.clerkUserId]
   )).rows[0];
-  if (!editor) throw new Error("Sense permís d'edició");
-  return { workspaceId: band.workspace_id };
+  if (editor) return { workspaceId: band.workspace_id };
+  // O bé el permís per membre que el gestor posa a la targeta d'equip.
+  try {
+    await requireBandPerm(bandId, kind === "riders" ? "riders" : "setlists");
+    return { workspaceId: band.workspace_id };
+  } catch {
+    throw new Error("Sense permís d'edició");
+  }
 }
 
 function revalidateMaterial(bandId: string) {

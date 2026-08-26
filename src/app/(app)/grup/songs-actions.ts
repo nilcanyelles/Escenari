@@ -2,25 +2,15 @@
 
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { getProfile } from "@/lib/current-user";
+import { requireBandAccess as requirePerm } from "@/lib/band-access";
 
 const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15 MB per fitxer
 
-// Repertori i fitxers: hi pot escriure el gestor del workspace o qualsevol
-// membre del grup amb compte d'Escenari.
+// Repertori i fitxers: el gestor del workspace o un membre del grup amb el
+// permís "Cançons" actiu (per defecte el tenen).
 async function requireBandAccess(bandId: string): Promise<{ workspaceId: string; who: string }> {
-  const profile = await getProfile();
-  if (!profile) throw new Error("Sessió no vàlida");
-  const band = (await db().query("select workspace_id from bands where id=$1", [bandId])).rows[0];
-  if (!band) throw new Error("Grup no trobat");
-  if (profile.role === "manager" && profile.workspaceId === band.workspace_id) {
-    return { workspaceId: band.workspace_id, who: profile.name };
-  }
-  const member = (await db().query(
-    "select 1 from band_members where band_id=$1 and clerk_user_id=$2", [bandId, profile.clerkUserId]
-  )).rows[0];
-  if (!member) throw new Error("Sense accés a aquest grup");
-  return { workspaceId: band.workspace_id, who: profile.name };
+  const access = await requirePerm(bandId, "songs");
+  return { workspaceId: access.workspaceId, who: access.profile.name };
 }
 
 function revalidateSongs(bandId: string) {

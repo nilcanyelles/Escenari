@@ -10,6 +10,7 @@ export type ProfileBand = {
   color2: string;
   instruments: string[];
   role: string;
+  perms?: Partial<import("./types").MemberPerms>;
 };
 
 export type ProfileConcert = {
@@ -150,6 +151,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     return {
       id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "", color2: b.color2 || "",
       instruments: ins, role: me?.role || "",
+      perms: me?.perms || {},
     };
   });
 

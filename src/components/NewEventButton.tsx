@@ -17,10 +17,11 @@ const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon
 // "+ Nou esdeveniment": primer es tria el tipus. Un bolo obre la fitxa
 // completa; assaig/reunió/altre es creen en un moment des d'un popup amb
 // data, convidats i repetició estil Google Calendar.
-export default function NewEventButton({ bands, concerts = [], selectedBandId = "", defaultDate }: {
+export default function NewEventButton({ bands, concerts = [], selectedBandId = "", allowBolo = true, defaultDate }: {
   bands: Band[];
   concerts?: Concert[];
   selectedBandId?: string;
+  allowBolo?: boolean; // els músics amb permís creen assajos/reunions, no bolos
   defaultDate?: string;
 }) {
   const router = useRouter();
@@ -98,7 +99,7 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
               <button className="cf-head-close" onClick={() => setStep("closed")}>✕</button>
             </div>
             <div className="ne-kinds">
-              {KINDS.map((k) => (
+              {KINDS.filter((k) => allowBolo || k.kind !== "bolo").map((k) => (
                 <button key={k.kind} type="button" className="ne-kind" disabled={busy} onClick={() => chooseKind(k.kind)}>
                   <span className="ne-kind-icon">{k.icon}</span>
                   <span className="ne-kind-main">

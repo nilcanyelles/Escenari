@@ -1,4 +1,6 @@
-export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[] };
+export type MemberPerms = { songs: boolean; riders: boolean; setlists: boolean; members: boolean; events: boolean };
+
+export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[]; perms?: Partial<MemberPerms> };
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
 

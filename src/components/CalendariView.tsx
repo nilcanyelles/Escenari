@@ -32,7 +32,7 @@ function groupByDate(list: Concert[]) {
   return { byDate, dates };
 }
 
-export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; today: string }) {
+export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; today: string }) {
   const router = useRouter();
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week" | "year">("month");
@@ -136,7 +136,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
                 className="calx-ev"
                 style={{ background: KIND_META[k].bg, color: KIND_META[k].color, ["--calx-bar" as string]: KIND_META[k].color }}
                 title={`${c.bandName} · ${c.city || c.venue || "—"}${c.time ? ` · ${c.time}h` : ""}`}
-                onClick={(e) => { e.stopPropagation(); router.push(`/concerts/${c.id}`); }}
+                onClick={(e) => { e.stopPropagation(); router.push(`${detailBase}/${c.id}`); }}
               >
                 <span className="calx-ev-text">
                   {kindOf(c) !== "bolo"
@@ -185,7 +185,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
             {(byDate[date] || []).map((c) => {
               const k = kindOf(c);
               return (
-                <div key={c.id} className="upcoming-concert-row clickable" onClick={() => router.push(`/concerts/${c.id}`)}>
+                <div key={c.id} className="upcoming-concert-row clickable" onClick={() => router.push(`${detailBase}/${c.id}`)}>
                   <div className="upcoming-concert-text">
                     <span className="upcoming-concert-band">
                       <span className="cal-day-dot" style={{ background: KIND_META[k].color, marginRight: 6, display: "inline-block" }}></span>
@@ -279,7 +279,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
               }}
             >📅 Afegeix-ho tot a Google Calendar</button>
           )}
-          <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} defaultDate={calSelectedDate || today} />
+          {canCreate && <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} allowBolo={allowBolo} defaultDate={calSelectedDate || today} />}
         </div>
       </div>
 

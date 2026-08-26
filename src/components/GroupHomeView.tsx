@@ -9,7 +9,10 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColo
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { setMyAttendanceAction } from "@/app/(artist)/actions";
+import { memberPerms, PERM_LABELS } from "@/lib/perms";
+import type { MemberPerms } from "@/lib/types";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
@@ -20,6 +23,30 @@ import { normalize } from "@/lib/text";
 import { bandColor } from "@/lib/tags";
 import type { Person } from "@/lib/types";
 import { openPersonProfileAction } from "@/app/p/profile-actions";
+
+// Fila de permisos que el gestor commuta a la targeta de cada membre: què
+// pot crear (cançons, riders, setlists), si pot afegir gent i esdeveniments.
+function PermsRow({ bandId, member }: { bandId: string; member: Person }) {
+  const router = useRouter();
+  const [perms, setPerms] = useState<MemberPerms>(() => memberPerms(member));
+  return (
+    <div className="perm-row" title="Què pot fer aquest membre">
+      {PERM_LABELS.map(({ key, label }) => (
+        <button
+          key={key} type="button"
+          className={"perm-chip" + (perms[key] ? " on" : "")}
+          title={`${label}: ${perms[key] ? "permès (clic per treure)" : "no permès (clic per donar)"}`}
+          onClick={async () => {
+            const v = !perms[key];
+            setPerms((p) => ({ ...p, [key]: v }));
+            await setMemberPermAction(bandId, member.name, key, v);
+            router.refresh();
+          }}
+        >{label}</button>
+      ))}
+    </div>
+  );
+}
 
 // Targetes "chroma" per a l'equip: colors del grup, nom, instrument i @ estil
 // Instagram; el clic obre la pàgina de perfil del músic.
@@ -32,6 +59,7 @@ function personChromaItem(
   igByName: Record<string, string>,
   linked: boolean,
   onInvite?: (name: string) => void,
+  footer?: React.ReactNode,
 ): ChromaItem {
   const realIg = igByName[normalize(p.name)] || "";
   const handle = "@" + (realIg || normalize(p.name).replace(/\s+/g, ""));
@@ -70,6 +98,7 @@ function personChromaItem(
     gradient: `linear-gradient(150deg, ${c1}, ${c2})`,
     onClick: () => onOpen(p.name),
     actions,
+    footer,
   };
 }
 
@@ -90,7 +119,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, today }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", today }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -104,9 +133,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   files: BandFile[];
   photosByName?: Record<string, string>;
   igByName?: Record<string, string>;
+  viewer?: "manager" | "artist";
+  caps?: MemberPerms;
+  myName?: string;
   today: string;
 }) {
   const router = useRouter();
+  const isMgr = viewer === "manager";
+  const base = isMgr ? "" : "/artista"; // rutes de l'àrea d'artista
+  const can: MemberPerms = isMgr
+    ? { songs: true, riders: true, setlists: true, members: true, events: true }
+    : (caps || { songs: true, riders: true, setlists: true, members: false, events: false });
   const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists">("inici");
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
@@ -207,7 +244,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             </div>
           </div>
           <div className="group-hero-actions">
-            <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>
+            {isMgr && <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>}
           </div>
         </div>
       </div>
@@ -252,16 +289,34 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               description: `${total} concerts en total`,
               colSpan: 2,
               rowSpan: 2,
-              onClick: () => router.push("/agenda"),
+              onClick: () => router.push(base + "/agenda"),
               content: (
                 <div className="bento-gigs">
-                  {upcoming.slice(0, 5).map((c) => (
-                    <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); router.push(`/concerts/${c.id}`); }}>
-                      <span className="bento-gig-date">{formatDate(c.date)}</span>
-                      <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
-                      <span className="badge" style={{ marginLeft: "auto" }}>{c.status}</span>
-                    </div>
-                  ))}
+                  {upcoming.slice(0, 5).map((c) => {
+                    const myAns = myName ? (c.attendance || {})[myName] : undefined;
+                    return (
+                      <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); router.push(`${base}/concerts/${c.id}`); }}>
+                        <span className="bento-gig-date">{formatDate(c.date)}</span>
+                        <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
+                        {!isMgr && myName ? (
+                          <span className="bento-gig-att" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button" className={"bento-att-btn yes" + (myAns === "yes" ? " active" : "")}
+                              title="Hi seré"
+                              onClick={async () => { await setMyAttendanceAction(c.id, "yes"); router.refresh(); }}
+                            >✓</button>
+                            <button
+                              type="button" className={"bento-att-btn no" + (myAns === "no" ? " active" : "")}
+                              title="No hi seré"
+                              onClick={async () => { await setMyAttendanceAction(c.id, "no"); router.refresh(); }}
+                            >✗</button>
+                          </span>
+                        ) : (
+                          <span className="badge" style={{ marginLeft: "auto" }}>{c.status}</span>
+                        )}
+                      </div>
+                    );
+                  })}
                   {upcoming.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap bolo programat.</span>}
                 </div>
               ),
@@ -292,19 +347,19 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               label: "Ritme",
               title: `${concertsPerMonth} concerts/mes`,
               description: `${monthCount} aquest mes · mitjana d'enguany`,
-              onClick: () => router.push("/estadistiques"),
+              onClick: () => router.push(base + "/estadistiques"),
             },
           ] as BentoCard[])}
         />
       )}
 
-      {tab === "cancons" && <SongsPanel band={band} songs={songs} canEdit={true} />}
+      {tab === "cancons" && <SongsPanel band={band} songs={songs} canEdit={can.songs} />}
 
       {tab === "riders" && (
-        <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={true} isManager={true} />
+        <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={can.riders} isManager={isMgr} />
       )}
       {tab === "setlists" && (
-        <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={true} isManager={true} songs={songs} />
+        <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isMgr} songs={songs} />
       )}
 
       {tab === "equip" && (<>
@@ -327,7 +382,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 ✉️ Correu a tot el grup
               </a>
             )}
-            {addKind !== "member" && <button type="button" className="btn-outline" onClick={() => setAddKind("member")}>+ Afegeix membre</button>}
+            {can.members && addKind !== "member" && <button type="button" className="btn-outline" onClick={() => setAddKind("member")}>+ Afegeix membre</button>}
           </div>
         </div>
         {band.members.length === 0 && addKind !== "member" ? (
@@ -335,7 +390,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         ) : (
           band.members.length > 0 && (
             <ChromaGrid
-              items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName, !!linkedByName[m.name], handleInvite))}
+              items={band.members.map((m) => personChromaItem(
+                m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
+                !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                isMgr ? <PermsRow bandId={band.id} member={m} /> : undefined,
+              ))}
               columns={4}
               cardWidth={190}
               radius={240}
@@ -369,7 +428,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 ✉️ Correu al tècnic
               </a>
             )}
-            {addKind !== "crew" && <button type="button" className="btn-outline" onClick={() => setAddKind("crew")}>+ Afegeix tècnic</button>}
+            {can.members && addKind !== "crew" && <button type="button" className="btn-outline" onClick={() => setAddKind("crew")}>+ Afegeix tècnic</button>}
           </div>
         </div>
         {band.crew.length === 0 && addKind !== "crew" ? (
@@ -377,7 +436,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         ) : (
           band.crew.length > 0 && (
             <ChromaGrid
-              items={band.crew.map((m) => personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name], handleInvite))}
+              items={band.crew.map((m) => personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name], isMgr ? handleInvite : undefined))}
               columns={4}
               cardWidth={190}
               radius={240}
@@ -400,7 +459,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         )}
       </div>
 
-      {/* Uneix-te al grup */}
+      {/* Uneix-te al grup (només el gestor comparteix el codi) */}
+      {isMgr && (
       <div className="panel">
         <div className="panel-title" style={{ marginBottom: 10 }}>Uneix-te al grup</div>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 12 }}>
@@ -420,12 +480,13 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
         </div>
       </div>
+      )}
 
       {/* Suplents */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
           <div className="panel-title">Suplents de confiança{savingBackups ? " · desant…" : ""}</div>
-          {!backupDraft && (
+          {can.members && !backupDraft && (
             <button type="button" className="btn-outline" onClick={() => setBackupDraft({ name: "", instruments: [], phone: "", email: "" })}>+ Afegeix suplent</button>
           )}
         </div>
@@ -443,14 +504,14 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                   <InstrumentChips items={b.instruments} />
                 </div>
                 <div className="t-dim" style={{ fontSize: 12 }}>{b.phone}</div>
-                <button
+                {can.members && <button
                   type="button" className="row-delete-btn" title="Treu el suplent"
                   onClick={() => persistBackups(backups.filter((_, j) => j !== i))}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                     <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
                   </svg>
-                </button>
+                </button>}
               </div>
             ))}
           </div>
@@ -475,8 +536,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         )}
       </div>
 
-      {/* Cerques de suplent publicades */}
-      {openRequests.length > 0 && (
+      {/* Cerques de suplent publicades (gestió del gestor) */}
+      {isMgr && openRequests.length > 0 && (
         <div className="panel">
           <div className="panel-title" style={{ marginBottom: 14 }}>Cerques de suplent obertes</div>
           <div className="backup-request-list">

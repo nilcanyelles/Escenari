@@ -24,6 +24,7 @@ export type ChromaItem = {
   url?: string;
   onClick?: () => void;
   actions?: ChromaAction[];
+  footer?: React.ReactNode;
 };
 
 export default function ChromaGrid({
@@ -142,6 +143,7 @@ export default function ChromaGrid({
               )}
             </div>
           )}
+          {c.footer && <div className="chroma-footer" onClick={(e) => e.stopPropagation()}>{c.footer}</div>}
         </article>
       ))}
       <div className="chroma-overlay" />

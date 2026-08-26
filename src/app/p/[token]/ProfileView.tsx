@@ -6,7 +6,33 @@ import type { PersonProfileData } from "@/lib/person-profile";
 import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDate } from "@/lib/format";
 import { personPhotoDataUri, bandPhotoDataUri, instrumentIconFor } from "@/lib/tags";
 import { updateProfileInfoAction, uploadProfilePhotoAction, updatePersonAction } from "../profile-actions";
+import { setMemberPermAction } from "@/app/(app)/grup/actions";
+import { DEFAULT_PERMS, PERM_LABELS } from "@/lib/perms";
+import type { MemberPerms } from "@/lib/types";
 import ProfileShareModal from "./ProfileShareModal";
+
+// Permisos del membre en un grup, editables pel gestor des del perfil.
+function BandPermsRow({ bandId, memberName, initial }: { bandId: string; memberName: string; initial: Partial<MemberPerms> }) {
+  const router = useRouter();
+  const [perms, setPerms] = useState<MemberPerms>({ ...DEFAULT_PERMS, ...initial });
+  return (
+    <div className="perm-row" style={{ marginTop: 6 }}>
+      {PERM_LABELS.map(({ key, label }) => (
+        <button
+          key={key} type="button"
+          className={"perm-chip" + (perms[key] ? " on" : "")}
+          title={`${label}: ${perms[key] ? "permès (clic per treure)" : "no permès (clic per donar)"}`}
+          onClick={async () => {
+            const v = !perms[key];
+            setPerms((p) => ({ ...p, [key]: v }));
+            await setMemberPermAction(bandId, memberName, key, v);
+            router.refresh();
+          }}
+        >{label}</button>
+      ))}
+    </div>
+  );
+}
 
 // Calendari mensual amb l'estat d'assistència de la persona a cada bolo.
 function AttendanceCalendar({ concerts, today }: { concerts: PersonProfileData["concerts"]; today: string }) {
@@ -218,12 +244,17 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
           <div className="pv-section-title">Grups</div>
           <div className="pv-bands">
             {data.bands.map((b) => (
-              <div key={b.id} className="pv-band" style={{ ["--pv-accent" as string]: b.color1 || "#8b7bff" }}>
+              <div key={b.id} className="pv-band" style={{ ["--pv-accent" as string]: b.color1 || "#8b7bff", flexWrap: "wrap" }}>
                 <img src={b.logo || bandPhotoDataUri(b)} alt="" />
                 <div>
                   <div className="pv-band-name">{b.name}</div>
                   <div className="pv-band-role">{b.instruments.join(", ") || b.role}</div>
                 </div>
+                {isManager && (
+                  <div style={{ width: "100%" }}>
+                    <BandPermsRow bandId={b.id} memberName={data.name} initial={b.perms || {}} />
+                  </div>
+                )}
               </div>
             ))}
             {data.bands.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}

@@ -204,3 +204,17 @@ export async function applyToBackupRequestAction(requestId: string, message: str
   revalidatePath("/suplencies");
   return { ok: true as const };
 }
+
+// Disponibilitat per a suplències: s'aplica a tots els perfils vinculats al
+// compte (un per workspace on és membre).
+export async function setSubsAvailabilityAction(input: { open?: boolean; visible?: boolean }) {
+  const profile = await requireArtistAction();
+  await db().query(
+    `update person_profiles set
+       open_to_subs = coalesce($1, open_to_subs),
+       profile_public = coalesce($2, profile_public)
+     where clerk_user_id = $3`,
+    [input.open ?? null, input.visible ?? null, profile.clerkUserId]
+  );
+  revalidatePath("/suplencies");
+}

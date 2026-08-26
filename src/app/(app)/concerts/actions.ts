@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Concert } from "@/lib/types";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireBandAccess } from "@/lib/band-access";
 import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
 
 export type SaveConcertInput = {
@@ -208,7 +209,8 @@ export async function createEventAction(input: {
   invited: string[];
   repeat: { freq: "cap" | "setmanal" | "quinzenal" | "mensual"; count: number };
 }): Promise<{ created: number; firstId: string | null }> {
-  const { workspaceId } = await requireManagerAction();
+  // Gestor, o membre del grup amb el permís "Esdeveniments".
+  const { workspaceId } = await requireBandAccess(input.bandId, "events");
   const pool = db();
   const band = (await pool.query("select id, name, tags, city from bands where id=$1 and workspace_id=$2", [input.bandId, workspaceId])).rows[0];
   if (!band) return { created: 0, firstId: null };

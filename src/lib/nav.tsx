@@ -12,12 +12,13 @@ export const PAGES: NavPage[] = [
   { key: "estadistiques", href: "/estadistiques", label: "Estadístiques" },
 ];
 
-// Navegació de l'àrea d'artista (reutilitza les icones existents).
+// Navegació de l'àrea d'artista: mirall de la del gestor (el perfil i les
+// suplències viuen a la barra lateral, sobre la llista de grups).
 export const ARTIST_PAGES: NavPage[] = [
-  { key: "concerts", href: "/artista", label: "Els meus bolos" },
-  { key: "grups", href: "/els-meus-grups", label: "Els meus grups" },
-  { key: "suplencies", href: "/suplencies", label: "Suplències" },
-  { key: "practica", href: "/practica", label: "Pràctica" },
+  { key: "grup", href: "/artista/grup", label: "Grup" },
+  { key: "agenda", href: "/artista/agenda", label: "Agenda" },
+  { key: "concerts", href: "/artista/concerts", label: "Concerts" },
+  { key: "estadistiques", href: "/artista/estadistiques", label: "Estadístiques" },
 ];
 
 export function initialsOf(name: string): string {

@@ -107,6 +107,75 @@ export async function getArtistGigs(clerkUserId: string): Promise<ArtistGig[]> {
   });
 }
 
+// Grups complets (forma Band) on l'usuari és membre — per reutilitzar les
+// vistes del gestor (calendari, grup, concerts) dins l'àrea d'artista.
+export async function getArtistBandsFull(clerkUserId: string): Promise<import("./types").Band[]> {
+  const { rows } = await db().query(
+    `select b.* from band_members bm join bands b on b.id = bm.band_id
+     where bm.clerk_user_id = $1 order by b.name`,
+    [clerkUserId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    city: r.city,
+    rate: r.rate,
+    contact: r.contact,
+    phone: r.phone,
+    tags: r.tags,
+    members: r.members,
+    crew: r.crew,
+    joinCode: r.join_code,
+    joinCodeActive: r.join_code_active,
+    logo: r.logo,
+    color1: r.color1,
+    color2: r.color2,
+    backups: r.backups || [],
+    showFees: !!r.show_fees,
+    coverUrl: r.cover_url || "",
+  }));
+}
+
+// Concerts complets (forma Concert) dels grups on l'usuari és membre, per a
+// les vistes de calendari i llistat de l'àrea d'artista. Amaga els diners:
+// amount es posa a 0 tret que el grup mostri caixets, i respecta els convidats
+// dels esdeveniments que no són bolos.
+export async function getArtistConcertsFull(clerkUserId: string): Promise<import("./types").Concert[]> {
+  const { rows } = await db().query(
+    `select c.*, b.show_fees, bm.member_name
+     from concerts c
+     join band_members bm on bm.band_id = c.band_id and bm.clerk_user_id = $1
+     join bands b on b.id = c.band_id
+     where (coalesce(c.kind, 'bolo') = 'bolo'
+            or jsonb_array_length(coalesce(c.invited, '[]'::jsonb)) = 0
+            or c.invited ? bm.member_name)
+     order by c.date desc`,
+    [clerkUserId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    date: toDateStr(r.date),
+    time: r.time,
+    venue: r.venue,
+    city: r.city,
+    festaEntitat: r.festa_entitat,
+    bandId: r.band_id,
+    bandName: r.band_name,
+    tags: r.tags,
+    status: r.status,
+    amount: r.show_fees ? r.amount : 0,
+    attendance: r.attendance,
+    substitutes: r.substitutes,
+    noSubstitute: r.no_substitute,
+    routeSheet: r.route_sheet,
+    payouts: r.payouts || {},
+    riderId: r.rider_id || null,
+    setlistId: r.setlist_id || null,
+    kind: r.kind || "bolo",
+    invited: r.invited || [],
+  }));
+}
+
 // Token del feed iCal personal de l'usuari.
 export async function getFeedToken(clerkUserId: string): Promise<string> {
   const { rows } = await db().query("select feed_token from profiles where clerk_user_id=$1", [clerkUserId]);
