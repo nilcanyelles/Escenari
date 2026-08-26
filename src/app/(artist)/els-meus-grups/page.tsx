@@ -1,5 +1,7 @@
+import Link from "next/link";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBands, getPendingInvitations } from "@/lib/artist-data";
+import { getArtistEditableBands } from "@/lib/material-data";
 import { bandPhotoDataUri } from "@/lib/tags";
 import InvitationCard from "./InvitationCard";
 import JoinByCode from "./JoinByCode";
@@ -8,9 +10,10 @@ export const dynamic = "force-dynamic";
 
 export default async function ArtistGroupsPage() {
   const profile = await requireArtist();
-  const [bands, invitations] = await Promise.all([
+  const [bands, invitations, editable] = await Promise.all([
     getArtistBands(profile.clerkUserId),
     getPendingInvitations(profile.email),
+    getArtistEditableBands(profile.clerkUserId),
   ]);
 
   return (
@@ -52,6 +55,9 @@ export default async function ArtistGroupsPage() {
                     {band.city ? `${band.city} · ` : ""}
                     {band.memberCount} {band.memberCount === 1 ? "membre" : "membres"}
                   </div>
+                  <Link className="artist-band-material-link" href={`/material/${band.id}`}>
+                    Riders i setlists{editable[band.id]?.canRiders || editable[band.id]?.canSetlists ? " · pots editar" : ""}
+                  </Link>
                 </div>
               </div>
             );

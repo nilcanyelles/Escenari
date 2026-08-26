@@ -23,6 +23,7 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     logo: r.logo,
     color1: r.color1,
     color2: r.color2,
+    backups: r.backups || [],
   }));
 }
 
@@ -44,6 +45,9 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     substitutes: r.substitutes,
     noSubstitute: r.no_substitute,
     routeSheet: r.route_sheet,
+    payouts: r.payouts || {},
+    riderId: r.rider_id || null,
+    setlistId: r.setlist_id || null,
   }));
 }
 

@@ -36,7 +36,15 @@ export default async function ArtistHomePage() {
           <img src={logo} alt="" />
           {gig.bandName}
         </span>
-        {editable && <AttendanceButtons concertId={gig.id} current={gig.myAttendance} />}
+        {editable && (
+          <AttendanceButtons
+            concertId={gig.id}
+            current={gig.myAttendance}
+            currentSubstitute={gig.mySubstitute}
+            searchPublished={gig.myNoSubstitute}
+            backups={gig.bandBackups}
+          />
+        )}
       </div>
     );
   }

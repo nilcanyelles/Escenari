@@ -1,19 +1,6 @@
-import GrupsView from "@/components/GrupsView";
-import { getBands, getConcerts } from "@/lib/data";
-import { requireManager } from "@/lib/current-user";
+import { redirect } from "next/navigation";
 
-export const dynamic = "force-dynamic";
-
-export default async function GrupsPage() {
-  const { workspaceId } = await requireManager();
-  const [bands, concerts] = await Promise.all([getBands(workspaceId), getConcerts(workspaceId)]);
-  const historyByBand: Record<string, number> = {};
-  const concertCountByPerson: Record<string, number> = {};
-  concerts.forEach((c) => {
-    historyByBand[c.bandId] = (historyByBand[c.bandId] || 0) + 1;
-    Object.entries(c.attendance || {}).forEach(([name, val]) => {
-      if (val === "yes") concertCountByPerson[name] = (concertCountByPerson[name] || 0) + 1;
-    });
-  });
-  return <GrupsView bands={bands} historyByBand={historyByBand} concertCountByPerson={concertCountByPerson} />;
+// La pàgina de grups ara viu a /grup (fitxa del grup seleccionat o graella).
+export default function GrupsPage() {
+  redirect("/grup");
 }

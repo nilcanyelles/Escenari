@@ -25,6 +25,9 @@ export type ArtistGig = {
   color1: string;
   color2: string;
   myAttendance: "yes" | "no" | null;
+  mySubstitute: string;
+  myNoSubstitute: boolean;
+  bandBackups: { name: string; instruments: string[] }[];
 };
 
 export type PendingInvitation = {
@@ -67,8 +70,8 @@ export async function getArtistBands(clerkUserId: string): Promise<ArtistBand[]>
 export async function getArtistGigs(clerkUserId: string): Promise<ArtistGig[]> {
   const { rows } = await db().query(
     `select c.id, c.date, c.time, c.venue, c.city, c.festa_entitat, c.status,
-            c.attendance, bm.member_name,
-            b.id as band_id, b.name as band_name, b.logo, b.color1, b.color2
+            c.attendance, c.substitutes, c.no_substitute, bm.member_name,
+            b.id as band_id, b.name as band_name, b.logo, b.color1, b.color2, b.backups
      from concerts c
      join band_members bm on bm.band_id = c.band_id and bm.clerk_user_id = $1
      join bands b on b.id = c.band_id
@@ -92,8 +95,58 @@ export async function getArtistGigs(clerkUserId: string): Promise<ArtistGig[]> {
       color1: r.color1,
       color2: r.color2,
       myAttendance: att === "yes" || att === "no" ? att : null,
+      mySubstitute: (r.substitutes || {})[r.member_name] || "",
+      myNoSubstitute: !!(r.no_substitute || {})[r.member_name],
+      bandBackups: (r.backups || []).map((b: { name?: string; instruments?: string[] }) => ({ name: b.name || "", instruments: b.instruments || [] })),
     };
   });
+}
+
+export type OpenBackupSearch = {
+  id: string;
+  date: string;
+  city: string;
+  venue: string;
+  bandId: string;
+  bandName: string;
+  bandLogo: string;
+  color1: string;
+  instruments: string[];
+  note: string;
+  myApplicationStatus: "pendent" | "acceptada" | "rebutjada" | null;
+  isMine: boolean;
+};
+
+// Borsa de suplències: cerques obertes de qualsevol grup d'Escenari.
+export async function getOpenBackupSearches(clerkUserId: string): Promise<OpenBackupSearch[]> {
+  const { rows } = await db().query(
+    `select br.id, br.instruments, br.note, br.member_name,
+            c.date, c.city, c.venue,
+            b.id as band_id, b.name as band_name, b.logo, b.color1,
+            ba.status as my_status,
+            exists (select 1 from band_members bm where bm.band_id = br.band_id and bm.clerk_user_id = $1) as is_mine
+     from backup_requests br
+     join concerts c on c.id = br.concert_id
+     join bands b on b.id = br.band_id
+     left join backup_applications ba on ba.request_id = br.id and ba.clerk_user_id = $1
+     where br.status = 'oberta' and c.date >= current_date
+     order by c.date`,
+    [clerkUserId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    date: toDateStr(r.date),
+    city: r.city,
+    venue: r.venue,
+    bandId: r.band_id,
+    bandName: r.band_name,
+    bandLogo: r.logo,
+    color1: r.color1,
+    instruments: r.instruments || [],
+    note: r.note || "",
+    myApplicationStatus: r.my_status || null,
+    isMine: !!r.is_mine,
+  }));
 }
 
 export async function getPendingInvitations(email: string): Promise<PendingInvitation[]> {

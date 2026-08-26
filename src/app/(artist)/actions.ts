@@ -102,3 +102,80 @@ export async function setMyAttendanceAction(concertId: string, value: "yes" | "n
   }
   revalidateArtist();
 }
+
+// L'artista que no pot venir proposa un suplent de la llista del grup.
+export async function suggestSubstituteAction(concertId: string, subName: string) {
+  const profile = await requireArtistAction();
+  const pool = db();
+  const membership = (
+    await pool.query(
+      `select bm.member_name from band_members bm
+       join concerts c on c.band_id = bm.band_id
+       where c.id = $1 and bm.clerk_user_id = $2`,
+      [concertId, profile.clerkUserId]
+    )
+  ).rows[0];
+  if (!membership) return;
+  if (subName) {
+    await pool.query(
+      `update concerts set substitutes = substitutes || jsonb_build_object($1::text, $2::text), no_substitute = no_substitute - $1 where id = $3`,
+      [membership.member_name, subName, concertId]
+    );
+  } else {
+    await pool.query(
+      `update concerts set substitutes = substitutes - $1 where id = $2`,
+      [membership.member_name, concertId]
+    );
+  }
+  revalidateArtist();
+}
+
+// Sense suplent disponible: l'artista publica una cerca a la borsa de suplències.
+export async function publishBackupSearchAction(concertId: string) {
+  const profile = await requireArtistAction();
+  const pool = db();
+  const row = (
+    await pool.query(
+      `select bm.member_name, c.band_id, c.workspace_id from band_members bm
+       join concerts c on c.band_id = bm.band_id
+       where c.id = $1 and bm.clerk_user_id = $2`,
+      [concertId, profile.clerkUserId]
+    )
+  ).rows[0];
+  if (!row) return { ok: false as const };
+  const existing = (
+    await pool.query(
+      "select id from backup_requests where concert_id=$1 and member_name=$2 and status='oberta'",
+      [concertId, row.member_name]
+    )
+  ).rows[0];
+  if (existing) return { ok: true as const };
+  await pool.query(
+    `insert into backup_requests (id, workspace_id, band_id, concert_id, member_name, instruments)
+     values ($1,$2,$3,$4,$5,$6)`,
+    ["br" + Date.now(), row.workspace_id, row.band_id, concertId, row.member_name, JSON.stringify(profile.instruments || [])]
+  );
+  await pool.query(
+    `update concerts set no_substitute = no_substitute || jsonb_build_object($1::text, true) where id=$2`,
+    [row.member_name, concertId]
+  );
+  revalidateArtist();
+  revalidatePath("/suplencies");
+  return { ok: true as const };
+}
+
+// Un músic d'Escenari es presenta a una cerca de suplent.
+export async function applyToBackupRequestAction(requestId: string, message: string) {
+  const profile = await requireArtistAction();
+  const pool = db();
+  const req = (await pool.query("select id from backup_requests where id=$1 and status='oberta'", [requestId])).rows[0];
+  if (!req) return { ok: false as const, error: "Aquesta cerca ja no està oberta." };
+  await pool.query(
+    `insert into backup_applications (request_id, clerk_user_id, message)
+     values ($1,$2,$3)
+     on conflict (request_id, clerk_user_id) do update set message = excluded.message`,
+    [requestId, profile.clerkUserId, (message || "").slice(0, 500)]
+  );
+  revalidatePath("/suplencies");
+  return { ok: true as const };
+}

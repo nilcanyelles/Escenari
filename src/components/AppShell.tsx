@@ -1,31 +1,51 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { SignOutButton } from "@clerk/nextjs";
 import { NavIcon, initialsOf, type NavPage } from "@/lib/nav";
+import { bandPhotoDataUri } from "@/lib/tags";
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export type ShellUser = { name: string; roleLabel: string };
+export type ShellBand = { id: string; name: string; logo: string; color1: string; tags?: string[] };
+
+const BAND_COOKIE = "escenari_band";
+
+function setBandCookie(id: string) {
+  document.cookie = `${BAND_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+}
 
 export default function AppShell({
   todayLabel,
   pages,
   user,
+  bands,
+  selectedBandId,
   children,
 }: {
   todayLabel: string;
   pages: NavPage[];
   user: ShellUser;
+  bands?: ShellBand[];
+  selectedBandId?: string;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [, startTransition] = useTransition();
   const [profileOpen, setProfileOpen] = useState(false);
   const topnavRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState<{ left: number; width: number; ready: boolean }>({ left: 0, width: 0, ready: false });
+  // Selecció optimista: la cookie triga un refresh a arribar al servidor.
+  const [localBand, setLocalBand] = useState<string | null>(null);
   const initials = initialsOf(user.name);
+  const activeBand = localBand ?? (selectedBandId || "");
+  const hasRail = Array.isArray(bands);
+
+  useEffect(() => { setLocalBand(null); }, [selectedBandId]);
 
   useIsomorphicLayoutEffect(() => {
     function measure() {
@@ -40,6 +60,12 @@ export default function AppShell({
     return () => window.removeEventListener("resize", measure);
   }, [pathname]);
 
+  function selectBand(id: string) {
+    setLocalBand(id);
+    setBandCookie(id);
+    startTransition(() => router.refresh());
+  }
+
   function ProfileButton() {
     return (
       <button className="profile-btn" onClick={() => setProfileOpen((v) => !v)}>
@@ -48,8 +74,65 @@ export default function AppShell({
     );
   }
 
+  function BandRailItem({ b }: { b: ShellBand }) {
+    const active = activeBand === b.id;
+    return (
+      <button
+        type="button"
+        className={"band-rail-item" + (active ? " active" : "")}
+        title={b.name}
+        onClick={() => selectBand(active ? "" : b.id)}
+        style={active && b.color1 ? { ["--rail-accent" as string]: b.color1 } : undefined}
+      >
+        <img className="band-rail-avatar" src={b.logo || bandPhotoDataUri(b)} alt="" />
+        <span className="band-rail-name">{b.name}</span>
+      </button>
+    );
+  }
+
+  const bandRail = hasRail && (
+    <aside className="band-rail desktop-only">
+      <div className="band-rail-title">Els teus grups</div>
+      <button
+        type="button"
+        className={"band-rail-item band-rail-all" + (activeBand === "" ? " active" : "")}
+        onClick={() => selectBand("")}
+      >
+        <span className="band-rail-avatar band-rail-avatar-all">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+          </svg>
+        </span>
+        <span className="band-rail-name">Tots els grups</span>
+      </button>
+      <div className="band-rail-sep"></div>
+      <div className="band-rail-list">
+        {(bands || []).map((b) => <BandRailItem key={b.id} b={b} />)}
+      </div>
+    </aside>
+  );
+
+  const bandChips = hasRail && (
+    <div className="band-chips mobile-only">
+      <button type="button" className={"band-chip" + (activeBand === "" ? " active" : "")} onClick={() => selectBand("")}>Tots</button>
+      {(bands || []).map((b) => (
+        <button
+          key={b.id}
+          type="button"
+          className={"band-chip" + (activeBand === b.id ? " active" : "")}
+          onClick={() => selectBand(activeBand === b.id ? "" : b.id)}
+        >
+          <img src={b.logo || bandPhotoDataUri(b)} alt="" />
+          {b.name}
+        </button>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="app-shell">
+    <div className={"app-shell" + (hasRail ? " has-rail" : "")}>
+      {bandRail}
       <div className="main-col">
         <div className="mobile-topbar mobile-only">
           <span className="brand-lockup">
@@ -59,6 +142,7 @@ export default function AppShell({
           <div className="spacer"></div>
           <ProfileButton />
         </div>
+        {bandChips}
 
         <div className="page-header desktop-only">
           <div className="page-header-brand">
@@ -78,7 +162,7 @@ export default function AppShell({
               aria-hidden="true"
             ></div>
             {pages.map((p) => {
-              const active = pathname === p.href;
+              const active = pathname === p.href || pathname.startsWith(p.href + "/");
               return (
                 <Link
                   key={p.key}
@@ -105,7 +189,7 @@ export default function AppShell({
 
       <div className="bottom-nav mobile-only">
         {pages.map((p) => {
-          const active = pathname === p.href;
+          const active = pathname === p.href || pathname.startsWith(p.href + "/");
           return (
             <Link
               key={p.key}

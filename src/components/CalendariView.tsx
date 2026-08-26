@@ -9,7 +9,6 @@ import { bandColor } from "@/lib/tags";
 import { saveConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
-import ConcertModal from "@/components/ConcertModal";
 
 function splitIntoColumns<T>(items: T[], maxPerColumn = 8): T[][] {
   if (!items.length) return [];
@@ -32,7 +31,6 @@ function groupByDate(list: Concert[]) {
 
 export default function CalendariView({ bands, concerts, today }: { bands: Band[]; concerts: Concert[]; today: string }) {
   const router = useRouter();
-  const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week">("month");
   const [calWeekOffset, setCalWeekOffset] = useState(0);
@@ -42,7 +40,6 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
   const [calBandFilterOpen, setCalBandFilterOpen] = useState(false);
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
-  const [concertModalId, setConcertModalId] = useState<string | null>(null);
   const dayCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const concertRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const hoverScrollTimer = useRef<number | null>(null);
@@ -54,13 +51,6 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       if (card) card.scrollIntoView({ behavior: "smooth", block: "start" });
     }
   }, [calSelectedDate]);
-
-  useEffect(() => {
-    if (concertModalId) {
-      const row = concertRowRefs.current[concertModalId];
-      if (row) row.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
-  }, [concertModalId]);
 
   const base = new Date(parseInt(today.slice(0, 4), 10), calMonthIndex, 1);
   const y = base.getFullYear(), mIdx = base.getMonth();
@@ -157,7 +147,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
         {isWeekCell ? (
           <div className="week-day-concerts">
             {evs.map((c) => (
-              <div key={c.id} ref={(el) => { concertRowRefs.current[c.id] = el; }} className={"upcoming-concert-row clickable" + (concertModalId === c.id ? " selected" : "")} onClick={() => setConcertModalId(c.id)}>
+              <div key={c.id} ref={(el) => { concertRowRefs.current[c.id] = el; }} className="upcoming-concert-row clickable" onClick={() => router.push(`/concerts/${c.id}`)}>
                 <div className="upcoming-concert-text">
                   <span className="upcoming-concert-band">
                     <span className="cal-day-dot" style={{ background: bandColor(c.bandId).color, marginRight: 6, display: "inline-block" }}></span>
@@ -225,7 +215,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
           </div>
           <div className="upcoming-day-card-concerts">
             {byDate[date].map((c) => (
-              <div key={c.id} ref={(el) => { concertRowRefs.current[c.id] = el; }} className={"upcoming-concert-row clickable" + (concertModalId === c.id ? " selected" : "")} onClick={() => setConcertModalId(c.id)}>
+              <div key={c.id} ref={(el) => { concertRowRefs.current[c.id] = el; }} className="upcoming-concert-row clickable" onClick={() => router.push(`/concerts/${c.id}`)}>
                 <div className="upcoming-concert-text">
                   <span className="upcoming-concert-band">
                     <span className="cal-day-dot" style={{ background: bandColor(c.bandId).color, marginRight: 6, display: "inline-block" }}></span>
@@ -298,18 +288,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       skipDefaults: true,
     });
     if (!created) return;
-    router.refresh();
-    setDraftConcert(created);
-    setConcertModalId(created.id);
-  }
-
-  async function discardDraftAndClose() {
-    if (draftConcert) {
-      await deleteConcertAction(draftConcert.id);
-      router.refresh();
-    }
-    setConcertModalId(null);
-    setDraftConcert(null);
+    router.push(`/concerts/${created.id}`);
   }
 
   return (
@@ -387,34 +366,6 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
         )}
       </div>
 
-      {concertModalId && (() => {
-        const c = concerts.find((x) => x.id === concertModalId) || (draftConcert && draftConcert.id === concertModalId ? draftConcert : null);
-        if (!c) return null;
-        const isNewDraft = !!draftConcert && draftConcert.id === concertModalId;
-        const navigableList = calConcerts.slice().sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-        const navigableIndex = navigableList.findIndex((x) => x.id === c.id);
-        function navigateConcert(dir: "prev" | "next") {
-          if (navigableIndex === -1) return;
-          const target = navigableList[dir === "prev" ? navigableIndex - 1 : navigableIndex + 1];
-          if (target) setConcertModalId(target.id);
-        }
-        return (
-          <ConcertModal
-            key={c.id}
-            mode="edit"
-            concert={c}
-            bands={bands}
-            isDraft={isNewDraft}
-            startInEditMode={isNewDraft}
-            onDiscardDraft={discardDraftAndClose}
-            onClose={() => { setConcertModalId(null); setDraftConcert(null); }}
-            onOpenRouteSheetPreview={() => { setConcertModalId(null); setDraftConcert(null); setRsPreviewConcertId(c.id); }}
-            onNavigate={navigateConcert}
-            hasPrev={navigableIndex > 0}
-            hasNext={navigableIndex !== -1 && navigableIndex < navigableList.length - 1}
-          />
-        );
-      })()}
       {rsModalConcertId && (() => {
         const c = concerts.find((x) => x.id === rsModalConcertId);
         if (!c) return null;

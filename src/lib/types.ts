@@ -1,5 +1,7 @@
 export type Person = { name: string; role: string; phone?: string; email?: string; instruments?: string[] };
 
+export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
+
 export type Band = {
   id: string;
   name: string;
@@ -15,6 +17,7 @@ export type Band = {
   logo?: string;
   color1?: string;
   color2?: string;
+  backups?: BackupPerson[];
 };
 
 export type Concert = {
@@ -33,6 +36,9 @@ export type Concert = {
   substitutes: Record<string, string>;
   noSubstitute: Record<string, boolean>;
   routeSheet: unknown;
+  payouts?: Record<string, number>;
+  riderId?: string | null;
+  setlistId?: string | null;
 };
 
 export type Invoice = {

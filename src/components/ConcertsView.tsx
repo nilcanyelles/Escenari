@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
-import { uniqueTags } from "@/lib/tags";
+import { uniqueTags, bandColor } from "@/lib/tags";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
@@ -154,12 +154,14 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
     }
 
     const isSelected = modal?.concertId === c.id;
+    const cityColor = bandColor("city:" + (c.city || "?"));
+    const venueColor = bandColor("venue:" + (c.venue || "?"));
     return (
-      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => setModal({ concertId: c.id })}>
+      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`/concerts/${c.id}`)}>
         <div className="t-dim">{formatDate(c.date)}</div>
         <div className="t-strong">{c.bandName}</div>
-        <div className="t-dim">{c.city}</div>
-        <div className="t-dim">{c.venue}</div>
+        <div>{c.city ? <span className="loc-chip" style={{ background: cityColor.bg, color: cityColor.color }}>{c.city.split(",")[0]}</span> : <span className="t-dim">—</span>}</div>
+        <div>{c.venue ? <span className="loc-chip" style={{ background: venueColor.bg, color: venueColor.color }}>{c.venue}</span> : <span className="t-dim">—</span>}</div>
         <div className="t-dim">{c.festaEntitat || "—"}</div>
         <div>
           <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
@@ -217,9 +219,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
       skipDefaults: true,
     });
     if (!created) return;
-    router.refresh();
-    setDraftConcert(created);
-    setModal({ concertId: created.id });
+    router.push(`/concerts/${created.id}`);
   }
 
   async function discardDraftAndClose() {

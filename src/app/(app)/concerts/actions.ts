@@ -121,6 +121,20 @@ export async function saveRouteSheetAction(concertId: string, routeSheet: unknow
   revalidatePath("/contactes");
 }
 
+// Repartiment del caixet entre les persones del bolo: { "Nom": import en € }.
+export async function savePayoutsAction(concertId: string, payouts: Record<string, number>) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update concerts set payouts=$1 where id=$2 and workspace_id=$3", [JSON.stringify(payouts || {}), concertId, workspaceId]);
+  revalidatePath(`/concerts/${concertId}`);
+}
+
+export async function setInvoiceStateAction(invoiceId: string, state: "pagada" | "pendent" | "vençuda") {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update invoices set state=$1 where id=$2 and workspace_id=$3", [state, invoiceId, workspaceId]);
+  revalidateAll();
+  revalidatePath("/facturacio");
+}
+
 export async function setConcertStatusAction(id: string, status: string) {
   const { workspaceId } = await requireManagerAction();
   await db().query("update concerts set status=$1 where id=$2 and workspace_id=$3", [status, id, workspaceId]);
