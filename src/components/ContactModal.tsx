@@ -7,7 +7,7 @@ import { personPhotoDataUri, personColorHue } from "@/lib/tags";
 import { saveContactAction, deleteContactAction } from "@/app/(app)/contactes/actions";
 
 const KIND_META: Record<string, { label: string; hue: number }> = {
-  grup: { label: "Grup", hue: 290 },
+  grup: { label: "Artista", hue: 290 },
   ruta: { label: "Full de ruta", hue: 220 },
   empresa: { label: "Empresa", hue: 155 },
 };

@@ -418,6 +418,7 @@ button { font-family: inherit; }
 .badge-btn:disabled { opacity: 0.6; cursor: default; pointer-events: none; }
 .badge.sm { font-size: 10.5px; padding: 2px 8px; }
 .instrument-badge { background: oklch(0.78 0.13 290 / 0.28); color: oklch(0.72 0.16 290); display: inline-flex; align-items: center; gap: 5px; padding-left: 4px; }
+.instrument-badge.crew-badge { background: oklch(0.8 0.14 70 / 0.28); color: oklch(0.75 0.16 70); }
 .instrument-badge:not(:has(.instrument-badge-icon)) { padding-left: 9px; }
 .instrument-badge-icon { width: 18px; height: 18px; object-fit: contain; flex: none; border-radius: 4px; }
 .badge.sm .instrument-badge-icon { width: 14px; height: 14px; }
@@ -623,7 +624,7 @@ button { font-family: inherit; }
 .rs-btn-group { display: flex; align-items: center; justify-content: center; gap: 4px; }
 
 .concerts-cols { grid-template-columns: 100px 1.2fr 0.9fr 0.9fr 0.9fr 0.8fr 92px 90px 34px; min-width: 870px; }
-.contactes-cols { grid-template-columns: 1.2fr 1fr 1.1fr 1fr 1.3fr 34px; min-width: 760px; }
+.contactes-cols { grid-template-columns: 1.2fr 1fr 1.1fr 1fr 1fr 1.3fr 34px; min-width: 860px; }
 .fact-cols { grid-template-columns: 1fr 1.3fr 1fr 1fr 0.9fr 40px; min-width: 600px; }
 .db-cols { grid-template-columns: 70px 135px 1.2fr 1fr 1fr 0.9fr 0.9fr 0.9fr 110px; min-width: 960px; }
 .db-cols > * { text-align: center; justify-self: center; }

@@ -56,6 +56,32 @@ export async function syncBandPeopleToContacts(workspaceId: string, people: { na
   }
 }
 
+// Passada completa: sincronitza tots els músics i crew de tots els grups del
+// workspace, no només els que s'han desat des d'un formulari concret. Cobreix
+// dades que ja existien abans que aquest sincronitzador es cridés puntualment
+// (p. ex. grups creats per script o important d'una altra font). Es limita a
+// una consulta de comptatge quan ja no hi ha res per posar al dia, perquè no
+// pesi a cada visita a la pestanya un cop tot està sincronitzat.
+export async function syncAllBandPeopleToContacts(workspaceId: string) {
+  const pool = db();
+  const { rows } = await pool.query("select members, crew from bands where workspace_id=$1", [workspaceId]);
+  const people: { name: string; role: string; phone?: string; email?: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    for (const p of [...(row.members || []), ...(row.crew || [])]) {
+      const key = (p.name || "").trim().toLowerCase();
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      people.push({ name: p.name, role: p.role, phone: p.phone, email: p.email });
+    }
+  }
+  const { rows: countRows } = await pool.query(
+    "select count(*) from contacts where workspace_id=$1 and kinds @> '[\"grup\"]'::jsonb", [workspaceId]
+  );
+  if (Number(countRows[0].count) >= people.length) return;
+  await syncBandPeopleToContacts(workspaceId, people);
+}
+
 export async function syncRouteSheetContactsToContacts(workspaceId: string, contacts: { name: string; role: string; phone: string; company: string }[]) {
   const pool = db();
   for (const c of contacts) {

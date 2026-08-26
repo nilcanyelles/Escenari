@@ -219,7 +219,7 @@ export default function MemberProfileModal({
                       </span>
                     ))}
                     {crewFunctions.map((fn, i) => (
-                      <span key={i} className="badge instrument-badge">
+                      <span key={i} className="badge instrument-badge crew-badge">
                         <CrewRoleSvg icon={crewRoleIconKey(fn)} />
                         {fn}
                       </span>
@@ -291,7 +291,7 @@ export default function MemberProfileModal({
                       {g.entries.map((e, ei) => (
                         e.listType === "crew" ? (
                           splitInstruments(e.role).map((fn, fi) => (
-                            <span key={ei + "-" + fi} className="badge instrument-badge sm">
+                            <span key={ei + "-" + fi} className="badge instrument-badge crew-badge sm">
                               <CrewRoleSvg icon={crewRoleIconKey(fn)} size={14} />
                               {fn}
                             </span>

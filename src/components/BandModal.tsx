@@ -217,7 +217,7 @@ export default function BandModal({
         {!isMusician && draftRole && !draftPickerOpen && (
           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignSelf: "flex-start" }}>
             {splitInstruments(draftRole).map((fn, i) => (
-              <span key={i} className="badge instrument-badge sm">
+              <span key={i} className="badge instrument-badge crew-badge sm">
                 <CrewRoleSvg icon={crewRoleIconKey(fn)} size={14} />
                 {fn}
               </span>
@@ -255,7 +255,7 @@ export default function BandModal({
         {!isMusician && p.role && instrumentPickerRow !== rowKey && (
           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", alignSelf: "flex-start" }}>
             {splitInstruments(p.role).map((fn, fi) => (
-              <span key={fi} className="badge instrument-badge sm">
+              <span key={fi} className="badge instrument-badge crew-badge sm">
                 <CrewRoleSvg icon={crewRoleIconKey(fn)} size={14} />
                 {fn}
               </span>
@@ -455,7 +455,7 @@ export default function BandModal({
                         {p.role && (
                           <span style={{ display: "inline-flex", gap: 4, flexWrap: "wrap", marginLeft: 8, verticalAlign: "middle" }}>
                             {splitInstruments(p.role).map((fn, fi) => (
-                              <span key={fi} className="badge instrument-badge sm">
+                              <span key={fi} className="badge instrument-badge crew-badge sm">
                                 <CrewRoleSvg icon={crewRoleIconKey(fn)} size={14} />
                                 {fn}
                               </span>
