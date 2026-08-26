@@ -2870,3 +2870,173 @@ button { font-family: inherit; }
   .studio-items { grid-template-columns: repeat(3, 1fr); }
   .studio-name { max-width: 160px; }
 }
+
+/* ============ Suite de gestió: cançons, fitxers, finances, checklists, pràctica ============ */
+
+/* Repertori */
+.song-cols { grid-template-columns: 2fr 1.2fr 0.5fr 0.5fr 0.6fr 0.6fr 34px; }
+.song-chord-badge { margin-left: 7px; color: var(--accent-text); font-size: 12px; }
+.song-editor { max-width: 820px; width: min(820px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
+.song-editor-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding: 4px 2px 10px; }
+.song-meta-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.song-meta { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--text-muted); }
+.song-meta .field-input { min-width: 110px; }
+.song-lyrics-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.song-lyrics-input { font-family: "JetBrains Mono", Consolas, monospace; font-size: 13px; line-height: 1.7; }
+.transpose-ctl { display: inline-flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-muted); }
+.transpose-ctl button {
+  border: 1px solid var(--border-input); background: transparent; color: var(--text);
+  width: 26px; height: 26px; border-radius: 8px; cursor: pointer; font-family: inherit;
+}
+.transpose-val { min-width: 24px; text-align: center; font-weight: 700; color: var(--accent-text); }
+
+/* Lletres amb acords */
+.lyrics-view {
+  background: var(--bg-card-2);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm);
+  padding: 16px 18px;
+  line-height: 1.5;
+  font-size: 14.5px;
+  overflow-x: auto;
+}
+.lyrics-line { min-height: 1.4em; white-space: pre-wrap; }
+.lyrics-line-chords { display: flex; flex-wrap: wrap; align-items: flex-end; margin-top: 4px; }
+.lyrics-chunk { display: inline-flex; flex-direction: column; white-space: pre; }
+.lyrics-chord { font-size: 0.78em; font-weight: 700; color: var(--accent-text); min-height: 1.2em; }
+
+/* Fitxers */
+.file-list { display: flex; flex-direction: column; gap: 8px; }
+.file-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--bg-card-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); padding: 9px 13px;
+}
+.file-icon { font-size: 17px; }
+.file-row-main { flex: 1; min-width: 180px; display: flex; flex-direction: column; gap: 4px; }
+.file-name { color: var(--text); text-decoration: none; font-size: 13.5px; font-weight: 600; word-break: break-all; }
+.file-name:hover { color: var(--accent-text); }
+.file-audio { width: 100%; max-width: 380px; height: 32px; }
+.import-box { display: flex; flex-direction: column; gap: 10px; background: var(--bg-card-2); border: 1px dashed var(--border-input); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px; }
+.rec-active { color: var(--red) !important; border-color: oklch(0.68 0.18 25 / 0.5) !important; animation: rec-pulse 1.2s infinite; }
+@keyframes rec-pulse { 50% { background: oklch(0.68 0.18 25 / 0.14); } }
+
+/* Finances */
+.fin-summary { display: flex; gap: 22px; flex-wrap: wrap; font-size: 13.5px; color: var(--text-muted); margin-bottom: 14px; }
+.fin-pos { color: oklch(0.78 0.15 155); }
+.fin-neg { color: oklch(0.74 0.16 25); }
+.fin-form { display: flex; flex-direction: column; gap: 12px; background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 14px; }
+.fin-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.fin-list { display: flex; flex-direction: column; gap: 6px; }
+.fin-row {
+  display: flex; align-items: center; gap: 14px;
+  background: var(--bg-card-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); padding: 8px 13px;
+}
+.fin-amount { font-variant-numeric: tabular-nums; font-weight: 700; font-size: 13.5px; min-width: 90px; text-align: right; }
+.fin-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.settle-list { display: flex; flex-direction: column; gap: 8px; }
+.settle-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; border-bottom: 1px solid var(--border-soft); padding: 7px 4px; }
+.settle-row:last-child { border-bottom: none; }
+.settle-row > .t-strong { min-width: 140px; }
+.settle-pending { margin-left: auto; font-size: 13px; font-weight: 700; }
+
+/* Seguiments de contactes */
+.followup-list, .followup-history { display: flex; flex-direction: column; gap: 6px; }
+.followup-row {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: var(--bg-card-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); padding: 7px 12px;
+}
+.followup-row.due { border-color: oklch(0.78 0.15 80 / 0.5); background: oklch(0.78 0.15 80 / 0.07); }
+.followup-date { font-size: 12px; font-weight: 700; color: var(--text-muted); min-width: 92px; }
+.quick-link { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--text-ghost); }
+.quick-link:hover { color: var(--accent-text); }
+
+/* Checklists */
+.ck-progress { height: 7px; background: oklch(1 0 0 / 0.07); border-radius: 999px; overflow: hidden; margin-bottom: 14px; }
+.ck-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), oklch(0.72 0.15 155)); border-radius: 999px; transition: width 0.25s; }
+.ck-list { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.ck-item { display: flex; align-items: center; gap: 10px; padding: 5px 0; flex-wrap: wrap; }
+.ck-item.done .ck-text { text-decoration: line-through; color: var(--text-faint); }
+.ck-status {
+  border: none; background: transparent; cursor: pointer; font-size: 16px;
+  width: 26px; height: 26px; border-radius: 8px; font-family: inherit; line-height: 1;
+}
+.ck-status.s-pendent { color: var(--text-ghost); }
+.ck-status.s-en-curs { color: var(--amber); }
+.ck-status.s-fet { color: var(--green); }
+.ck-text { flex: 1; min-width: 140px; font-size: 13.5px; }
+.ck-assignee, .ck-due {
+  background: oklch(1 0 0 / 0.04); border: 1px solid var(--border-soft);
+  color: var(--text-muted); border-radius: 8px; padding: 3px 8px;
+  font-size: 11.5px; font-family: inherit;
+}
+.ck-due.overdue { color: var(--red); border-color: oklch(0.68 0.18 25 / 0.5); }
+.ck-mini {
+  border: 1px dashed var(--border-input); background: transparent; color: var(--text-ghost);
+  width: 22px; height: 22px; border-radius: 7px; cursor: pointer; font-family: inherit;
+}
+.ck-add { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.ck-templates { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; max-width: 420px; }
+
+/* Mode escenari (performance) */
+.perform { min-height: 100vh; background: #08070e; color: #f2f0fa; display: flex; flex-direction: column; }
+.perform-topbar {
+  display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+  border-bottom: 1px solid oklch(1 0 0 / 0.07); position: sticky; top: 0;
+  background: #08070e; z-index: 20; flex-wrap: wrap;
+}
+.perform-title { border: none; background: transparent; color: var(--text-dim); font-family: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+.perform-controls { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+.perform-ctl {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid oklch(1 0 0 / 0.14); background: transparent; color: var(--text-muted);
+  font-size: 12.5px; font-weight: 600; border-radius: 999px; padding: 6px 14px;
+  cursor: pointer; font-family: inherit;
+}
+.perform-ctl.active { background: oklch(0.68 0.19 290 / 0.22); color: white; border-color: var(--accent); }
+.perform-transpose { gap: 8px; }
+.perform-transpose button { border: none; background: transparent; color: inherit; cursor: pointer; font-family: inherit; font-size: 13px; padding: 0 3px; }
+.perform-list {
+  position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 8px; z-index: 40; min-width: 320px; max-height: 60vh; overflow-y: auto;
+  box-shadow: 0 20px 60px oklch(0 0 0 / 0.6); display: flex; flex-direction: column; gap: 2px;
+}
+.perform-list-item {
+  display: flex; align-items: center; gap: 10px;
+  border: none; background: transparent; color: var(--text-dim);
+  font-size: 14px; padding: 9px 12px; border-radius: 8px; cursor: pointer;
+  font-family: inherit; text-align: left;
+}
+.perform-list-item:hover { background: oklch(1 0 0 / 0.06); }
+.perform-list-item.active { background: oklch(0.68 0.19 290 / 0.18); color: white; }
+.perform-list-num { color: var(--text-ghost); font-size: 12px; min-width: 20px; }
+.perform-body { flex: 1; overflow-y: auto; padding: 30px clamp(18px, 8vw, 120px); scroll-behavior: auto; }
+.perform-song-head h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.6em; margin: 0 0 6px; }
+.perform-song-meta { color: var(--text-faint); font-size: 0.6em; margin-bottom: 26px; }
+.perform-body .lyrics-view { background: transparent; border: none; padding: 0; font-size: 1em; line-height: 1.65; }
+.perform-no-lyrics { color: var(--text-ghost); font-size: 0.7em; }
+.perform-nav {
+  display: flex; justify-content: space-between; padding: 12px 20px;
+  border-top: 1px solid oklch(1 0 0 / 0.07); position: sticky; bottom: 0; background: #08070e;
+}
+.perform-nav button {
+  border: 1px solid oklch(1 0 0 / 0.14); background: transparent; color: var(--text-dim);
+  font-size: 14px; font-weight: 600; border-radius: 12px; padding: 10px 26px;
+  cursor: pointer; font-family: inherit;
+}
+.perform-nav button:disabled { opacity: 0.3; cursor: default; }
+.perform-empty { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+
+/* Pràctica */
+.practice-days { display: flex; gap: 10px; align-items: flex-end; height: 120px; }
+.practice-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; }
+.practice-day-bar-wrap { flex: 1; width: 100%; max-width: 44px; display: flex; align-items: flex-end; background: oklch(1 0 0 / 0.04); border-radius: 8px; overflow: hidden; }
+.practice-day-bar { width: 100%; background: linear-gradient(180deg, var(--accent), oklch(0.55 0.18 290)); border-radius: 8px 8px 0 0; min-height: 2px; }
+.practice-day-label { font-size: 11px; color: var(--text-faint); }
+
+/* Agenda: iCal */
+.ics-row { display: flex; gap: 12px; align-items: center; font-size: 12.5px; flex-wrap: wrap; }
+.stage-mode-btn { color: var(--accent-text); border-color: oklch(0.68 0.19 290 / 0.4); }

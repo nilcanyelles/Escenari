@@ -39,6 +39,7 @@ export type Concert = {
   payouts?: Record<string, number>;
   riderId?: string | null;
   setlistId?: string | null;
+  kind?: "bolo" | "assaig" | "reunio" | "altre";
 };
 
 export type Invoice = {

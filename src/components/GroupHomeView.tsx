@@ -8,9 +8,12 @@ import { formatCurrency, formatDate } from "@/lib/format";
 import { tagColors, bandPhotoDataUri, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
+import type { Song, BandFile } from "@/lib/songs";
 import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, type BackupPerson } from "@/app/(app)/grup/actions";
 import BandModal from "@/components/BandModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
+import SongsPanel from "@/components/SongsPanel";
+import FilesPanel from "@/components/FilesPanel";
 
 function InstrumentChips({ items }: { items: string[] }) {
   return (
@@ -29,7 +32,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, today }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, today }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -39,10 +42,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   riders: Rider[];
   setlists: Setlist[];
   editors: BandEditor[];
+  songs: Song[];
+  files: BandFile[];
   today: string;
 }) {
   const router = useRouter();
-  const [tab, setTab] = useState<"equip" | "riders" | "setlists">("equip");
+  const [tab, setTab] = useState<"equip" | "cancons" | "riders" | "setlists" | "fitxers">("equip");
   const [editOpen, setEditOpen] = useState(false);
   const [backups, setBackups] = useState<BackupPerson[]>(() =>
     ((band as unknown as { backups?: BackupPerson[] }).backups || []).map((b) => ({ name: b.name || "", instruments: b.instruments || [], phone: b.phone || "", email: b.email || "" }))
@@ -94,15 +99,19 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {/* Subtabs */}
       <div className="stats-tabs group-tabs">
         <button className={"stats-tab" + (tab === "equip" ? " active" : "")} onClick={() => setTab("equip")}>Equip</button>
+        <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
         <button className={"stats-tab" + (tab === "riders" ? " active" : "")} onClick={() => setTab("riders")}>Riders</button>
         <button className={"stats-tab" + (tab === "setlists" ? " active" : "")} onClick={() => setTab("setlists")}>Setlists</button>
+        <button className={"stats-tab" + (tab === "fitxers" ? " active" : "")} onClick={() => setTab("fitxers")}>Fitxers</button>
       </div>
 
+      {tab === "cancons" && <SongsPanel band={band} songs={songs} canEdit={true} />}
+      {tab === "fitxers" && <FilesPanel band={band} files={files} canEdit={true} />}
       {tab === "riders" && (
         <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={true} isManager={true} />
       )}
       {tab === "setlists" && (
-        <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={true} isManager={true} />
+        <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={true} isManager={true} songs={songs} />
       )}
 
       {tab === "equip" && (<>

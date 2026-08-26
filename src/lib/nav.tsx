@@ -1,4 +1,4 @@
-export type PageKey = "grup" | "agenda" | "concerts" | "estadistiques" | "resum" | "calendari" | "grups" | "contactes" | "facturacio" | "basedades" | "suplencies";
+export type PageKey = "grup" | "agenda" | "concerts" | "estadistiques" | "resum" | "calendari" | "grups" | "contactes" | "facturacio" | "basedades" | "suplencies" | "practica";
 
 export type NavPage = { key: PageKey; href: string; label: string };
 
@@ -17,6 +17,7 @@ export const ARTIST_PAGES: NavPage[] = [
   { key: "concerts", href: "/artista", label: "Els meus bolos" },
   { key: "grups", href: "/els-meus-grups", label: "Els meus grups" },
   { key: "suplencies", href: "/suplencies", label: "Suplències" },
+  { key: "practica", href: "/practica", label: "Pràctica" },
 ];
 
 export function initialsOf(name: string): string {
@@ -41,6 +42,7 @@ export const NAV_ICON_PATHS: Record<PageKey, string> = {
   facturacio: '<circle cx="12" cy="12" r="9.5"></circle><text x="12" y="16.3" text-anchor="middle" font-size="12.5" font-weight="700" font-family="Inter,sans-serif" stroke="none" fill="currentColor">€</text>',
   basedades: '<rect x="3" y="3" width="18" height="18" rx="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line><line x1="9" y1="3" x2="9" y2="21"></line>',
   suplencies: '<circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line><line x1="11" y1="8" x2="11" y2="14"></line><line x1="8" y1="11" x2="14" y2="11"></line>',
+  practica: '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
 };
 
 export function NavIcon({ page, color, className }: { page: PageKey; color: string; className?: string }) {

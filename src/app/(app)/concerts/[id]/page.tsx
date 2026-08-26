@@ -5,6 +5,7 @@ import { getLinkedMembers } from "@/lib/group-data";
 import { getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
+import { getChecklists } from "@/lib/checklists";
 import { emailConfigured } from "@/lib/email";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
@@ -21,13 +22,14 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
   if (!concert) notFound();
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
-  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals] = await Promise.all([
+  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     getShareLinks(workspaceId, id),
     getBackupRequests(workspaceId, { concertId: id }),
     band ? getRiders(band.id) : Promise.resolve([]),
     band ? getSetlists(band.id) : Promise.resolve([]),
     getRiderApprovals(workspaceId, id),
+    getChecklists(workspaceId, id),
   ]);
 
   return (
@@ -44,6 +46,7 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       riders={riders}
       setlists={setlists}
       riderApprovals={riderApprovals}
+      checklists={checklists}
       emailReady={emailConfigured()}
       today={today()}
     />

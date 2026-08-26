@@ -8,6 +8,8 @@ import {
   computeMonthAgg, computeYearAgg, computeInvoiceMonthAgg, computeProjectedMonthAgg,
   computeInvoiceYearAgg, computeProjectedYearAgg, pieSlicePath, type InvoiceRecord,
 } from "@/lib/resum-helpers";
+import type { Transaction } from "@/lib/finance";
+import FinancePanel from "@/components/FinancePanel";
 
 const NBSP = " ";
 
@@ -151,7 +153,7 @@ function RankList({ title, rows, fmt }: { title: string; rows: { label: string; 
   );
 }
 
-export default function StatsView({ bands, concerts, invoices, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; today: string }) {
+export default function StatsView({ bands, concerts, invoices, transactions = [], today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; transactions?: Transaction[]; today: string }) {
   const currentYear = parseInt(today.slice(0, 4), 10);
   const [tab, setTab] = useState<"concerts" | "diners">("concerts");
   const [range, setRange] = useState<"year" | "all">("year");
@@ -378,6 +380,8 @@ export default function StatsView({ bands, concerts, invoices, today }: { bands:
       </div>
 
       {ranks}
+
+      {tab === "diners" && <FinancePanel transactions={transactions} bands={bands} concerts={concerts} />}
     </div>
   );
 }

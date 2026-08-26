@@ -4,9 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import { songDurationSecs, formatTotalDuration, type Setlist, type Song } from "@/lib/material-types";
+import type { Song as LibrarySong } from "@/lib/songs";
 import { saveSetlistAction } from "@/app/(app)/grup/material-actions";
 
-export default function SetlistEditor({ band, setlist, onClose }: { band: Band; setlist: Setlist | null; onClose: () => void }) {
+export default function SetlistEditor({ band, setlist, librarySongs = [], onClose }: { band: Band; setlist: Setlist | null; librarySongs?: LibrarySong[]; onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(setlist?.name || "Setlist");
   const [songs, setSongs] = useState<Song[]>(setlist?.songs?.length ? setlist.songs : [{ title: "", duration: "", key: "", notes: "" }]);
@@ -77,8 +78,26 @@ export default function SetlistEditor({ band, setlist, onClose }: { band: Band; 
               </div>
             ))}
           </div>
-          <button type="button" className="btn-outline" style={{ alignSelf: "flex-start" }}
-            onClick={() => setSongs(songs.concat([{ title: "", duration: "", key: "", notes: "" }]))}>+ Afegeix cançó</button>
+          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+            <button type="button" className="btn-outline"
+              onClick={() => setSongs(songs.concat([{ title: "", duration: "", key: "", notes: "" }]))}>+ Afegeix cançó</button>
+            {librarySongs.length > 0 && (
+              <select
+                className="field-input compact-field" value=""
+                onChange={(e) => {
+                  const s = librarySongs.find((x) => x.id === e.target.value);
+                  if (!s) return;
+                  setSongs((prev) => {
+                    const base = prev.length === 1 && !prev[0].title.trim() ? [] : prev;
+                    return base.concat([{ title: s.title, duration: s.duration, key: s.songKey, notes: "", songId: s.id }]);
+                  });
+                }}
+              >
+                <option value="">+ Del repertori…</option>
+                {librarySongs.map((s) => <option key={s.id} value={s.id}>{s.title}{s.duration ? ` (${s.duration})` : ""}</option>)}
+              </select>
+            )}
+          </div>
         </div>
       </div>
     </div>

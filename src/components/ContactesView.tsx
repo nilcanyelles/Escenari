@@ -10,6 +10,8 @@ import { InstrumentIcon } from "@/components/InstrumentPicker";
 import { CrewRoleSvg, crewRoleIconKey } from "@/lib/crewRoles";
 import ContactModal from "@/components/ContactModal";
 import MemberProfileModal from "@/components/MemberProfileModal";
+import ContactFollowups from "@/components/ContactFollowups";
+import type { ContactInteraction } from "@/lib/contacts-data";
 
 const PAGE_SIZE = 50;
 
@@ -74,7 +76,7 @@ function bandBadgesFor(name: string, allBands: Band[]) {
   return { inBands, isMusician, isCrew, instruments, functions, bandNames };
 }
 
-export default function ContactesView({ contacts, allBands, concertCountByPerson }: { contacts: Contact[]; allBands: Band[]; concertCountByPerson: Record<string, number> }) {
+export default function ContactesView({ contacts, allBands, concertCountByPerson, interactions = [] }: { contacts: Contact[]; allBands: Band[]; concertCountByPerson: Record<string, number>; interactions?: ContactInteraction[] }) {
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<"tots" | ContactKind>("tots");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -124,6 +126,7 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
   return (
     <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="glow-blooms" aria-hidden="true"></div>
+      <ContactFollowups contacts={contacts} interactions={interactions} />
       <div className="filter-bar contactes-filterbar">
         <input className="input search" type="text" placeholder="Cerca nom, instrument, tipus, grup, empresa, telèfon, correu…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as "tots" | ContactKind)}>
@@ -183,8 +186,12 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
                       ? (info?.bandNames.length ? info.bandNames.join(", ") : "—")
                       : (c.company || "—")}
                   </div>
-                  <div className="t-dim">{c.phone || "—"}</div>
-                  <div className="t-dim">{c.email || "—"}</div>
+                  <div className="t-dim" onClick={(e) => e.stopPropagation()}>
+                    {c.phone ? <a className="quick-link" href={`tel:${c.phone.replace(/\s/g, "")}`} title="Truca">{c.phone}</a> : "—"}
+                  </div>
+                  <div className="t-dim" onClick={(e) => e.stopPropagation()}>
+                    {c.email ? <a className="quick-link" href={`mailto:${c.email}`} title="Escriu un correu">{c.email}</a> : "—"}
+                  </div>
                   <div onClick={(e) => e.stopPropagation()}><DeleteContactBtn id={c.id} /></div>
                 </div>
               );

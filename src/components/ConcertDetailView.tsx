@@ -14,7 +14,9 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, repeatConcertAction } from "@/app/(app)/concerts/actions";
+import type { Checklist } from "@/lib/checklists";
+import ChecklistSection from "@/components/ChecklistSection";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
 import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction } from "@/app/(app)/concerts/share-actions";
@@ -88,7 +90,7 @@ function rsMissingList(c: Concert): string[] {
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, emailReady, today,
+  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, emailReady, today,
 }: {
   concert: Concert;
   band: Band | null;
@@ -102,6 +104,7 @@ export default function ConcertDetailView({
   riders: Rider[];
   setlists: Setlist[];
   riderApprovals: RiderApproval[];
+  checklists: Checklist[];
   emailReady: boolean;
   today: string;
 }) {
@@ -114,6 +117,9 @@ export default function ConcertDetailView({
   const [substitutes, setSubstitutes] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
   const [noSubstitute, setNoSubstitute] = useState<Record<string, boolean>>({ ...(concert.noSubstitute || {}) });
   const [saving, setSaving] = useState(false);
+  const [kind, setKind] = useState<string>(concert.kind || "bolo");
+  const [repeatWeeks, setRepeatWeeks] = useState(4);
+  const [repeating, setRepeating] = useState(false);
   const [rsPreviewOpen, setRsPreviewOpen] = useState(false);
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -399,8 +405,50 @@ export default function ConcertDetailView({
             <label className="form-label">Import (sense IVA)</label>
             <input type="number" className="field-input form-field" value={cf.amount} onChange={(e) => setField("amount", e.target.value)} />
           </div>
+          <div className="cd-field">
+            <label className="form-label">Tipus d&apos;esdeveniment</label>
+            <select
+              className="field-input form-field" value={kind}
+              onChange={async (e) => {
+                const v = e.target.value as "bolo" | "assaig" | "reunio" | "altre";
+                setKind(v);
+                await setConcertKindAction(concert.id, v);
+                router.refresh();
+              }}
+            >
+              <option value="bolo">Bolo</option>
+              <option value="assaig">Assaig</option>
+              <option value="reunio">Reunió</option>
+              <option value="altre">Altre</option>
+            </select>
+          </div>
+          <div className="cd-field">
+            <label className="form-label">Repeteix setmanalment</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <select className="field-input form-field" style={{ width: 110 }} value={repeatWeeks} onChange={(e) => setRepeatWeeks(parseInt(e.target.value, 10))}>
+                {[1, 2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>×{n}</option>)}
+              </select>
+              <button
+                type="button" className="btn-outline" disabled={repeating}
+                title="Crea còpies d'aquest esdeveniment les setmanes següents"
+                onClick={async () => {
+                  setRepeating(true);
+                  const { created } = await repeatConcertAction(concert.id, repeatWeeks);
+                  router.refresh();
+                  setRepeating(false);
+                  alert(`${created} esdeveniments creats.`);
+                }}
+              >{repeating ? "Creant…" : "Crea còpies"}</button>
+            </div>
+          </div>
         </div>
       </div>
+
+      <ChecklistSection
+        concertId={concert.id}
+        checklists={checklists}
+        memberNames={members.map((m) => m.name)}
+      />
 
       {/* Assistència */}
       <div className="panel cd-section" id="cd-assistencia">

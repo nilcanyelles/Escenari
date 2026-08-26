@@ -7,6 +7,7 @@ import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import { songDurationSecs, formatTotalDuration } from "@/lib/material-types";
 import type { LinkedMember } from "@/lib/group-data";
 import { emptyRiderContent } from "@/lib/material-types";
+import type { Song as LibrarySong } from "@/lib/songs";
 import { saveRiderAction, deleteRiderAction, deleteSetlistAction, setBandEditorAction } from "@/app/(app)/grup/material-actions";
 import SetlistEditor from "@/components/SetlistEditor";
 import SpecularButton from "@/components/SpecularButton";
@@ -147,13 +148,14 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
   );
 }
 
-export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit, isManager }: {
+export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit, isManager, songs }: {
   band: Band;
   setlists: Setlist[];
   linkedMembers: LinkedMember[];
   editors: BandEditor[];
   canEdit: boolean;
   isManager: boolean;
+  songs?: LibrarySong[];
 }) {
   const router = useRouter();
   const [editing, setEditing] = useState<{ setlist: Setlist | null } | null>(null);
@@ -182,6 +184,7 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
                   </div>
                   <div className="material-card-actions">
                     {canEdit && <button type="button" className="btn-outline" onClick={() => setEditing({ setlist: s })}>Edita</button>}
+                    <button type="button" className="btn-outline stage-mode-btn" title="Mode escenari: lletres a pantalla completa amb auto-scroll" onClick={() => router.push(`/escenari-mode/${s.id}`)}>▶ Escenari</button>
                     <ShareBtns token={s.publicToken} what="Setlist" bandName={band.name} />
                     {canEdit && (
                       <button type="button" className="row-delete-btn" title="Elimina la setlist"
@@ -203,7 +206,7 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
           <AccessBox band={band} linkedMembers={linkedMembers} editors={editors} kind="setlists" />
         </div>
       )}
-      {editing && <SetlistEditor band={band} setlist={editing.setlist} onClose={() => { setEditing(null); router.refresh(); }} />}
+      {editing && <SetlistEditor band={band} setlist={editing.setlist} librarySongs={songs || []} onClose={() => { setEditing(null); router.refresh(); }} />}
     </div>
   );
 }

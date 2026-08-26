@@ -121,6 +121,39 @@ export async function saveRouteSheetAction(concertId: string, routeSheet: unknow
   revalidatePath("/contactes");
 }
 
+// Tipus d'esdeveniment del calendari (bolo, assaig, reunió, altre).
+export async function setConcertKindAction(id: string, kind: "bolo" | "assaig" | "reunio" | "altre") {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update concerts set kind=$1 where id=$2 and workspace_id=$3", [kind, id, workspaceId]);
+  revalidateAll();
+  revalidatePath(`/concerts/${id}`);
+}
+
+// Repeteix un esdeveniment setmanalment N cops (assajos, residències...).
+export async function repeatConcertAction(id: string, weeks: number): Promise<{ created: number }> {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  const c = (await pool.query("select * from concerts where id=$1 and workspace_id=$2", [id, workspaceId])).rows[0];
+  if (!c) return { created: 0 };
+  const n = Math.min(Math.max(weeks, 1), 26);
+  const baseDate = typeof c.date === "string" ? c.date.slice(0, 10) : c.date.toISOString().slice(0, 10);
+  let created = 0;
+  for (let i = 1; i <= n; i++) {
+    const p = baseDate.split("-").map(Number);
+    const d = new Date(p[0], p[1] - 1, p[2] + i * 7);
+    const dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const newId = "c" + Date.now() + i;
+    await pool.query(
+      `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, workspace_id, kind)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'{}','{}','{}',$12,$13)`,
+      [newId, dateStr, c.time, c.venue, c.city, c.festa_entitat, c.band_id, c.band_name, JSON.stringify(c.tags || []), c.status, c.amount, workspaceId, c.kind || "bolo"]
+    );
+    created++;
+  }
+  revalidateAll();
+  return { created };
+}
+
 // Repartiment del caixet entre les persones del bolo: { "Nom": import en € }.
 export async function savePayoutsAction(concertId: string, payouts: Record<string, number>) {
   const { workspaceId } = await requireManagerAction();

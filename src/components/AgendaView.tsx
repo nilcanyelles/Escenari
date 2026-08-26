@@ -7,8 +7,9 @@ import CalendariView from "@/components/CalendariView";
 import ShareMonthModal from "@/components/ShareMonthModal";
 
 // Agenda = resum ràpid + calendari en una sola pàgina (la principal).
-export default function AgendaView({ bands, concerts, invoices, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; today: string }) {
+export default function AgendaView({ bands, concerts, invoices, icsToken = "", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; icsToken?: string; today: string }) {
   const [shareOpen, setShareOpen] = useState(false);
+  const [icsCopied, setIcsCopied] = useState<string | null>(null);
   const ym = today.slice(0, 7);
   const monthIdx = parseInt(today.slice(5, 7), 10) - 1;
 
@@ -74,6 +75,30 @@ export default function AgendaView({ bands, concerts, invoices, today }: { bands
       </div>
 
       <CalendariView bands={bands} concerts={concerts} today={today} />
+
+      {icsToken && (
+        <div className="ics-row">
+          <button
+            type="button" className="link-btn"
+            title="Copia l'URL per subscriure't des de Google Calendar o Apple Calendar"
+            onClick={async () => {
+              await navigator.clipboard.writeText(`${window.location.origin}/api/ics/${icsToken}`);
+              setIcsCopied("ics");
+              window.setTimeout(() => setIcsCopied(null), 1800);
+            }}
+          >📅 {icsCopied === "ics" ? "Enllaç copiat ✓" : "Subscriu-te al calendari (iCal)"}</button>
+          <span className="t-dim">·</span>
+          <button
+            type="button" className="link-btn"
+            title="Feed JSON públic dels bolos confirmats, per al web del grup"
+            onClick={async () => {
+              await navigator.clipboard.writeText(`${window.location.origin}/api/public-events/${icsToken}`);
+              setIcsCopied("feed");
+              window.setTimeout(() => setIcsCopied(null), 1800);
+            }}
+          >🌐 {icsCopied === "feed" ? "Enllaç copiat ✓" : "Feed públic per al web"}</button>
+        </div>
+      )}
 
       {shareOpen && (
         <ShareMonthModal bands={bands} concerts={concerts} today={today} onClose={() => setShareOpen(false)} />

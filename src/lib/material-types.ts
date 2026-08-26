@@ -53,7 +53,7 @@ export type RiderApproval = {
   createdAt: string;
 };
 
-export type Song = { title: string; duration: string; key: string; notes: string };
+export type Song = { title: string; duration: string; key: string; notes: string; songId?: string };
 
 export type Setlist = {
   id: string;

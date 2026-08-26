@@ -3,6 +3,7 @@ import GroupHomeView from "@/components/GroupHomeView";
 import { getBands, getConcerts } from "@/lib/data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getRiders, getSetlists, getBandEditors } from "@/lib/material-data";
+import { getSongs, getBandFiles } from "@/lib/songs";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
@@ -32,12 +33,14 @@ export default async function GrupPage() {
   }
 
   const band = bands.find((b) => b.id === bandId)!;
-  const [linkedMembers, backupRequests, riders, setlists, editors] = await Promise.all([
+  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files] = await Promise.all([
     getLinkedMembers(bandId),
     getBackupRequests(workspaceId, { bandId }),
     getRiders(bandId),
     getSetlists(bandId),
     getBandEditors(bandId),
+    getSongs(bandId),
+    getBandFiles(bandId),
   ]);
 
   return (
@@ -51,6 +54,8 @@ export default async function GrupPage() {
       riders={riders}
       setlists={setlists}
       editors={editors}
+      songs={songs}
+      files={files}
       today={today()}
     />
   );

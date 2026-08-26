@@ -141,3 +141,29 @@ export async function deleteContactAction(id: string) {
   await db().query("delete from contacts where id=$1 and workspace_id=$2", [id, workspaceId]);
   revalidateAll();
 }
+
+// ---------- Historial d'interaccions i seguiments ----------
+
+export async function addInteractionAction(input: { contactId: string; date: string; note: string; nextDate: string | null; nextNote: string }): Promise<{ id: string }> {
+  const { workspaceId } = await requireManagerAction();
+  const id = "in" + Date.now();
+  await db().query(
+    `insert into contact_interactions (id, workspace_id, contact_id, idate, note, next_date, next_note)
+     values ($1,$2,$3,$4,$5,$6,$7)`,
+    [id, workspaceId, input.contactId, input.date, input.note || "", input.nextDate, input.nextNote || ""]
+  );
+  revalidatePath("/contactes");
+  return { id };
+}
+
+export async function markInteractionDoneAction(id: string, done: boolean) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update contact_interactions set done=$1 where id=$2 and workspace_id=$3", [done, id, workspaceId]);
+  revalidatePath("/contactes");
+}
+
+export async function deleteInteractionAction(id: string) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("delete from contact_interactions where id=$1 and workspace_id=$2", [id, workspaceId]);
+  revalidatePath("/contactes");
+}
