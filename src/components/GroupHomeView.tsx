@@ -15,6 +15,27 @@ import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
 import FilesPanel from "@/components/FilesPanel";
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
+import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
+import { normalize } from "@/lib/text";
+import { personColorHue } from "@/lib/tags";
+import type { Person } from "@/lib/types";
+
+// Targetes "chroma" per a l'equip: nom, instrument i @ estil Instagram.
+function personChromaItem(p: Person, concertCount: number | null): ChromaItem {
+  const h = personColorHue(p.name);
+  const handle = "@" + normalize(p.name).replace(/\s+/g, "");
+  const inss = instrumentsFor(p);
+  return {
+    image: personPhotoDataUri(p.name),
+    title: p.name,
+    subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
+    handle,
+    location: concertCount !== null ? `${concertCount} concerts` : undefined,
+    borderColor: `hsl(${h}, 62%, 58%)`,
+    gradient: `linear-gradient(145deg, hsl(${h}, 55%, 32%), #000)`,
+    url: `https://instagram.com/${handle.slice(1)}`,
+  };
+}
 
 function InstrumentChips({ items }: { items: string[] }) {
   return (
@@ -59,6 +80,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
   const total = concerts.filter((c) => c.status !== "cancel·lat").length;
   const upcoming = concerts.filter((c) => c.date >= today && c.status !== "cancel·lat");
+  // KPI de ritme: mitjana de concerts per mes d'enguany.
+  const yearStr = today.slice(0, 4);
+  const yearCount = concerts.filter((c) => c.date.slice(0, 4) === yearStr && c.status !== "cancel·lat").length;
+  const monthsElapsed = parseInt(today.slice(5, 7), 10);
+  const concertsPerMonth = (yearCount / Math.max(1, monthsElapsed)).toFixed(1).replace(".", ",");
+  const monthCount = concerts.filter((c) => c.date.slice(0, 7) === today.slice(0, 7) && c.status !== "cancel·lat").length;
   const linkedByName: Record<string, LinkedMember> = {};
   linkedMembers.forEach((m) => { linkedByName[m.memberName] = m; });
 
@@ -131,23 +158,14 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               rowSpan: 2,
               onClick: () => setTab("equip"),
               content: (
-                <div className="bento-members">
-                  {band.members.slice(0, 8).map((m) => {
-                    const ins = instrumentsFor(m)[0] || "";
-                    const icon = ins ? instrumentIconFor(ins) : null;
-                    const linked = !!linkedByName[m.name];
-                    return (
-                      <div key={m.name} className={"bento-member" + (linked ? " linked" : "")} title={`${m.name}${ins ? " — " + ins : ""}`}>
-                        <div className="bento-member-avatar">
-                          <img src={personPhotoDataUri(m.name)} alt="" />
-                          {icon && <span className="bento-member-instr"><img src={icon} alt="" /></span>}
-                        </div>
-                        <span className="bento-member-name">{m.name.split(" ")[0]}</span>
-                        {ins && <span className="bento-member-role">{ins}</span>}
-                      </div>
-                    );
-                  })}
-                  {band.members.length > 8 && <div className="bento-member-more">+{band.members.length - 8}</div>}
+                <div className="bento-chroma">
+                  <ChromaGrid
+                    className="chroma-compact"
+                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null))}
+                    columns={4}
+                    cardWidth={104}
+                    radius={150}
+                  />
                 </div>
               ),
             },
@@ -194,11 +212,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               onClick: () => setTab("setlists"),
             },
             {
-              key: "fitxers",
-              label: "Arxiu",
-              title: `${files.filter((f) => !f.songId).length} fitxers`,
-              description: "Contractes, cartells, àudios",
-              onClick: () => setTab("fitxers"),
+              key: "ritme",
+              label: "Ritme",
+              title: `${concertsPerMonth} concerts/mes`,
+              description: `${monthCount} aquest mes · mitjana d'enguany`,
+              onClick: () => router.push("/estadistiques"),
             },
           ] as BentoCard[])}
         />
@@ -228,29 +246,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         {band.members.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té membres — edita el grup per afegir-n&apos;hi.</div>
         ) : (
-          <div className="member-grid">
-            {band.members.map((m) => {
-              const linked = linkedByName[m.name];
-              const inss = instrumentsFor(m);
-              return (
-                <div key={m.name} className="member-card">
-                  <img className="member-photo" src={personPhotoDataUri(m.name)} alt={m.name} />
-                  <div className="member-card-body">
-                    <div className="member-name">
-                      {m.name}
-                      {linked && (
-                        <span className="member-linked" title={`Usuari d'Escenari: ${linked.email}`}>
-                          <img src="/logo-mark.png" alt="Escenari" />
-                        </span>
-                      )}
-                    </div>
-                    <InstrumentChips items={inss} />
-                    <div className="member-count">{concertCountByPerson[m.name] || 0} concerts</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <ChromaGrid
+            items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0))}
+            columns={4}
+            cardWidth={190}
+            radius={240}
+          />
         )}
       </div>
 
@@ -258,17 +259,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {band.crew.length > 0 && (
         <div className="panel">
           <div className="panel-title" style={{ marginBottom: 14 }}>Equip tècnic</div>
-          <div className="member-grid">
-            {band.crew.map((m) => (
-              <div key={m.name} className="member-card">
-                <img className="member-photo" src={personPhotoDataUri(m.name)} alt={m.name} />
-                <div className="member-card-body">
-                  <div className="member-name">{m.name}</div>
-                  <div className="member-count">{m.role}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+          <ChromaGrid
+            items={band.crew.map((m) => personChromaItem(m, null))}
+            columns={4}
+            cardWidth={190}
+            radius={240}
+          />
         </div>
       )}
 
