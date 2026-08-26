@@ -17,11 +17,12 @@ type ConfMember = {
   answer: "yes" | "no" | "";
 };
 
-export default function ConfirmView({ token, event, members, signedIn, preselect }: {
+export default function ConfirmView({ token, event, members, signedIn, viewerIsManager = false, preselect }: {
   token: string;
   event: { date: string; time: string; city: string; venue: string; festaEntitat: string; kind: string; bandName: string; logo: string; color1: string; color2: string };
   members: ConfMember[];
   signedIn: boolean;
+  viewerIsManager?: boolean;
   preselect: string;
 }) {
   const router = useRouter();
@@ -84,7 +85,12 @@ export default function ConfirmView({ token, event, members, signedIn, preselect
 
         {sel && (
           <div className="cfm-panel">
-            {done ? (
+            {viewerIsManager ? (
+              <div className="cfm-note">
+                Estàs amb el compte de <strong>gestor</strong> — aquest enllaç és perquè cada músic respongui amb el seu compte.
+                Marca l&apos;assistència des de la fitxa del concert a Escenari.
+              </div>
+            ) : done ? (
               <div className={"cfm-done " + done}>
                 {done === "yes" ? `Gràcies, ${sel.name.split(" ")[0]}! Has confirmat que hi seràs. 🎉` : `Anotat: ${sel.name.split(" ")[0]} no hi serà.`}
               </div>

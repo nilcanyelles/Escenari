@@ -30,6 +30,15 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
   const payoutKey = Object.keys(payouts).find((k) => normalize(k) === normalize(myName));
   const myAmount = payoutKey !== undefined ? payouts[payoutKey] : null;
 
+  // Fotos reals per a la llista d'assistència.
+  const ws = (await db().query("select workspace_id from bands where id=$1", [concert.bandId])).rows[0];
+  const photoRows = ws ? (await db().query(
+    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+    [ws.workspace_id]
+  )).rows : [];
+  const photosByName: Record<string, string> = {};
+  photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+
   return (
     <ArtistConcertDetail
       concert={concert}
@@ -37,6 +46,7 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
       myName={myName}
       myAmount={myAmount}
       showFees={!!band?.showFees}
+      photosByName={photosByName}
       today={today()}
     />
   );

@@ -37,6 +37,15 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
   const transactions = await getTransactions(workspaceId);
   const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
 
+  // Fotos reals de perfil per a les llistes d'assistència i repartiment.
+  const { db } = await import("@/lib/db");
+  const photoRows = (await db().query(
+    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+    [workspaceId]
+  )).rows;
+  const photosByName: Record<string, string> = {};
+  photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+
   // Conflictes: només quan coincideixen dia I hora — mateix grup, o un membre
   // compromès amb un altre grup a la mateixa hora.
   const clashes: string[] = [];
@@ -93,6 +102,7 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       venueHistory={venueHistory}
       concertExpenses={concertExpenses.reduce((s, t) => s + t.amount, 0)}
       emailReady={emailConfigured()}
+      photosByName={photosByName}
       today={today()}
     />
   );

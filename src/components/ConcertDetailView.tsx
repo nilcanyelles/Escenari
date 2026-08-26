@@ -95,7 +95,7 @@ function rsMissingList(c: Concert): string[] {
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses, emailReady, today,
+  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses, emailReady, photosByName = {}, today,
 }: {
   concert: Concert;
   band: Band | null;
@@ -114,6 +114,7 @@ export default function ConcertDetailView({
   venueHistory: { date: string; amount: number; invoiceState: string | null; daysToPay: number | null }[];
   concertExpenses: number;
   emailReady: boolean;
+  photosByName?: Record<string, string>; // nom normalitzat → id de fitxer de foto
   today: string;
 }) {
   const router = useRouter();
@@ -549,7 +550,7 @@ export default function ConcertDetailView({
               const inss = instrumentsFor(m);
               return (
                 <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
-                  <img className="member-photo backup-photo" src={personPhotoDataUri(m.name)} alt="" />
+                  <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                   <div className="cd-att-main">
                     <div className="member-name">
                       {m.name}
@@ -978,7 +979,7 @@ export default function ConcertDetailView({
               {payoutNames.map((n, i) => (
                 <div key={n} className="cd-payout-row">
                   <span className="cd-payout-dot" style={{ background: `oklch(0.68 0.16 ${(i * 47 + 250) % 360})` }}></span>
-                  <img className="member-photo" style={{ width: 28, height: 28, borderRadius: 8 }} src={personPhotoDataUri(n)} alt="" />
+                  <img className="member-photo" style={{ width: 28, height: 28, borderRadius: 8 }} src={photosByName[normalize(n)] ? `/api/file/${photosByName[normalize(n)]}` : personPhotoDataUri(n)} alt="" />
                   <span className="cd-payout-name">{n}</span>
                   <input
                     type="number" className="field-input compact-field cd-payout-input"

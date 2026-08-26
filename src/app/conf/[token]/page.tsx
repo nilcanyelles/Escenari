@@ -45,6 +45,9 @@ export default async function ConfirmPage({ params, searchParams }: {
   const myMemberName = userId
     ? links.find((l) => l.clerk_user_id === userId)?.member_name || ""
     : "";
+  const viewerRole = userId
+    ? (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0]?.role || "none"
+    : "none";
 
   const attendance: Record<string, string> = concert.attendance || {};
 
@@ -72,6 +75,7 @@ export default async function ConfirmPage({ params, searchParams }: {
         answer: attendance[m.name] === "yes" ? "yes" : attendance[m.name] === "no" ? "no" : "",
       }))}
       signedIn={!!userId}
+      viewerIsManager={viewerRole === "manager"}
       preselect={sel || ""}
     />
   );

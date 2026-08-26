@@ -34,6 +34,14 @@ export async function respondConfAction(
   if (!userId) return { ok: false, error: "Cal iniciar sessió per confirmar" };
 
   const pool = db();
+
+  // Un compte de gestor mai pot reclamar ni respondre per un músic: el gestor
+  // marca l'assistència des de la fitxa del concert.
+  const myProfile = (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0];
+  if (myProfile?.role === "manager") {
+    return { ok: false, error: "Ets el gestor — marca l'assistència des de la fitxa del concert, no des d'aquest enllaç." };
+  }
+
   const concert = (await pool.query(
     "select id, band_id, workspace_id from concerts where att_token=$1 and status <> 'cancel·lat'",
     [token]

@@ -5,6 +5,7 @@ import Link from "next/link";
 import type { Band, Concert } from "@/lib/types";
 import { formatCurrency, formatDateFull, capitalize, formatDate, statusColors } from "@/lib/format";
 import { personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
+import { normalize } from "@/lib/text";
 import { rsCompletionPercent } from "@/lib/route-sheet";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import RouteSheetPreviewDoc from "@/components/RouteSheetPreviewDoc";
@@ -15,12 +16,13 @@ const KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", re
 // Fitxa del concert per al músic: mateixa portada de pòster que el gestor,
 // però tot de només lectura — informació, full de ruta (amb PDF), assistència
 // i, de facturació, només el seu caixet.
-export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, today }: {
+export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, photosByName = {}, today }: {
   concert: Concert;
   band: Band | null;
   myName: string;
   myAmount: number | null; // null = el grup no mostra caixets
   showFees: boolean;
+  photosByName?: Record<string, string>;
   today: string;
 }) {
   const [tab, setTab] = useState<"info" | "ruta" | "assistencia" | "caixet">("info");
@@ -125,7 +127,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
               const inss = instrumentsFor(m);
               return (
                 <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
-                  <img className="member-photo backup-photo" src={personPhotoDataUri(m.name)} alt="" />
+                  <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                   <div className="cd-att-main">
                     <div className="member-name">{m.name}{m.name === myName ? " (tu)" : ""}</div>
                     <div className="member-instruments">
