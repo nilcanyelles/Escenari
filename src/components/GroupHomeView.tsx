@@ -50,8 +50,8 @@ function personChromaItem(
     p.phone
       ? { icon: "📞", title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` }
       : { icon: "📞", title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
-    p.phone
-      ? { icon: "💬", title: "WhatsApp", href: `https://wa.me/${p.phone.replace(/[^\d]/g, "")}` }
+    (p.whatsapp || p.phone)
+      ? { icon: "💬", title: "WhatsApp", href: `https://wa.me/${(p.whatsapp || p.phone || "").replace(/[^\d]/g, "")}` }
       : { icon: "💬", title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
     p.email
       ? { icon: "✉️", title: `Escriu a ${p.email}`, href: `mailto:${p.email}` }

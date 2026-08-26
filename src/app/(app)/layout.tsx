@@ -4,11 +4,19 @@ import { PAGES } from "@/lib/nav";
 import { requireManager } from "@/lib/current-user";
 import { getBands } from "@/lib/data";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
+import { db } from "@/lib/db";
 
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireManager();
   const todayLabel = capitalize(formatDateFull(today()));
-  const [bands, selectedRaw] = await Promise.all([getBands(profile.workspaceId), getSelectedBandId()]);
+  const [bands, selectedRaw, ppRow] = await Promise.all([
+    getBands(profile.workspaceId),
+    getSelectedBandId(),
+    db().query(
+      "select photo_file_id, phone, whatsapp, role_label, contact_email from person_profiles where workspace_id=$1 and lower(person_name)=lower($2)",
+      [profile.workspaceId, profile.name]
+    ).then((r) => r.rows[0] || null),
+  ]);
   const selectedBandId = resolveBandScope(bands, selectedRaw);
   // La pestanya "Grup" només existeix quan hi ha un grup seleccionat: amb
   // "tots els grups" no hi ha pàgina de grup.
@@ -17,7 +25,15 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
     <AppShell
       todayLabel={todayLabel}
       pages={pages}
-      user={{ name: profile.name, roleLabel: "Gestió" }}
+      user={{
+        name: profile.name,
+        roleLabel: ppRow?.role_label || "Gestió",
+        photoUrl: ppRow?.photo_file_id ? `/api/file/${ppRow.photo_file_id}` : "",
+        phone: ppRow?.phone || "",
+        whatsapp: ppRow?.whatsapp || "",
+        email: ppRow?.contact_email || profile.email || "",
+        editable: true,
+      }}
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "", tags: b.tags }))}
       selectedBandId={selectedBandId}
     >

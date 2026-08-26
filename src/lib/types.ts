@@ -1,4 +1,4 @@
-export type Person = { name: string; role: string; phone?: string; email?: string; instruments?: string[] };
+export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[] };
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
 

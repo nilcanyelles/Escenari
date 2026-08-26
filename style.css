@@ -4738,3 +4738,44 @@ button { font-family: inherit; }
   position: sticky; top: 75px; z-index: 2;
   background: var(--bg-card);
 }
+
+/* ============ Perfil del gestor (menú de compte) ============ */
+.profile-avatar-img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+  display: block;
+}
+.mp-avatar-row { display: flex; align-items: center; gap: 14px; }
+.mp-avatar {
+  position: relative;
+  width: 72px; height: 72px;
+  border-radius: 50%;
+  border: 2px solid var(--border-input);
+  background: var(--accent);
+  color: #0b0a12;
+  font-size: 24px; font-weight: 800;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  overflow: visible;
+  flex-shrink: 0;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.mp-avatar:hover { border-color: var(--accent); }
+.mp-avatar img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.mp-avatar-edit {
+  position: absolute;
+  right: -4px; bottom: -4px;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-input);
+  font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+}

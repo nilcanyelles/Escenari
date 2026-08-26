@@ -6,10 +6,20 @@ import { useEffect, useLayoutEffect, useRef, useState, useTransition } from "rea
 import { SignOutButton } from "@clerk/nextjs";
 import { NavIcon, initialsOf, type NavPage } from "@/lib/nav";
 import { bandPhotoDataUri } from "@/lib/tags";
+import ManagerProfileModal from "@/components/ManagerProfileModal";
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
-export type ShellUser = { name: string; roleLabel: string };
+export type ShellUser = {
+  name: string;
+  roleLabel: string;
+  // Presents només per al gestor: activen el botó "Edita el perfil".
+  photoUrl?: string;
+  phone?: string;
+  whatsapp?: string;
+  email?: string;
+  editable?: boolean;
+};
 export type ShellBand = { id: string; name: string; logo: string; color1: string; tags?: string[] };
 
 const BAND_COOKIE = "escenari_band";
@@ -37,6 +47,7 @@ export default function AppShell({
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [profileEditOpen, setProfileEditOpen] = useState(false);
   const topnavRef = useRef<HTMLDivElement>(null);
   const [indicator, setIndicator] = useState<{ left: number; width: number; ready: boolean }>({ left: 0, width: 0, ready: false });
   // Selecció optimista: la cookie triga un refresh a arribar al servidor.
@@ -79,7 +90,9 @@ export default function AppShell({
   function ProfileButton() {
     return (
       <button className="profile-btn" onClick={() => setProfileOpen((v) => !v)}>
-        <div className="profile-btn-avatar">{initials}</div>
+        <div className="profile-btn-avatar">
+          {user.photoUrl ? <img className="profile-avatar-img" src={user.photoUrl} alt="" /> : initials}
+        </div>
       </button>
     );
   }
@@ -217,9 +230,17 @@ export default function AppShell({
       {profileOpen && (
         <div className="profile-overlay" onClick={() => setProfileOpen(false)}>
           <div className="profile-popover" onClick={(e) => e.stopPropagation()}>
-            <div className="profile-popover-avatar">{initials}</div>
+            <div className="profile-popover-avatar">
+              {user.photoUrl ? <img className="profile-avatar-img" src={user.photoUrl} alt="" /> : initials}
+            </div>
             <div className="profile-popover-name">{user.name}</div>
             <div className="profile-popover-role">{user.roleLabel}</div>
+            {user.editable && (
+              <button
+                type="button" className="btn-outline" style={{ width: "100%", marginBottom: 10 }}
+                onClick={() => { setProfileOpen(false); setProfileEditOpen(true); }}
+              >Edita el perfil</button>
+            )}
             <SignOutButton redirectUrl="/">
               <button className="btn-danger-outline" style={{ width: "100%" }} type="button">
                 Tanca sessió
@@ -227,6 +248,17 @@ export default function AppShell({
             </SignOutButton>
           </div>
         </div>
+      )}
+
+      {profileEditOpen && (
+        <ManagerProfileModal
+          profile={{
+            name: user.name, roleLabel: user.roleLabel,
+            photoUrl: user.photoUrl || "", phone: user.phone || "",
+            whatsapp: user.whatsapp || "", email: user.email || "",
+          }}
+          onClose={() => setProfileEditOpen(false)}
+        />
       )}
     </div>
   );

@@ -9,12 +9,16 @@ import { normalize } from "@/lib/text";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
+import { ensureManagerCrew } from "@/lib/person-profile";
 
 export const dynamic = "force-dynamic";
 
 // Pàgina principal del grup seleccionat (membres, suplents, material, bolos).
 export default async function GrupPage() {
-  const { workspaceId } = await requireManager();
+  const profile = await requireManager();
+  const { workspaceId } = profile;
+  // El gestor apareix sempre com a mànager a l'equip tècnic de tots els grups.
+  await ensureManagerCrew(workspaceId, { clerkUserId: profile.clerkUserId, name: profile.name, email: profile.email });
   const [bands, concerts, selectedRaw] = await Promise.all([
     getBands(workspaceId), getConcerts(workspaceId), getSelectedBandId(),
   ]);
