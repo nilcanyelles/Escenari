@@ -15,7 +15,7 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, repeatConcertAction, nudgeAttendanceAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import type { Checklist } from "@/lib/checklists";
@@ -129,8 +129,6 @@ export default function ConcertDetailView({
   const [nudging, setNudging] = useState(false);
   const [nudgeResult, setNudgeResult] = useState<string | null>(null);
   const [kind, setKind] = useState<string>(concert.kind || "bolo");
-  const [repeatWeeks, setRepeatWeeks] = useState(4);
-  const [repeating, setRepeating] = useState(false);
   const [rsPreviewOpen, setRsPreviewOpen] = useState(false);
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
   const [posterOpen, setPosterOpen] = useState(false);
@@ -486,25 +484,6 @@ export default function ConcertDetailView({
               <option value="reunio">Reunió</option>
               <option value="altre">Altre</option>
             </select>
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Repeteix setmanalment</label>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <select className="field-input form-field" style={{ width: 110 }} value={repeatWeeks} onChange={(e) => setRepeatWeeks(parseInt(e.target.value, 10))}>
-                {[1, 2, 3, 4, 6, 8, 12].map((n) => <option key={n} value={n}>×{n}</option>)}
-              </select>
-              <button
-                type="button" className="btn-outline" disabled={repeating}
-                title="Crea còpies d'aquest esdeveniment les setmanes següents"
-                onClick={async () => {
-                  setRepeating(true);
-                  const { created } = await repeatConcertAction(concert.id, repeatWeeks);
-                  router.refresh();
-                  setRepeating(false);
-                  alert(`${created} esdeveniments creats.`);
-                }}
-              >{repeating ? "Creant…" : "Crea còpies"}</button>
-            </div>
           </div>
         </div>
       </div>
