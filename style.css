@@ -1439,3 +1439,163 @@ button { font-family: inherit; }
 .instr-panel::-webkit-scrollbar { width: 8px; }
 .instr-panel::-webkit-scrollbar-thumb { background: oklch(0.68 0.19 290 / 0.3); border-radius: 999px; }
 .instr-panel::-webkit-scrollbar-track { background: transparent; }
+
+/* ---------- SCROLL EXPAND HERO ---------- */
+.sx { position: relative; width: 100%; }
+.sx-self { height: 100%; overflow-y: auto; overflow-x: hidden; }
+.sx-track { position: relative; width: 100%; }
+.sx-stage {
+  position: sticky; top: 0;
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
+  height: 100vh;
+}
+.sx-window .sx-stage { height: 100dvh; }
+.sx-self .sx-stage { height: 100%; }
+.sx-frame {
+  position: relative; overflow: hidden;
+  background: var(--bg-deep);
+  box-shadow: 0 40px 120px -30px rgba(0, 0, 0, 0.85);
+  will-change: width, height, border-radius;
+}
+.sx-media {
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  object-fit: cover;
+  will-change: transform;
+  user-select: none; -webkit-user-drag: none;
+}
+.sx-media-fallback {
+  background:
+    radial-gradient(120% 80% at 50% 15%, oklch(0.68 0.19 290 / 0.35), transparent 60%),
+    radial-gradient(90% 70% at 70% 100%, oklch(0.72 0.2 330 / 0.28), transparent 65%),
+    linear-gradient(180deg, oklch(0.22 0.03 258), oklch(0.13 0.02 258));
+}
+.sx-scrim {
+  position: absolute; inset: 0; pointer-events: none;
+  background:
+    radial-gradient(100% 75% at 50% 55%, transparent 20%, rgba(0, 0, 0, 0.75) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.1) 42%, rgba(0, 0, 0, 0.8));
+}
+.sx-content {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: clamp(16px, 3vh, 30px);
+  padding: 8vh clamp(18px, 5vw, 48px);
+  text-align: center;
+  pointer-events: none;
+}
+.sx-title-wrap { will-change: transform; }
+.sx-title {
+  display: block;
+  font-family: "Space Grotesk", Inter, system-ui, sans-serif;
+  font-size: clamp(38px, 11vw, 148px);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-indent: 0.14em;
+  color: var(--text);
+  text-shadow: 0 8px 40px rgba(0, 0, 0, 0.65);
+}
+.sx-reveal {
+  display: flex; flex-direction: column; align-items: center;
+  gap: clamp(14px, 2.4vh, 24px);
+  will-change: opacity, transform;
+}
+.sx-tagline {
+  margin: 0;
+  max-width: 30ch;
+  font-size: clamp(15px, 2.1vw, 20px);
+  line-height: 1.5;
+  color: var(--text-dim);
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.7);
+}
+.sx-actions { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; }
+.sx-actions .landing-cta { box-shadow: 0 18px 40px -18px oklch(0.68 0.19 290 / 0.9); }
+.sx-cta-ghost {
+  background: oklch(1 0 0 / 0.08);
+  border-color: oklch(1 0 0 / 0.28);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+}
+.sx-cta-ghost:hover { background: oklch(1 0 0 / 0.14); border-color: oklch(1 0 0 / 0.45); }
+.sx-hint {
+  position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 11.5px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase;
+  color: oklch(1 0 0 / 0.72);
+  pointer-events: none;
+}
+.sx-hint svg { animation: sx-bob 1.9s ease-in-out infinite; }
+@keyframes sx-bob {
+  0%, 100% { transform: translateY(-2px); opacity: 0.55; }
+  50% { transform: translateY(3px); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sx-hint svg { animation: none; }
+}
+
+/* ---------- LANDING (cinematic) ---------- */
+.landing.landing-cinematic { overflow: visible; overflow-x: clip; display: block; }
+.landing-header-fixed {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.5), transparent);
+}
+.landing-body {
+  position: relative; z-index: 2;
+  background: var(--bg-deep);
+  padding: clamp(56px, 10vh, 104px) clamp(20px, 5vw, 40px) 0;
+}
+.landing-body::before {
+  content: ""; position: absolute; left: 50%; top: -220px; transform: translateX(-50%);
+  width: 900px; max-width: 140%; height: 440px; pointer-events: none;
+  background: radial-gradient(circle, oklch(0.68 0.19 290 / 0.18), transparent 70%);
+}
+.landing-section {
+  position: relative;
+  max-width: 1040px; margin: 0 auto;
+  padding-bottom: clamp(52px, 9vh, 96px);
+}
+.landing-eyebrow {
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--accent-text); margin-bottom: 12px;
+}
+.landing-h2 {
+  font-family: "Space Grotesk", Inter, sans-serif;
+  font-size: clamp(24px, 4vw, 40px); line-height: 1.15; font-weight: 700;
+  letter-spacing: -0.02em; margin: 0 0 16px;
+}
+.landing-section .landing-sub { margin-left: 0; text-align: left; }
+.landing-steps {
+  list-style: none; margin: 32px 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;
+}
+.landing-step {
+  position: relative;
+  background: oklch(1 0 0 / 0.03); border: 1px solid var(--border-soft);
+  border-radius: 16px; padding: 24px 22px;
+}
+.landing-step-num {
+  font-family: "Space Grotesk", Inter, sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--accent-text); display: block; margin-bottom: 12px;
+}
+.landing-step-title { font-family: "Space Grotesk", Inter, sans-serif; font-weight: 700; font-size: 16px; margin-bottom: 8px; }
+.landing-step p { margin: 0; font-size: 13.5px; color: var(--text-muted); line-height: 1.55; }
+.landing-cinematic .landing-features { margin: 0; padding: 0; max-width: none; }
+.landing-cinematic .landing-roles { margin-top: 0; }
+.landing-final {
+  position: relative;
+  max-width: 1040px; margin: 0 auto;
+  text-align: center;
+  padding: clamp(44px, 8vh, 88px) 0 clamp(20px, 4vh, 40px);
+  border-top: 1px solid var(--border-soft);
+}
+.landing-final .landing-h2 { margin-bottom: 26px; }
+.landing-cinematic .landing-footer { margin-top: 0; padding-top: 28px; }
+
+@media (max-width: 640px) {
+  .sx-title { letter-spacing: 0.1em; text-indent: 0.1em; }
+  .sx-actions { flex-direction: column; align-items: stretch; width: min(300px, 80vw); }
+  .sx-actions a { text-align: center; }
+  .landing-header-fixed { padding: 14px 18px; }
+}

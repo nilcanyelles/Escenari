@@ -1,7 +1,26 @@
 import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
+import ScrollExpand from "@/components/ScrollExpand";
 
 export const dynamic = "force-dynamic";
+
+const STEPS = [
+  {
+    n: "01",
+    title: "Crea el grup i convida els músics",
+    desc: "Munta el teu col·lectiu en un minut. Cada artista entra amb una invitació o un codi i té el seu propi compte.",
+  },
+  {
+    n: "02",
+    title: "Afegeix cada bolo una sola vegada",
+    desc: "Data, hora, lloc, caixet i contacte. El concert queda al calendari de tothom i cada músic hi confirma l'assistència.",
+  },
+  {
+    n: "03",
+    title: "Genera-ho tot des d'aquell registre",
+    desc: "Full de ruta en PDF, factura numerada i la story de promoció surten del mateix concert. Zero còpies, zero errors.",
+  },
+];
 
 const FEATURES = [
   {
@@ -40,9 +59,8 @@ export default async function LandingPage() {
   const { userId } = await auth();
 
   return (
-    <div className="landing">
-      <div className="login-glow"></div>
-      <header className="landing-header">
+    <div className="landing landing-cinematic">
+      <header className="landing-header landing-header-fixed">
         <span className="brand-lockup">
           <img className="brand-mark" src="/logo-mark.png" alt="" />
           <span className="brand-name">ESCENARI</span>
@@ -59,58 +77,114 @@ export default async function LandingPage() {
         </nav>
       </header>
 
-      <section className="landing-hero">
-        <h1>
-          Tota la vida en directe dels teus grups,
-          <br />
-          <span className="landing-accent">en un sol escenari.</span>
-        </h1>
-        <p className="landing-sub">
-          Escenari centralitza els bolos del teu col·lectiu musical: calendari, fulls de ruta,
-          assistència dels músics, factures i promoció — tot generat des del mateix registre de cada concert.
+      <ScrollExpand
+        src="/landing/hero-escenari.jpg"
+        alt="Un músic mirant l'escenari abans que s'ompli el públic"
+        title="ESCENARI"
+        scrollHint="Desplaça't"
+        useWindowScroll
+        startWidth={40}
+        startHeight={58}
+        startRadius={26}
+        endRadius={0}
+        mediaZoom={1.9}
+        focusX={50}
+        focusY={64}
+        scrollDistance={1.25}
+        holdDistance={0.4}
+        smoothing={0.1}
+        overlayScrim={0.5}
+        revealAt={0.45}
+      >
+        <p className="sx-tagline">
+          Tota la vida en directe dels teus grups, en un sol escenari.
         </p>
-        <div className="landing-hero-cta">
+        <div className="sx-actions">
           {userId ? (
             <Link className="btn-primary landing-cta" href="/resum">Obre l&apos;aplicació</Link>
           ) : (
             <>
-              <Link className="btn-primary landing-cta" href="/sign-up">Comença gratis</Link>
-              <Link className="landing-cta-secondary" href="/sign-in">Ja tinc compte</Link>
+              <Link className="btn-primary landing-cta" href="/sign-up">Crea el teu compte</Link>
+              <Link className="landing-cta-secondary sx-cta-ghost" href="/sign-in">Inicia sessió</Link>
             </>
           )}
         </div>
-        <div className="landing-roles">
-          <div className="landing-role-card">
-            <div className="landing-role-title">Per a agències</div>
-            <p>Crea el teu grup, convida els músics i porta el calendari, la facturació i la logística de cada bolo.</p>
-          </div>
-          <div className="landing-role-card">
-            <div className="landing-role-title">Per a artistes</div>
-            <p>Uneix-te als teus grups amb una invitació o un codi, mira els pròxims bolos i confirma la teva assistència.</p>
-          </div>
-        </div>
-      </section>
+      </ScrollExpand>
 
-      <section className="landing-features">
-        {FEATURES.map((f) => (
-          <div className="landing-feature" key={f.title}>
-            <svg
-              className="landing-feature-icon"
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              dangerouslySetInnerHTML={{ __html: f.icon }}
-            />
-            <div className="landing-feature-title">{f.title}</div>
-            <p>{f.desc}</p>
+      <main className="landing-body">
+        <section className="landing-section">
+          <div className="landing-eyebrow">Com funciona</div>
+          <h2 className="landing-h2">
+            Del primer assaig a la factura, <span className="landing-accent">sense sortir d&apos;aquí</span>
+          </h2>
+          <p className="landing-sub">
+            Escenari centralitza els bolos del teu col·lectiu musical: calendari, fulls de ruta,
+            assistència dels músics, factures i promoció — tot generat des del mateix registre de cada concert.
+          </p>
+          <ol className="landing-steps">
+            {STEPS.map((s) => (
+              <li className="landing-step" key={s.n}>
+                <span className="landing-step-num">{s.n}</span>
+                <div className="landing-step-title">{s.title}</div>
+                <p>{s.desc}</p>
+              </li>
+            ))}
+          </ol>
+        </section>
+
+        <section className="landing-section">
+          <div className="landing-eyebrow">Què hi trobaràs</div>
+          <h2 className="landing-h2">Tot el que envolta un bolo</h2>
+          <div className="landing-features">
+            {FEATURES.map((f) => (
+              <div className="landing-feature" key={f.title}>
+                <svg
+                  className="landing-feature-icon"
+                  width="22"
+                  height="22"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  dangerouslySetInnerHTML={{ __html: f.icon }}
+                />
+                <div className="landing-feature-title">{f.title}</div>
+                <p>{f.desc}</p>
+              </div>
+            ))}
           </div>
-        ))}
-      </section>
+        </section>
+
+        <section className="landing-section">
+          <div className="landing-eyebrow">Per a qui</div>
+          <div className="landing-roles">
+            <div className="landing-role-card">
+              <div className="landing-role-title">Per a agències</div>
+              <p>Crea el teu grup, convida els músics i porta el calendari, la facturació i la logística de cada bolo.</p>
+            </div>
+            <div className="landing-role-card">
+              <div className="landing-role-title">Per a artistes</div>
+              <p>Uneix-te als teus grups amb una invitació o un codi, mira els pròxims bolos i confirma la teva assistència.</p>
+            </div>
+          </div>
+        </section>
+
+        <section className="landing-final">
+          <h2 className="landing-h2">A punt per pujar a l&apos;escenari?</h2>
+          <div className="landing-hero-cta">
+            {userId ? (
+              <Link className="btn-primary landing-cta" href="/resum">Obre l&apos;aplicació</Link>
+            ) : (
+              <>
+                <Link className="btn-primary landing-cta" href="/sign-up">Comença gratis</Link>
+                <Link className="landing-cta-secondary" href="/sign-in">Ja tinc compte</Link>
+              </>
+            )}
+          </div>
+        </section>
+      </main>
 
       <footer className="landing-footer">
         © {new Date().getFullYear()} Escenari — Gestió d&apos;actuacions musicals
