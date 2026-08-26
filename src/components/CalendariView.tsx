@@ -5,18 +5,21 @@ import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
 import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep } from "@/lib/format";
 import { rsIsComplete } from "@/lib/route-sheet";
-import { bandColor } from "@/lib/tags";
-import { saveConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction } from "@/app/(app)/concerts/actions";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 
-function splitIntoColumns<T>(items: T[], maxPerColumn = 8): T[][] {
-  if (!items.length) return [];
-  const numCols = Math.ceil(items.length / maxPerColumn);
-  const perCol = Math.ceil(items.length / numCols);
-  const cols: T[][] = [];
-  for (let i = 0; i < items.length; i += perCol) cols.push(items.slice(i, i + perCol));
-  return cols;
+// Tipus d'esdeveniment amb el seu color (la "Legend" del calendari).
+export const KIND_META: Record<string, { label: string; color: string; bg: string }> = {
+  bolo: { label: "Bolo", color: "oklch(0.72 0.16 290)", bg: "oklch(0.72 0.16 290 / 0.18)" },
+  assaig: { label: "Assaig", color: "oklch(0.72 0.15 155)", bg: "oklch(0.72 0.15 155 / 0.16)" },
+  reunio: { label: "Reunió", color: "oklch(0.78 0.14 70)", bg: "oklch(0.78 0.14 70 / 0.16)" },
+  altre: { label: "Altre", color: "oklch(0.72 0.12 230)", bg: "oklch(0.72 0.12 230 / 0.16)" },
+};
+const KIND_ORDER = ["bolo", "assaig", "reunio", "altre"];
+
+function kindOf(c: Concert): string {
+  return c.kind && KIND_META[c.kind] ? c.kind : "bolo";
 }
 
 function groupByDate(list: Concert[]) {
@@ -35,15 +38,12 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
   const [calViewMode, setCalViewMode] = useState<"month" | "week">("month");
   const [calWeekOffset, setCalWeekOffset] = useState(0);
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
-  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
   const [calBandFilter, setCalBandFilter] = useState<string[]>([]);
   const [calBandFilterOpen, setCalBandFilterOpen] = useState(false);
+  const [kindsOn, setKindsOn] = useState<Record<string, boolean>>({ bolo: true, assaig: true, reunio: true, altre: true });
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
   const dayCardRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const concertRowRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const hoverScrollTimer = useRef<number | null>(null);
-  const [tooltipCaps, setTooltipCaps] = useState<Record<string, number>>({});
 
   useEffect(() => {
     if (calSelectedDate) {
@@ -61,31 +61,21 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
   for (let i = 0; i < startOffset; i++) cells.push(null);
   for (let d = 1; d <= daysInMonth; d++) cells.push(d);
   while (cells.length % 7 !== 0) cells.push(null);
-
-  const calBandSet: Record<string, boolean> = {};
-  calBandFilter.forEach((id) => { calBandSet[id] = true; });
-  const calConcerts = calBandFilter.length ? concerts.filter((c) => calBandSet[c.bandId]) : concerts;
-
-  const eventsByDate: Record<string, Concert[]> = {};
-  calConcerts.slice().sort((a, b) => a.time.localeCompare(b.time)).forEach((c) => { (eventsByDate[c.date] = eventsByDate[c.date] || []).push(c); });
-
-  const selDate = calSelectedDate;
-  let shownDates: string[];
-  if (selDate) {
-    shownDates = calConcerts.filter((c) => c.date >= selDate)
-      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-      .reduce<string[]>((acc, c) => { if (acc.indexOf(c.date) === -1) acc.push(c.date); return acc; }, [])
-      .slice(0, 3);
-  } else {
-    shownDates = calConcerts.filter((c) => c.date >= today && c.status !== "cancel·lat")
-      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-      .reduce<string[]>((acc, c) => { if (acc.indexOf(c.date) === -1) acc.push(c.date); return acc; }, [])
-      .slice(0, 3);
-  }
-
   const weeks: (number | null)[][] = [];
   for (let wStart = 0; wStart < cells.length; wStart += 7) weeks.push(cells.slice(wStart, wStart + 7));
 
+  const calBandSet: Record<string, boolean> = {};
+  calBandFilter.forEach((id) => { calBandSet[id] = true; });
+  const calConcerts = concerts.filter((c) =>
+    (!calBandFilter.length || calBandSet[c.bandId]) && kindsOn[kindOf(c)]
+  );
+
+  const eventsByDate: Record<string, Concert[]> = {};
+  calConcerts.slice().sort((a, b) => a.time.localeCompare(b.time)).forEach((c) => {
+    (eventsByDate[c.date] = eventsByDate[c.date] || []).push(c);
+  });
+
+  // Setmana
   const todayYear = parseInt(today.slice(0, 4), 10), todayMonth = parseInt(today.slice(5, 7), 10) - 1, todayDay = parseInt(today.slice(8, 10), 10);
   const todayObj = new Date(todayYear, todayMonth, todayDay);
   const todayDow = (todayObj.getDay() + 6) % 7;
@@ -101,97 +91,72 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
   }
   const weekLabel = weekStart.getMonth() === weekEnd.getMonth()
     ? `${weekStart.getDate()} - ${weekEnd.getDate()} ${monthWithPrep(MONTH_FULL[weekStart.getMonth()])} de ${weekEnd.getFullYear()}`
-    : weekStart.getFullYear() === weekEnd.getFullYear()
-      ? `${weekStart.getDate()} ${monthWithPrep(MONTH_FULL[weekStart.getMonth()])} - ${weekEnd.getDate()} ${monthWithPrep(MONTH_FULL[weekEnd.getMonth()])} de ${weekEnd.getFullYear()}`
-      : `${weekStart.getDate()} ${monthWithPrep(MONTH_FULL[weekStart.getMonth()])} de ${weekStart.getFullYear()} - ${weekEnd.getDate()} ${monthWithPrep(MONTH_FULL[weekEnd.getMonth()])} de ${weekEnd.getFullYear()}`;
+    : `${weekStart.getDate()} ${monthWithPrep(MONTH_FULL[weekStart.getMonth()])} - ${weekEnd.getDate()} ${monthWithPrep(MONTH_FULL[weekEnd.getMonth()])} de ${weekEnd.getFullYear()}`;
 
   const goPrev = () => { if (calViewMode === "week") setCalWeekOffset((v) => v - 1); else setCalMonthIndex((v) => v - 1); };
   const goNext = () => { if (calViewMode === "week") setCalWeekOffset((v) => v + 1); else setCalMonthIndex((v) => v + 1); };
 
-  function renderDayCell(dateStr: string, dayNum: number, extraClass: string) {
+  const selDate = calSelectedDate;
+  const shownDates = (selDate
+    ? calConcerts.filter((c) => c.date >= selDate)
+    : calConcerts.filter((c) => c.date >= today && c.status !== "cancel·lat"))
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+    .reduce<string[]>((acc, c) => { if (acc.indexOf(c.date) === -1) acc.push(c.date); return acc; }, [])
+    .slice(0, 3);
+
+  // Cel·la de dia: entrades "còmodes" fins a 3, compactes amb recompte a partir de 4.
+  function renderDayCell(dateStr: string, dayNum: number, extraClass = "") {
     const evs = eventsByDate[dateStr] || [];
     const isSelected = calSelectedDate === dateStr;
-    const showSelected = isSelected && (hoveredDate === null || hoveredDate === dateStr);
     const isToday = dateStr === today;
-    const isWeekCell = extraClass.indexOf("week-cell") !== -1;
-    const showTooltip = !isWeekCell && evs.length > 0 && shownDates.indexOf(dateStr) === -1;
+    const compact = evs.length > 3;
+
+    let body: React.ReactNode;
+    if (compact) {
+      const counts: Record<string, number> = {};
+      evs.forEach((c) => { counts[kindOf(c)] = (counts[kindOf(c)] || 0) + 1; });
+      body = (
+        <div className="calx-compact">
+          {KIND_ORDER.filter((k) => counts[k]).map((k) => (
+            <span key={k} className="calx-compact-chip" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>
+              <i style={{ background: KIND_META[k].color }}></i>{counts[k]}
+            </span>
+          ))}
+        </div>
+      );
+    } else {
+      body = (
+        <div className="calx-evs">
+          {evs.map((c) => {
+            const k = kindOf(c);
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className="calx-ev"
+                style={{ background: KIND_META[k].bg, color: KIND_META[k].color, ["--calx-bar" as string]: KIND_META[k].color }}
+                title={`${c.bandName} · ${c.city || c.venue || "—"}${c.time ? ` · ${c.time}h` : ""}`}
+                onClick={(e) => { e.stopPropagation(); router.push(`/concerts/${c.id}`); }}
+              >
+                <span className="calx-ev-text">{(c.city || c.venue || c.bandName).split(",")[0]}</span>
+                {c.time && <span className="calx-ev-time">{c.time}</span>}
+              </button>
+            );
+          })}
+        </div>
+      );
+    }
+
     return (
-      <div key={dateStr} role="button" tabIndex={0} className={"cal-day" + (extraClass ? " " + extraClass : "") + (showSelected ? " selected" : "") + (isToday ? " today" : "")}
+      <div
+        key={dateStr}
+        role="button"
+        tabIndex={0}
+        className={"calx-day" + (extraClass ? " " + extraClass : "") + (isSelected ? " selected" : "") + (isToday ? " today" : "")}
         onClick={() => setCalSelectedDate(dateStr)}
-        onMouseEnter={(e) => {
-          setHoveredDate(dateStr);
-          if (hoverScrollTimer.current) window.clearTimeout(hoverScrollTimer.current);
-          hoverScrollTimer.current = window.setTimeout(() => {
-            const card = dayCardRefs.current[dateStr];
-            if (card) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-          }, 500);
-          if (showTooltip && tooltipCaps[dateStr] === undefined) {
-            const rect = e.currentTarget.getBoundingClientRect();
-            const topMarginPx = 38; // ~1cm de marge amb la part superior de la pantalla
-            const availableAbove = rect.top - topMarginPx;
-            const sampleRow = document.querySelector(".cal-day-tooltip-row") as HTMLElement | null;
-            const rowH = sampleRow ? sampleRow.getBoundingClientRect().height : 28;
-            const colGap = 7;
-            const containerPadding = 18;
-            const bottomOffset = 8;
-            const usable = availableAbove - bottomOffset - containerPadding;
-            const rows = Math.max(1, Math.floor((usable + colGap) / (rowH + colGap)) - 2);
-            setTooltipCaps((prev) => ({ ...prev, [dateStr]: Math.min(rows, 8) }));
-          }
-        }}
-        onMouseLeave={() => {
-          setHoveredDate((prev) => prev === dateStr ? null : prev);
-          if (hoverScrollTimer.current) { window.clearTimeout(hoverScrollTimer.current); hoverScrollTimer.current = null; }
-        }}>
-        <span className="cal-day-num">{dayNum}</span>
-        {isWeekCell ? (
-          <div className="week-day-concerts">
-            {evs.map((c) => (
-              <div key={c.id} ref={(el) => { concertRowRefs.current[c.id] = el; }} className="upcoming-concert-row clickable" onClick={() => router.push(`/concerts/${c.id}`)}>
-                <div className="upcoming-concert-text">
-                  <span className="upcoming-concert-band">
-                    <span className="cal-day-dot" style={{ background: bandColor(c.bandId).color, marginRight: 6, display: "inline-block" }}></span>
-                    {c.bandName}
-                  </span>
-                  <div className="upcoming-concert-place">{c.time}h · {c.venue}, {c.city}</div>
-                </div>
-                <div className="upcoming-concert-actions">
-                  <button className="row-rs-btn" title="Edita el full de ruta" aria-label="Edita el full de ruta" onClick={(ev) => { ev.stopPropagation(); setRsModalConcertId(c.id); }}>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                    </svg>
-                  </button>
-                  <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(ev) => { ev.stopPropagation(); setRsPreviewConcertId(c.id); }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="cal-day-dots">
-            {evs.map((e) => <span key={e.id} className="cal-day-dot" style={{ background: bandColor(e.bandId).color }}></span>)}
-          </div>
-        )}
-        {showTooltip && (
-          <div className="cal-day-tooltip">
-            {splitIntoColumns(evs, tooltipCaps[dateStr] ?? 8).map((col, ci) => (
-              <div key={ci} className="cal-day-tooltip-col">
-                {col.map((e) => (
-                  <div key={e.id} className="cal-day-tooltip-row">
-                    <span className="cal-day-tooltip-dot" style={{ background: bandColor(e.bandId).color }}></span>
-                    <span className="cal-day-tooltip-text">
-                      <span className="cal-day-tooltip-band">{e.bandName}</span>
-                      <span className="cal-day-tooltip-city">{e.city}</span>
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ))}
-          </div>
-        )}
+      >
+        <span className={"calx-num" + (isToday ? " today" : "")}>{dayNum}</span>
+        {body}
       </div>
     );
   }
@@ -201,9 +166,8 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       const dayNum = parseInt(date.slice(8, 10), 10);
       const mi = parseInt(date.slice(5, 7), 10) - 1;
       const weekday = WEEKDAY_FULL[new Date(parseInt(date.slice(0, 4), 10), mi, dayNum).getDay()];
-      const cardHighlighted = hoveredDate !== null ? date === hoveredDate : date === calSelectedDate;
       return (
-        <div key={date} ref={(el) => { dayCardRefs.current[date] = el; }} className={"upcoming-day-card" + (cardHighlighted ? " cal-hover-highlight" : "")} data-date={date}>
+        <div key={date} ref={(el) => { dayCardRefs.current[date] = el; }} className={"upcoming-day-card" + (date === calSelectedDate ? " cal-hover-highlight" : "")} data-date={date}>
           <div className="upcoming-day-card-header">
             <div className="upcoming-day-card-num">{dayNum}</div>
             <div className="upcoming-day-card-meta">
@@ -214,56 +178,39 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
             <div className="upcoming-day-card-fdr-label">FDR</div>
           </div>
           <div className="upcoming-day-card-concerts">
-            {byDate[date].map((c) => (
-              <div key={c.id} ref={(el) => { concertRowRefs.current[c.id] = el; }} className="upcoming-concert-row clickable" onClick={() => router.push(`/concerts/${c.id}`)}>
-                <div className="upcoming-concert-text">
-                  <span className="upcoming-concert-band">
-                    <span className="cal-day-dot" style={{ background: bandColor(c.bandId).color, marginRight: 6, display: "inline-block" }}></span>
-                    {c.bandName}
-                  </span>
-                  <div className="upcoming-concert-place">{c.time}h · {c.venue}, {c.city}</div>
+            {(byDate[date] || []).map((c) => {
+              const k = kindOf(c);
+              return (
+                <div key={c.id} className="upcoming-concert-row clickable" onClick={() => router.push(`/concerts/${c.id}`)}>
+                  <div className="upcoming-concert-text">
+                    <span className="upcoming-concert-band">
+                      <span className="cal-day-dot" style={{ background: KIND_META[k].color, marginRight: 6, display: "inline-block" }}></span>
+                      {c.bandName}
+                    </span>
+                    <div className="upcoming-concert-place">{c.time}h · {c.venue}{c.city ? `, ${c.city}` : ""}</div>
+                  </div>
+                  <div className="upcoming-concert-actions">
+                    <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(ev) => { ev.stopPropagation(); setRsPreviewConcertId(c.id); }}>
+                      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
+                      </svg>
+                    </button>
+                  </div>
                 </div>
-                <div className="upcoming-concert-actions">
-                  <button className={"row-rs-btn" + (rsIsComplete(c) ? " rs-complete" : "")} title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(ev) => { ev.stopPropagation(); setRsPreviewConcertId(c.id); }}>
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       );
     });
   }
 
-  let sideTitle: string, sideContent: React.ReactNode;
-  if (selDate) {
-    const forward = groupByDate(
-      calConcerts.filter((c) => c.date >= selDate).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-    );
-    sideTitle = capitalize(formatDateFull(selDate));
-    sideContent = (
-      <div className="cal-side-panel">
-        <div className="upcoming-days">
-          {shownDates.length ? dayCards(shownDates, forward.byDate) : <div className="empty-state">Cap actuació propera.</div>}
-        </div>
-      </div>
-    );
-  } else {
-    const upcoming = groupByDate(
-      calConcerts.filter((c) => c.date >= today && c.status !== "cancel·lat").sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-    );
-    sideTitle = "Propers bolos";
-    sideContent = (
-      <div className="cal-side-panel">
-        <div className="upcoming-days">
-          {shownDates.length ? dayCards(shownDates, upcoming.byDate) : <div className="empty-state">Cap actuació propera.</div>}
-        </div>
-      </div>
-    );
-  }
+  const forward = groupByDate(
+    calConcerts
+      .filter((c) => (selDate ? c.date >= selDate : c.date >= today && c.status !== "cancel·lat"))
+      .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+  );
+  const sideTitle = selDate ? capitalize(formatDateFull(selDate)) : "Propers bolos";
 
   const calBandLabel = calBandFilter.length === 0
     ? "Tots els grups"
@@ -273,27 +220,25 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
 
   async function handleNewConcert() {
     const created = await saveConcertAction({
-      id: null,
-      bandName: "",
-      date: calSelectedDate || today,
-      time: "",
-      venue: "",
-      city: "",
-      festaEntitat: "",
-      amount: 0,
-      status: "pendent",
-      attendance: {},
-      substitutes: {},
-      noSubstitute: {},
-      skipDefaults: true,
+      id: null, bandName: "", date: calSelectedDate || today, time: "", venue: "", city: "",
+      festaEntitat: "", amount: 0, status: "pendent",
+      attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
     });
     if (!created) return;
     router.push(`/concerts/${created.id}`);
   }
 
+  // Mini calendari del mes (a la barra de la llegenda).
+  const miniCells = cells;
+
+  const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
+  const rsPreviewConcert = rsPreviewConcertId ? concerts.find((c) => c.id === rsPreviewConcertId) || null : null;
+
   return (
     <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div className="glow-blooms" aria-hidden="true"></div>
+
+      {/* Barra superior */}
       <div className="range-pills cal-view-pills">
         <div className="cal-view-pills-left">
           <div className="year-select-wrap">
@@ -330,65 +275,106 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
         </div>
       </div>
 
-      <div className={"cal-cols" + (calViewMode === "week" ? " cal-cols-week" : "")}>
-        <div className="cal-left-col">
-          <div className="cal-toolbar">
-            <button className="cal-nav-btn" onClick={goPrev}>‹</button>
-            <div className="cal-month-label">{capitalize(calViewMode === "week" ? weekLabel : monthLabel)}</div>
-            <button className="cal-nav-btn" onClick={goNext}>›</button>
+      <div className="calx-layout">
+        {/* Llegenda + mini mes */}
+        <aside className="calx-sidebar">
+          <div className="calx-side-title">Legend</div>
+          <div className="calx-legend">
+            {KIND_ORDER.map((k) => (
+              <button
+                key={k}
+                type="button"
+                className={"calx-legend-item" + (kindsOn[k] ? " on" : "")}
+                onClick={() => setKindsOn((p) => ({ ...p, [k]: !p[k] }))}
+              >
+                <span className="calx-legend-check" style={kindsOn[k] ? { background: KIND_META[k].color, borderColor: KIND_META[k].color } : {}}>
+                  {kindsOn[k] ? "✓" : ""}
+                </span>
+                <span className="calx-legend-swatch" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>{KIND_META[k].label}</span>
+              </button>
+            ))}
           </div>
-          <div className={"cal-grid-panel" + (calViewMode === "week" ? " cal-grid-panel-week" : "")}>
-            <div className="cal-weekdays">
-              {WEEKDAY_SHORT.map((w) => <div key={w} className="cal-weekday">{w}</div>)}
+
+          <div className="calx-mini">
+            <div className="calx-mini-title">{capitalize(MONTH_FULL[mIdx])} {y}</div>
+            <div className="calx-mini-grid">
+              {WEEKDAY_SHORT.map((w) => <span key={w} className="calx-mini-wd">{w[0]}</span>)}
+              {miniCells.map((d, i) => {
+                if (!d) return <span key={"e" + i}></span>;
+                const dateStr = y + "-" + pad2(mIdx + 1) + "-" + pad2(d);
+                const has = (eventsByDate[dateStr] || []).length > 0;
+                return (
+                  <button
+                    key={dateStr}
+                    type="button"
+                    className={"calx-mini-day" + (dateStr === today ? " today" : "") + (dateStr === calSelectedDate ? " selected" : "") + (has ? " has" : "")}
+                    onClick={() => setCalSelectedDate(dateStr)}
+                  >{d}</button>
+                );
+              })}
+            </div>
+          </div>
+        </aside>
+
+        {/* Graella principal */}
+        <div className="calx-main">
+          <div className="calx-toolbar">
+            <div className="calx-month-label">{capitalize(calViewMode === "week" ? weekLabel : monthLabel)}</div>
+            <div className="calx-nav">
+              <button className="cal-nav-btn" onClick={goPrev}>‹</button>
+              <button className="cal-nav-btn" onClick={goNext}>›</button>
+            </div>
+          </div>
+          <div className="calx-grid-panel">
+            <div className="calx-weekdays">
+              {WEEKDAY_SHORT.map((w) => <div key={w} className="calx-weekday">{w}</div>)}
             </div>
             {calViewMode === "week" ? (
-              <div className="cal-week cal-week-solo">
+              <div className="calx-week calx-week-solo">
                 {weekDatesArr.map((dateStr) => renderDayCell(dateStr, parseInt(dateStr.slice(8, 10), 10), "week-cell"))}
               </div>
             ) : (
               weeks.map((week, wi) => (
-                <div key={wi} className="cal-week">
+                <div key={wi} className="calx-week">
                   {week.map((dd, di) => {
-                    if (!dd) return <div key={di} className="cal-day empty"></div>;
+                    if (!dd) return <div key={di} className="calx-day empty"></div>;
                     const dateStr = y + "-" + pad2(mIdx + 1) + "-" + pad2(dd);
-                    return renderDayCell(dateStr, dd, "");
+                    return renderDayCell(dateStr, dd);
                   })}
                 </div>
               ))
             )}
           </div>
         </div>
+
+        {/* Propers bolos */}
         {calViewMode !== "week" && (
           <div className="cal-right-col">
             <div className="cal-side-title">{sideTitle}</div>
-            {sideContent}
+            <div className="cal-side-panel">
+              <div className="upcoming-days">
+                {shownDates.length ? dayCards(shownDates, forward.byDate) : <div className="empty-state">Cap actuació propera.</div>}
+              </div>
+            </div>
           </div>
         )}
       </div>
 
-      {rsModalConcertId && (() => {
-        const c = concerts.find((x) => x.id === rsModalConcertId);
-        if (!c) return null;
-        return (
-          <RouteSheetModal
-            key={c.id}
-            concert={c}
-            onClose={() => setRsModalConcertId(null)}
-            onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(c.id); }}
-          />
-        );
-      })()}
-      {rsPreviewConcertId && (() => {
-        const c = concerts.find((x) => x.id === rsPreviewConcertId);
-        if (!c) return null;
-        return (
-          <RouteSheetPreview
-            concert={c}
-            onClose={() => setRsPreviewConcertId(null)}
-            onEdit={() => { setRsPreviewConcertId(null); setRsModalConcertId(c.id); }}
-          />
-        );
-      })()}
+      {rsModalConcert && (
+        <RouteSheetModal
+          key={rsModalConcert.id}
+          concert={rsModalConcert}
+          onClose={() => setRsModalConcertId(null)}
+          onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(rsModalConcert.id); }}
+        />
+      )}
+      {rsPreviewConcert && (
+        <RouteSheetPreview
+          concert={rsPreviewConcert}
+          onClose={() => setRsPreviewConcertId(null)}
+          onEdit={() => { setRsPreviewConcertId(null); setRsModalConcertId(rsPreviewConcert.id); }}
+        />
+      )}
     </div>
   );
 }

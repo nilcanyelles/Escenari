@@ -44,13 +44,17 @@ export default async function GrupPage() {
     getBandFiles(bandId),
   ]);
 
-  // Fotos de perfil pujades (perquè les targetes de l'equip les mostrin).
-  const photoRows = (await db().query(
-    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+  // Fotos de perfil i Instagram reals (perquè les targetes de l'equip els usin).
+  const profRows = (await db().query(
+    "select person_name, photo_file_id, ig_handle from person_profiles where workspace_id=$1",
     [workspaceId]
   )).rows;
   const photosByName: Record<string, string> = {};
-  photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+  const igByName: Record<string, string> = {};
+  profRows.forEach((r) => {
+    if (r.photo_file_id) photosByName[normalize(r.person_name)] = r.photo_file_id;
+    if (r.ig_handle) igByName[normalize(r.person_name)] = r.ig_handle;
+  });
 
   return (
     <GroupHomeView
@@ -66,6 +70,7 @@ export default async function GrupPage() {
       songs={songs}
       files={files}
       photosByName={photosByName}
+      igByName={igByName}
       today={today()}
     />
   );

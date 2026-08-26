@@ -29,10 +29,12 @@ function personChromaItem(
   band: Band,
   onOpen: (name: string) => void,
   photosByName: Record<string, string>,
+  igByName: Record<string, string>,
   linked: boolean,
   onInvite?: (name: string) => void,
 ): ChromaItem {
-  const handle = "@" + normalize(p.name).replace(/\s+/g, "");
+  const realIg = igByName[normalize(p.name)] || "";
+  const handle = "@" + (realIg || normalize(p.name).replace(/\s+/g, ""));
   const inss = instrumentsFor(p);
   const c1 = band.color1 || bandColor(band.id).color;
   const c2 = band.color2 || bandColor(band.id + "x").color;
@@ -54,6 +56,7 @@ function personChromaItem(
     p.email
       ? { icon: "✉️", title: `Escriu a ${p.email}`, href: `mailto:${p.email}` }
       : { icon: "✉️", title: "Sense correu — afegeix-lo al perfil", onClick: missing("el correu") },
+    { icon: "📸", title: `Instagram ${handle}`, href: `https://instagram.com/${handle.slice(1)}` },
   ];
   if (!linked && onInvite) actions.push({ icon: "🔗", title: "Convida a reclamar aquest perfil", onClick: () => onInvite(p.name) });
 
@@ -87,7 +90,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, today }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, today }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -100,6 +103,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   songs: Song[];
   files: BandFile[];
   photosByName?: Record<string, string>;
+  igByName?: Record<string, string>;
   today: string;
 }) {
   const router = useRouter();
@@ -233,7 +237,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 <div className="bento-chroma">
                   <ChromaGrid
                     className="chroma-compact"
-                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null, band, openProfile, photosByName, !!linkedByName[m.name]))}
+                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name]))}
                     columns={4}
                     cardWidth={104}
                     radius={150}
@@ -331,7 +335,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         ) : (
           band.members.length > 0 && (
             <ChromaGrid
-              items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, !!linkedByName[m.name], handleInvite))}
+              items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName, !!linkedByName[m.name], handleInvite))}
               columns={4}
               cardWidth={190}
               radius={240}
@@ -373,7 +377,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         ) : (
           band.crew.length > 0 && (
             <ChromaGrid
-              items={band.crew.map((m) => personChromaItem(m, null, band, openProfile, photosByName, !!linkedByName[m.name], handleInvite))}
+              items={band.crew.map((m) => personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name], handleInvite))}
               columns={4}
               cardWidth={190}
               radius={240}

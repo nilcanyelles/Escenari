@@ -4353,3 +4353,199 @@ button { font-family: inherit; }
   text-decoration: none;
 }
 .pv-contact-btn:hover { border-color: var(--accent); color: var(--text); }
+
+/* ============ Calendari redissenyat (llegenda + graella neta) ============ */
+.calx-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr) 300px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1200px) { .calx-layout { grid-template-columns: 170px minmax(0, 1fr); } .calx-layout .cal-right-col { display: none; } }
+@media (max-width: 800px) { .calx-layout { grid-template-columns: 1fr; } .calx-sidebar { order: 2; } }
+
+/* Barra lateral: Legend + mini mes */
+.calx-sidebar {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.calx-side-title {
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  font-weight: 700;
+}
+.calx-legend { display: flex; flex-direction: column; gap: 8px; }
+.calx-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  font-family: inherit;
+  opacity: 1;
+  transition: opacity 0.15s;
+}
+.calx-legend-item:not(.on) { opacity: 0.45; }
+.calx-legend-check {
+  width: 16px; height: 16px;
+  border-radius: 5px;
+  border: 1.5px solid var(--border-input);
+  color: #0b0a12;
+  font-size: 10px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.calx-legend-swatch {
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 7px;
+  padding: 4px 10px;
+}
+.calx-mini-title { font-size: 12.5px; font-weight: 700; margin-bottom: 8px; }
+.calx-mini-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.calx-mini-wd { font-size: 9px; color: var(--text-ghost); text-align: center; text-transform: uppercase; padding-bottom: 3px; }
+.calx-mini-day {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 10.5px;
+  font-family: inherit;
+  border-radius: 6px;
+  aspect-ratio: 1;
+  cursor: pointer;
+  position: relative;
+}
+.calx-mini-day:hover { background: oklch(1 0 0 / 0.07); }
+.calx-mini-day.has::after {
+  content: "";
+  position: absolute;
+  bottom: 2px; left: 50%;
+  transform: translateX(-50%);
+  width: 4px; height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+.calx-mini-day.today { background: var(--accent); color: white; font-weight: 700; }
+.calx-mini-day.selected:not(.today) { outline: 1.5px solid var(--accent); }
+
+/* Graella principal */
+.calx-main { min-width: 0; }
+.calx-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.calx-month-label { font-family: "Space Grotesk", sans-serif; font-size: 17px; font-weight: 700; }
+.calx-nav { display: flex; gap: 6px; }
+.calx-grid-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.calx-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border); }
+.calx-weekday {
+  padding: 8px 10px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-ghost);
+  font-weight: 700;
+  text-align: right;
+}
+.calx-week { display: grid; grid-template-columns: repeat(7, 1fr); border-bottom: 1px solid var(--border-soft); }
+.calx-week:last-child { border-bottom: none; }
+.calx-day {
+  min-height: 96px;
+  border-right: 1px solid var(--border-soft);
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  cursor: pointer;
+  transition: background 0.12s;
+  overflow: hidden;
+}
+.calx-day:last-child { border-right: none; }
+.calx-day:hover:not(.empty) { background: oklch(1 0 0 / 0.035); }
+.calx-day.selected { background: oklch(0.68 0.19 290 / 0.08); box-shadow: inset 0 0 0 1.5px var(--accent); }
+.calx-day.empty {
+  cursor: default;
+  background: repeating-linear-gradient(45deg, transparent, transparent 6px, oklch(1 0 0 / 0.02) 6px, oklch(1 0 0 / 0.02) 8px);
+}
+.calx-day.week-cell { min-height: 240px; }
+.calx-num {
+  font-size: 11.5px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  align-self: flex-end;
+}
+.calx-num.today {
+  background: var(--accent);
+  color: white;
+  font-weight: 700;
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.calx-evs { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+.calx-ev {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  border-left: 3px solid var(--calx-bar);
+  border-radius: 5px;
+  padding: 3px 6px;
+  font-family: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+}
+.calx-ev:hover { filter: brightness(1.25); }
+.calx-ev-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.calx-ev-time { font-size: 9.5px; opacity: 0.75; flex-shrink: 0; }
+.calx-compact { display: flex; gap: 4px; flex-wrap: wrap; }
+.calx-compact-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border-radius: 6px;
+  padding: 3px 7px;
+  font-size: 10.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.calx-compact-chip i { width: 7px; height: 7px; border-radius: 2px; display: inline-block; }
+
+/* Botó Google Calendar */
+.gcal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid oklch(0.68 0.19 290 / 0.45);
+  background: oklch(0.68 0.19 290 / 0.12);
+  color: var(--accent-text);
+  font-size: 12.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  padding: 8px 16px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.gcal-btn:hover { background: oklch(0.68 0.19 290 / 0.2); }
+
+/* Detall de contacte al perfil */
+.pv-contact-details { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-faint); }

@@ -188,11 +188,17 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
           {data.bio && <p className="pv-bio">{data.bio}</p>}
 
           {(data.phone || data.email) && (
-            <div className="pv-contact">
-              {data.phone && <a className="pv-contact-btn" href={`tel:${data.phone.replace(/\s/g, "")}`} title={data.phone}>📞 Truca</a>}
-              {data.phone && <a className="pv-contact-btn" href={`https://wa.me/${data.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
-              {data.email && <a className="pv-contact-btn" href={`mailto:${data.email}`} title={data.email}>✉️ Correu</a>}
-            </div>
+            <>
+              <div className="pv-contact">
+                {data.phone && <a className="pv-contact-btn" href={`tel:${data.phone.replace(/\s/g, "")}`} title={data.phone}>📞 Truca</a>}
+                {data.phone && <a className="pv-contact-btn" href={`https://wa.me/${data.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
+                {data.email && <a className="pv-contact-btn" href={`mailto:${data.email}`} title={data.email}>✉️ Correu</a>}
+              </div>
+              <div className="pv-contact-details">
+                {data.phone && <span>📞 {data.phone}</span>}
+                {data.email && <span>✉️ {data.email}</span>}
+              </div>
+            </>
           )}
 
           <div className="pv-stats">

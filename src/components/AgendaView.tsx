@@ -79,6 +79,15 @@ export default function AgendaView({ bands, concerts, invoices, icsToken = "", t
       {icsToken && (
         <div className="ics-row">
           <button
+            type="button" className="gcal-btn"
+            title="Afegeix tots els concerts (lloc, hora i grup) al teu Google Calendar — s'actualitza sol quan canviïn"
+            onClick={() => {
+              const feed = `${window.location.origin}/api/ics/${icsToken}`;
+              window.open(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feed)}`, "_blank");
+            }}
+          >📅 Afegeix-ho tot a Google Calendar</button>
+          <span className="t-dim">·</span>
+          <button
             type="button" className="link-btn"
             title="Copia l'URL per subscriure't des de Google Calendar o Apple Calendar"
             onClick={async () => {
