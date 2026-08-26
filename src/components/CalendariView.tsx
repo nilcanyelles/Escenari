@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
 import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep } from "@/lib/format";
 import { rsIsComplete } from "@/lib/route-sheet";
-import { saveConcertAction } from "@/app/(app)/concerts/actions";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
+import NewEventButton from "@/components/NewEventButton";
 
 // Tipus d'esdeveniment amb el seu color (la "Legend" del calendari).
 export const KIND_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -32,10 +32,10 @@ function groupByDate(list: Concert[]) {
   return { byDate, dates };
 }
 
-export default function CalendariView({ bands, concerts, today }: { bands: Band[]; concerts: Concert[]; today: string }) {
+export default function CalendariView({ bands, concerts, selectedBandId = "", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; today: string }) {
   const router = useRouter();
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
-  const [calViewMode, setCalViewMode] = useState<"month" | "week">("month");
+  const [calViewMode, setCalViewMode] = useState<"month" | "week" | "year">("month");
   const [calWeekOffset, setCalWeekOffset] = useState(0);
   const [calSelectedDate, setCalSelectedDate] = useState<string | null>(null);
   const [calBandFilter, setCalBandFilter] = useState<string[]>([]);
@@ -93,8 +93,8 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
     ? `${weekStart.getDate()} - ${weekEnd.getDate()} ${monthWithPrep(MONTH_FULL[weekStart.getMonth()])} de ${weekEnd.getFullYear()}`
     : `${weekStart.getDate()} ${monthWithPrep(MONTH_FULL[weekStart.getMonth()])} - ${weekEnd.getDate()} ${monthWithPrep(MONTH_FULL[weekEnd.getMonth()])} de ${weekEnd.getFullYear()}`;
 
-  const goPrev = () => { if (calViewMode === "week") setCalWeekOffset((v) => v - 1); else setCalMonthIndex((v) => v - 1); };
-  const goNext = () => { if (calViewMode === "week") setCalWeekOffset((v) => v + 1); else setCalMonthIndex((v) => v + 1); };
+  const goPrev = () => { if (calViewMode === "week") setCalWeekOffset((v) => v - 1); else if (calViewMode === "year") setCalMonthIndex((v) => v - 12); else setCalMonthIndex((v) => v - 1); };
+  const goNext = () => { if (calViewMode === "week") setCalWeekOffset((v) => v + 1); else if (calViewMode === "year") setCalMonthIndex((v) => v + 12); else setCalMonthIndex((v) => v + 1); };
 
   const selDate = calSelectedDate;
   const shownDates = (selDate
@@ -218,16 +218,6 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       ? (bands.find((b) => b.id === calBandFilter[0])?.name || "1 grup")
       : calBandFilter.length + " grups";
 
-  async function handleNewConcert() {
-    const created = await saveConcertAction({
-      id: null, bandName: "", date: calSelectedDate || today, time: "", venue: "", city: "",
-      festaEntitat: "", amount: 0, status: "pendent",
-      attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
-    });
-    if (!created) return;
-    router.push(`/concerts/${created.id}`);
-  }
-
   // Mini calendari del mes (a la barra de la llegenda).
   const miniCells = cells;
 
@@ -241,6 +231,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
       {/* Barra superior */}
       <div className="range-pills cal-view-pills">
         <div className="cal-view-pills-left">
+          {selectedBandId ? null : (
           <div className="year-select-wrap">
             <button className="pill active" onClick={() => setCalBandFilterOpen((v) => !v)}>{calBandLabel} ▾</button>
             {calBandFilterOpen && (
@@ -264,14 +255,15 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
               </>
             )}
           </div>
+          )}
         </div>
-        <div className="view-mode-switch">
-          <div className={"view-mode-switch-thumb" + (calViewMode === "week" ? " week" : "")}></div>
-          <button className={calViewMode === "month" ? "active" : ""} onClick={() => setCalViewMode("month")}>Mes</button>
-          <button className={calViewMode === "week" ? "active" : ""} onClick={() => setCalViewMode("week")}>Setmana</button>
+        <div className="stats-tabs">
+          <button className={"stats-tab" + (calViewMode === "month" ? " active" : "")} onClick={() => setCalViewMode("month")}>Mes</button>
+          <button className={"stats-tab" + (calViewMode === "week" ? " active" : "")} onClick={() => setCalViewMode("week")}>Setmana</button>
+          <button className={"stats-tab" + (calViewMode === "year" ? " active" : "")} onClick={() => setCalViewMode("year")}>Any</button>
         </div>
         <div className="cal-view-pills-right">
-          <button className="glow-cta" onClick={handleNewConcert}>+ Nou concert</button>
+          <NewEventButton bands={bands} selectedBandId={selectedBandId} defaultDate={calSelectedDate || today} />
         </div>
       </div>
 
@@ -319,17 +311,54 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
         {/* Graella principal */}
         <div className="calx-main">
           <div className="calx-toolbar">
-            <div className="calx-month-label">{capitalize(calViewMode === "week" ? weekLabel : monthLabel)}</div>
+            <div className="calx-month-label">{calViewMode === "year" ? String(y) : capitalize(calViewMode === "week" ? weekLabel : monthLabel)}</div>
             <div className="calx-nav">
               <button className="cal-nav-btn" onClick={goPrev}>‹</button>
               <button className="cal-nav-btn" onClick={goNext}>›</button>
             </div>
           </div>
           <div className="calx-grid-panel">
-            <div className="calx-weekdays">
+            {calViewMode !== "year" && (<div className="calx-weekdays">
               {WEEKDAY_SHORT.map((w) => <div key={w} className="calx-weekday">{w}</div>)}
-            </div>
-            {calViewMode === "week" ? (
+            </div>)}
+            {calViewMode === "year" ? (
+              <div className="calx-year">
+                {Array.from({ length: 12 }, (_, mi) => {
+                  const first = new Date(y, mi, 1);
+                  const off = (first.getDay() + 6) % 7;
+                  const dim = new Date(y, mi + 1, 0).getDate();
+                  const mCells: (number | null)[] = [];
+                  for (let i = 0; i < off; i++) mCells.push(null);
+                  for (let d = 1; d <= dim; d++) mCells.push(d);
+                  const monthCount = calConcerts.filter((c) => c.date.slice(0, 7) === `${y}-${pad2(mi + 1)}`).length;
+                  return (
+                    <button
+                      key={mi} type="button" className="calx-year-month"
+                      onClick={() => { setCalMonthIndex(mi + (y - parseInt(today.slice(0, 4), 10)) * 12); setCalViewMode("month"); }}
+                    >
+                      <div className="calx-year-month-head">
+                        <span>{capitalize(MONTH_FULL[mi])}</span>
+                        {monthCount > 0 && <span className="calx-year-count">{monthCount}</span>}
+                      </div>
+                      <div className="calx-mini-grid">
+                        {mCells.map((d, i) => {
+                          if (!d) return <span key={"e" + i}></span>;
+                          const ds = `${y}-${pad2(mi + 1)}-${pad2(d)}`;
+                          const evs = eventsByDate[ds] || [];
+                          const k = evs.length ? (evs[0].kind && KIND_META[evs[0].kind] ? evs[0].kind : "bolo") : null;
+                          return (
+                            <span key={ds} className={"calx-year-day" + (ds === today ? " today" : "")}
+                              style={k ? { background: KIND_META[k].bg, color: KIND_META[k].color, fontWeight: 700 } : {}}>
+                              {d}
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : calViewMode === "week" ? (
               <div className="calx-week calx-week-solo">
                 {weekDatesArr.map((dateStr) => renderDayCell(dateStr, parseInt(dateStr.slice(8, 10), 10), "week-cell"))}
               </div>
@@ -348,7 +377,7 @@ export default function CalendariView({ bands, concerts, today }: { bands: Band[
         </div>
 
         {/* Propers bolos */}
-        {calViewMode !== "week" && (
+        {calViewMode === "month" && (
           <div className="cal-right-col">
             <div className="cal-side-title">{sideTitle}</div>
             <div className="cal-side-panel">

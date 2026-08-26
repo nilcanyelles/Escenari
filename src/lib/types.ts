@@ -42,6 +42,7 @@ export type Concert = {
   riderId?: string | null;
   setlistId?: string | null;
   kind?: "bolo" | "assaig" | "reunio" | "altre";
+  invited?: string[];
 };
 
 export type Invoice = {

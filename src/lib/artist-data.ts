@@ -71,12 +71,15 @@ export async function getArtistBands(clerkUserId: string): Promise<ArtistBand[]>
 export async function getArtistGigs(clerkUserId: string): Promise<ArtistGig[]> {
   const { rows } = await db().query(
     `select c.id, c.date, c.time, c.venue, c.city, c.festa_entitat, c.status,
-            c.attendance, c.substitutes, c.no_substitute, c.amount, bm.member_name,
+            c.attendance, c.substitutes, c.no_substitute, c.amount, c.kind, c.invited, bm.member_name,
             b.id as band_id, b.name as band_name, b.logo, b.color1, b.color2, b.backups, b.show_fees
      from concerts c
      join band_members bm on bm.band_id = c.band_id and bm.clerk_user_id = $1
      join bands b on b.id = c.band_id
      where c.status <> 'cancel·lat'
+       and (coalesce(c.kind, 'bolo') = 'bolo'
+            or jsonb_array_length(coalesce(c.invited, '[]'::jsonb)) = 0
+            or c.invited ? bm.member_name)
      order by c.date, c.time`,
     [clerkUserId]
   );

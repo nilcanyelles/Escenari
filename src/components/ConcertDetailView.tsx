@@ -27,6 +27,7 @@ import { publishBackupRequestAction, setBackupRequestStatusAction } from "@/app/
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
+import ConcertPosterModal from "@/components/ConcertPosterModal";
 
 const STATUS_CYCLE = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
@@ -130,6 +131,8 @@ export default function ConcertDetailView({
   const [repeating, setRepeating] = useState(false);
   const [rsPreviewOpen, setRsPreviewOpen] = useState(false);
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
+  const [posterOpen, setPosterOpen] = useState(false);
+  const [tab, setTab] = useState<"info" | "assistencia" | "ruta" | "facturacio">("info");
   const [generating, setGenerating] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
@@ -373,36 +376,44 @@ export default function ConcertDetailView({
         </div>
       )}
 
-      <div className="cd-hero">
-        <div className="cd-hero-main">
-          <div className="cd-hero-band">{concert.bandName}</div>
-          <div className="cd-hero-date">{capitalize(formatDateFull(cf.date))}{cf.time ? ` · ${cf.time}h` : ""}</div>
-          <div className="cd-hero-chips">
-            {cf.city && <span className="cd-chip" style={{ background: cityColor.bg, color: cityColor.color }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-              {cf.city.split(",")[0]}
-            </span>}
-            {cf.venue && <span className="cd-chip" style={{ background: venueColor.bg, color: venueColor.color }}>
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path></svg>
-              {cf.venue}
-            </span>}
-            {cf.festaEntitat && <span className="cd-chip cd-chip-festa">{cf.festaEntitat}</span>}
-            <button
-              type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
-              onClick={() => setField("status", STATUS_CYCLE[(STATUS_CYCLE.indexOf(cf.status) + 1) % STATUS_CYCLE.length])}
-            >{cf.status}</button>
-          </div>
+      {/* Pòster: capçalera tipogràfica del concert */}
+      <div className="cd-poster">
+        <div className="cd-poster-glow" aria-hidden="true"></div>
+        <div className="cd-poster-kicker">
+          {cf.festaEntitat || (kind === "bolo" ? "concert" : kind === "reunio" ? "reunió" : kind)}
         </div>
-        <div className="cd-hero-side">
+        <div className="cd-poster-title">{concert.bandName}</div>
+        <div className="cd-poster-date">{capitalize(formatDateFull(cf.date))}{cf.time ? ` — ${cf.time}h` : ""}</div>
+        {(cf.venue || cf.city) && (
+          <div className="cd-poster-place">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+            {[cf.venue, cf.city.split(",")[0]].filter(Boolean).join(" · ")}
+          </div>
+        )}
+        <div className="cd-poster-foot">
+          <button
+            type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
+            onClick={() => setField("status", STATUS_CYCLE[(STATUS_CYCLE.indexOf(cf.status) + 1) % STATUS_CYCLE.length])}
+          >{cf.status}</button>
           <div className="cd-hero-amount">{formatCurrency(amountNum)}</div>
           <div className="cd-meters">
             <Meter label="Informació" percent={info.percent} missing={info.missing} />
             <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} />
           </div>
+          <button type="button" className="btn-outline cd-poster-share" onClick={() => setPosterOpen(true)}
+            title="Genera un pòster transparent per a Instagram amb el mapa i les dades del concert">📸 Pòster IG</button>
         </div>
       </div>
 
+      {/* Subpestanyes */}
+      <div className="stats-tabs cd-tabs">
+        {([["info", "Informació"], ["assistencia", "Assistència"], ["ruta", "Full de ruta"], ["facturacio", "Facturació"]] as const).map(([k, label]) => (
+          <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
+        ))}
+      </div>
+
       {/* Informació */}
+      {tab === "info" && (<>
       <div className="panel cd-section" id="cd-info">
         <div className="panel-title cd-section-title">Informació</div>
         <div className="cd-info-grid">
@@ -474,8 +485,10 @@ export default function ConcertDetailView({
         checklists={checklists}
         memberNames={members.map((m) => m.name)}
       />
+      </>)}
 
       {/* Assistència */}
+      {tab === "assistencia" && (
       <div className="panel cd-section" id="cd-assistencia">
         <div className="panel-header-row cd-section-title">
           <div className="panel-title">Assistència</div>
@@ -561,8 +574,10 @@ export default function ConcertDetailView({
           </div>
         )}
       </div>
+      )}
 
       {/* Full de ruta */}
+      {tab === "ruta" && (
       <div className="panel cd-section" id="cd-ruta">
         <div className="panel-header-row cd-section-title">
           <div className="panel-title">Full de ruta</div>
@@ -570,8 +585,10 @@ export default function ConcertDetailView({
         </div>
         <RouteSheetEditor concert={concert} />
       </div>
+      )}
 
       {/* Rider i setlist */}
+      {tab === "info" && (
       <div className="panel cd-section" id="cd-material">
         <div className="panel-title cd-section-title">Rider i setlist</div>
         <div className="cd-material-grid">
@@ -713,8 +730,10 @@ export default function ConcertDetailView({
           </div>
         </div>
       </div>
+      )}
 
       {/* Facturació */}
+      {tab === "facturacio" && (
       <div className="panel cd-section" id="cd-facturacio">
         <div className="panel-title cd-section-title">Facturació</div>
 
@@ -934,8 +953,10 @@ export default function ConcertDetailView({
           </>
         )}
       </div>
+      )}
 
       {/* Comparteix */}
+      {tab === "info" && (
       <div className="panel cd-section" id="cd-comparteix">
         <div className="panel-header-row cd-section-title">
           <div className="panel-title">Comparteix — formularis per omplir dades</div>
@@ -1036,12 +1057,16 @@ export default function ConcertDetailView({
           </div>
         )}
       </div>
+      )}
 
       {rsPreviewOpen && (
         <RouteSheetPreview concert={concert} onClose={() => setRsPreviewOpen(false)} onEdit={() => setRsPreviewOpen(false)} />
       )}
       {invoicePreviewOpen && invoice && (
         <InvoicePreview invoice={invoice} concert={concert} companyInfo={companyInfo} onClose={() => setInvoicePreviewOpen(false)} />
+      )}
+      {posterOpen && (
+        <ConcertPosterModal concert={liveConcert} band={band} onClose={() => setPosterOpen(false)} />
       )}
     </div>
   );

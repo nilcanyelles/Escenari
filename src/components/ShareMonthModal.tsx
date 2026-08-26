@@ -25,6 +25,7 @@ function drawRoundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: n
 
 export default function ShareMonthModal({ bands, concerts, today, onClose }: { bands: Band[]; concerts: Concert[]; today: string; onClose: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [mode, setMode] = useState<"story" | "poster">("story");
   const [monthIdx, setMonthIdx] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [year, setYear] = useState(() => parseInt(today.slice(0, 4), 10));
   const [accent, setAccent] = useState(ACCENTS[0]);
@@ -48,6 +49,60 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
+
+    // ---- Mode pòster: PNG transparent per posar sobre una foto a Instagram ----
+    if (mode === "poster") {
+      ctx.clearRect(0, 0, W, H);
+      const upcoming = concerts
+        .filter((c) => c.date >= today && c.status !== "cancel·lat")
+        .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
+        .slice(0, 6);
+      const cream = "#f4efe4";
+      ctx.textAlign = "center";
+      ctx.shadowColor = "rgba(0,0,0,0.55)";
+      ctx.shadowBlur = 26;
+
+      // Títol gran apilat (estil cartell)
+      const title = bands.length === 1 ? bands[0].name.toUpperCase() : "PROPERS\nCONCERTS";
+      const lines = title.includes("\n") ? title.split("\n") : title.split(" ").length > 1 && title.length > 14 ? [title.split(" ")[0], title.split(" ").slice(1).join(" ")] : [title];
+      ctx.fillStyle = cream;
+      let ty = 260;
+      lines.forEach((ln) => {
+        let size = 150;
+        ctx.font = `700 ${size}px 'Space Grotesk', sans-serif`;
+        while (ctx.measureText(ln).width > W - 120 && size > 60) {
+          size -= 6;
+          ctx.font = `700 ${size}px 'Space Grotesk', sans-serif`;
+        }
+        ctx.fillText(ln, W / 2, ty);
+        ty += size * 0.98;
+      });
+
+      // Molt d'espai buit al mig per a la foto de fons…
+
+      // Llista de dates a baix
+      ctx.font = "italic 500 34px Inter, sans-serif";
+      ctx.fillStyle = "rgba(244, 239, 228, 0.85)";
+      ctx.fillText("els pròxims concerts:", W / 2, H - 150 - upcoming.length * 54 - 40);
+      ctx.font = "600 38px Inter, sans-serif";
+      ctx.fillStyle = cream;
+      upcoming.forEach((c, i) => {
+        const [, mm, dd] = c.date.split("-");
+        const line = `${dd}.${mm}${c.time ? ` — ${c.time}h` : ""}${c.city ? ` — ${c.city.split(",")[0]}` : ""}`;
+        ctx.fillText(line, W / 2, H - 150 - (upcoming.length - 1 - i) * 54);
+      });
+      if (upcoming.length === 0) {
+        ctx.font = "500 34px Inter, sans-serif";
+        ctx.fillText("nous concerts ben aviat", W / 2, H - 190);
+      }
+
+      // Peu
+      ctx.font = "600 27px Inter, sans-serif";
+      ctx.fillStyle = "rgba(244, 239, 228, 0.75)";
+      ctx.fillText("@escenari.app", W / 2, H - 60);
+      ctx.shadowBlur = 0;
+      return;
+    }
 
     // Fons: degradat fosc amb un halo del color d'accent.
     const bg = ctx.createLinearGradient(0, 0, W, H);
@@ -196,7 +251,7 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
     ctx.fillStyle = "rgba(255,255,255,0.35)";
     ctx.font = "500 26px Inter, sans-serif";
     ctx.fillText("fet amb escenari.app", 72, H - 64);
-  }, [monthIdx, year, accent, showList, monthConcerts, bands]);
+  }, [monthIdx, year, accent, showList, monthConcerts, bands, mode, concerts, today]);
 
   async function toBlob(): Promise<Blob | null> {
     const canvas = canvasRef.current;
@@ -239,10 +294,21 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
           <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={onClose}>✕</button>
         </div>
         <div className="share-month-body">
-          <div className="share-month-preview-wrap">
+          <div className={"share-month-preview-wrap" + (mode === "poster" ? " poster-preview" : "")}>
             <canvas ref={canvasRef} width={W} height={H} className="share-month-canvas" />
           </div>
           <div className="share-month-controls">
+            <div className="stats-tabs" style={{ alignSelf: "flex-start" }}>
+              <button className={"stats-tab" + (mode === "story" ? " active" : "")} onClick={() => setMode("story")}>Story del mes</button>
+              <button className={"stats-tab" + (mode === "poster" ? " active" : "")} onClick={() => setMode("poster")}>Pòster transparent</button>
+            </div>
+            {mode === "poster" && (
+              <div className="t-dim" style={{ fontSize: 12.5 }}>
+                PNG amb fons transparent: posa&apos;l sobre una foto vostra a Instagram. Títol gran + els pròxims concerts (data, hora i lloc).
+              </div>
+            )}
+            {mode === "story" && (
+            <>
             <div className="share-month-nav">
               <button className="cal-nav-btn" onClick={() => shiftMonth(-1)}>‹</button>
               <span className="share-month-label">{MONTH_FULL[monthIdx]} {year}</span>
@@ -257,12 +323,14 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
               <input type="checkbox" checked={showList} onChange={(e) => setShowList(e.target.checked)} />
               Mostra la llista de bolos
             </label>
+            </>
+            )}
             <div className="share-month-actions">
               <button type="button" className="btn-outline" disabled={busy} onClick={handleDownload}>Descarrega PNG</button>
               <button type="button" className="btn-save" disabled={busy} onClick={handleShare}>Comparteix</button>
             </div>
             <div className="t-dim" style={{ fontSize: 12 }}>
-              1080×1920 — perfecte com a story o fons de pantalla.
+              {mode === "poster" ? "1080×1920 amb transparència — llest per a la story." : "1080×1920 — perfecte com a story o fons de pantalla."}
             </div>
           </div>
         </div>

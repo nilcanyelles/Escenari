@@ -19,6 +19,7 @@ export default async function ConcertsPage() {
       concerts={scoped}
       invoices={scopeInvoices(invoices, concerts, bandId)}
       companyInfo={companyInfo}
+      selectedBandId={bandId}
       today={today()}
     />
   );

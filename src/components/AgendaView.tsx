@@ -7,9 +7,8 @@ import CalendariView from "@/components/CalendariView";
 import ShareMonthModal from "@/components/ShareMonthModal";
 
 // Agenda = resum ràpid + calendari en una sola pàgina (la principal).
-export default function AgendaView({ bands, concerts, invoices, icsToken = "", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; icsToken?: string; today: string }) {
+export default function AgendaView({ bands, concerts, invoices, icsToken = "", selectedBandId = "", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; icsToken?: string; selectedBandId?: string; today: string }) {
   const [shareOpen, setShareOpen] = useState(false);
-  const [icsCopied, setIcsCopied] = useState<string | null>(null);
   const ym = today.slice(0, 7);
   const monthIdx = parseInt(today.slice(5, 7), 10) - 1;
 
@@ -39,6 +38,20 @@ export default function AgendaView({ bands, concerts, invoices, icsToken = "", t
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+      {icsToken && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button
+            type="button" className="gcal-btn"
+            title="Afegeix tots els concerts (lloc, hora i grup) al teu Google Calendar — s'actualitza sol quan canviïn"
+            onClick={() => {
+              // Google necessita poder llegir el feed: cal el domini públic
+              // (amb localhost no pot). El format webcal:// és el que espera.
+              const feed = `webcal://${window.location.host}/api/ics/${icsToken}`;
+              window.open(`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(feed)}`, "_blank");
+            }}
+          >📅 Afegeix-ho tot a Google Calendar</button>
+        </div>
+      )}
       <div className="agenda-kpis">
         <div className="agenda-kpi">
           <div className="agenda-kpi-label">Pròxim bolo</div>
@@ -74,40 +87,7 @@ export default function AgendaView({ bands, concerts, invoices, icsToken = "", t
         </button>
       </div>
 
-      <CalendariView bands={bands} concerts={concerts} today={today} />
-
-      {icsToken && (
-        <div className="ics-row">
-          <button
-            type="button" className="gcal-btn"
-            title="Afegeix tots els concerts (lloc, hora i grup) al teu Google Calendar — s'actualitza sol quan canviïn"
-            onClick={() => {
-              const feed = `${window.location.origin}/api/ics/${icsToken}`;
-              window.open(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(feed)}`, "_blank");
-            }}
-          >📅 Afegeix-ho tot a Google Calendar</button>
-          <span className="t-dim">·</span>
-          <button
-            type="button" className="link-btn"
-            title="Copia l'URL per subscriure't des de Google Calendar o Apple Calendar"
-            onClick={async () => {
-              await navigator.clipboard.writeText(`${window.location.origin}/api/ics/${icsToken}`);
-              setIcsCopied("ics");
-              window.setTimeout(() => setIcsCopied(null), 1800);
-            }}
-          >📅 {icsCopied === "ics" ? "Enllaç copiat ✓" : "Subscriu-te al calendari (iCal)"}</button>
-          <span className="t-dim">·</span>
-          <button
-            type="button" className="link-btn"
-            title="Feed JSON públic dels bolos confirmats, per al web del grup"
-            onClick={async () => {
-              await navigator.clipboard.writeText(`${window.location.origin}/api/public-events/${icsToken}`);
-              setIcsCopied("feed");
-              window.setTimeout(() => setIcsCopied(null), 1800);
-            }}
-          >🌐 {icsCopied === "feed" ? "Enllaç copiat ✓" : "Feed públic per al web"}</button>
-        </div>
-      )}
+      <CalendariView bands={bands} concerts={concerts} selectedBandId={selectedBandId} today={today} />
 
       {shareOpen && (
         <ShareMonthModal bands={bands} concerts={concerts} today={today} onClose={() => setShareOpen(false)} />

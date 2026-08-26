@@ -21,6 +21,7 @@ export default async function AgendaPage() {
       concerts={scoped}
       invoices={scopeInvoices(invoices, concerts, bandId)}
       icsToken={icsToken}
+      selectedBandId={bandId}
       today={today()}
     />
   );

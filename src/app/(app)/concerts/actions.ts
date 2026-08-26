@@ -195,6 +195,49 @@ export async function importConcertsAction(raw: string): Promise<{ imported: num
   return { imported, errors };
 }
 
+// Creació d'un esdeveniment intern (assaig, reunió, altre) amb convidats i
+// repetició estil Google Calendar. Torna els ids creats.
+export async function createEventAction(input: {
+  bandId: string;
+  kind: "assaig" | "reunio" | "altre";
+  title: string;
+  date: string;
+  time: string;
+  invited: string[];
+  repeat: { freq: "cap" | "setmanal" | "quinzenal" | "mensual"; count: number };
+}): Promise<{ created: number; firstId: string | null }> {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  const band = (await pool.query("select id, name, tags, city from bands where id=$1 and workspace_id=$2", [input.bandId, workspaceId])).rows[0];
+  if (!band) return { created: 0, firstId: null };
+
+  const occurrences = input.repeat.freq === "cap" ? 1 : Math.min(Math.max(input.repeat.count, 1), 30);
+  const p0 = input.date.split("-").map(Number);
+  let created = 0;
+  let firstId: string | null = null;
+  for (let i = 0; i < occurrences; i++) {
+    let d: Date;
+    if (input.repeat.freq === "mensual") d = new Date(p0[0], p0[1] - 1 + i, p0[2]);
+    else {
+      const stepDays = input.repeat.freq === "quinzenal" ? 14 : input.repeat.freq === "setmanal" ? 7 : 0;
+      d = new Date(p0[0], p0[1] - 1, p0[2] + i * stepDays);
+    }
+    const dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    const id = "c" + Date.now() + i;
+    if (!firstId) firstId = id;
+    await pool.query(
+      `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount,
+                             attendance, substitutes, no_substitute, workspace_id, kind, invited)
+       values ($1,$2,$3,'',$4,$5,$6,$7,$8,'confirmat',0,'{}','{}','{}',$9,$10,$11)`,
+      [id, dateStr, input.time || "20:00", band.city || "", (input.title || "").trim(), band.id, band.name,
+        JSON.stringify(band.tags || []), workspaceId, input.kind, JSON.stringify(input.invited || [])]
+    );
+    created++;
+  }
+  revalidateAll();
+  return { created, firstId };
+}
+
 // Tipus d'esdeveniment del calendari (bolo, assaig, reunió, altre).
 export async function setConcertKindAction(id: string, kind: "bolo" | "assaig" | "reunio" | "altre") {
   const { workspaceId } = await requireManagerAction();

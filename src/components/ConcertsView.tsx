@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
-import { uniqueTags, bandColor } from "@/lib/tags";
+import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
+import { rsCompletionPercent } from "@/lib/route-sheet";
+import NewEventButton from "@/components/NewEventButton";
 import { importConcertsAction } from "@/app/(app)/concerts/actions";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
@@ -59,7 +61,9 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, invoices, companyInfo, today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; today: string }) {
+export default function ConcertsView({ bands, concerts, invoices, companyInfo, selectedBandId = "", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; selectedBandId?: string; today: string }) {
+  const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
+  const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -160,27 +164,25 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
     }
 
     const isSelected = modal?.concertId === c.id;
-    const cityColor = bandColor("city:" + (c.city || "?"));
-    const venueColor = bandColor("venue:" + (c.venue || "?"));
-    // Recompte d'assistència dels membres del grup (per a bolos futurs).
+    // Recompte d'assistència dels membres del grup.
     const rowBand = bands.find((b) => b.id === c.bandId);
     const attTotal = rowBand?.members.length || 0;
     const attYes = rowBand ? rowBand.members.filter((m) => (c.attendance || {})[m.name] === "yes").length : 0;
-    const showAtt = c.date >= today && attTotal > 0 && c.status !== "cancel·lat";
+    const rsPct = rsCompletionPercent(c);
     return (
-      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row concerts-cols clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`/concerts/${c.id}`)}>
-        <div className="t-dim">{formatDate(c.date)}</div>
-        <div className="t-strong">{c.bandName}</div>
-        <div>{c.city ? <span className="loc-chip" style={{ background: cityColor.bg, color: cityColor.color }}>{c.city.split(",")[0]}</span> : <span className="t-dim">—</span>}</div>
-        <div>{c.venue ? <span className="loc-chip" style={{ background: venueColor.bg, color: venueColor.color }}>{c.venue}</span> : <span className="t-dim">—</span>}</div>
-        <div className="t-dim">{c.festaEntitat || "—"}</div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-          {showAtt && (
-            <span
-              className={"att-badge" + (attYes === attTotal ? " full" : "")}
-              title={`${attYes} de ${attTotal} membres han confirmat assistència`}
-            >{attYes}/{attTotal}</span>
-          )}
+      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`/concerts/${c.id}`)}>
+        <div className="t-dim">{formatDate(c.date)}{c.time ? <span className="cc-time"> · {c.time}</span> : ""}</div>
+        {!inBand && <div className="t-strong">{c.bandName}</div>}
+        <div className="cc-bold">{c.city ? c.city.split(",")[0] : "—"}</div>
+        <div className="cc-bold">{c.venue || "—"}</div>
+        <div className="cc-bold">{c.festaEntitat || "—"}</div>
+        <div style={{ textAlign: "center" }}>
+          {attTotal > 0 ? (
+            <span className={"att-badge" + (attYes === attTotal ? " full" : "")}
+              title={`${attYes} de ${attTotal} membres han confirmat assistència`}>{attYes}/{attTotal}</span>
+          ) : <span className="t-dim">—</span>}
+        </div>
+        <div>
           <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
             title="Canvia l'estat" aria-label="Canvia l'estat"
             onClick={(e) => {
@@ -194,7 +196,14 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
               }, 400);
             }}>{displayStatus}</button>
         </div>
-        <div className="rs-btn-group"><RouteSheetBtns c={c} onEdit={() => setRsModalConcertId(c.id)} onPreview={() => setRsPreviewConcertId(c.id)} /></div>
+        <div className="cc-fdr">
+          <span className="cc-fdr-pct" style={{ color: rsPct >= 100 ? "oklch(0.75 0.15 155)" : rsPct >= 50 ? "oklch(0.82 0.15 80)" : "var(--text-faint)" }}>{rsPct}%</span>
+          <button className="row-rs-btn" title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(e) => { e.stopPropagation(); setRsPreviewConcertId(c.id); }}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
+            </svg>
+          </button>
+        </div>
         <div style={{ textAlign: "center" }}>{invoiceCell}</div>
         <div onClick={(e) => e.stopPropagation()}><DeleteConcertBtn id={c.id} /></div>
       </div>
@@ -265,7 +274,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>
-        <button className="glow-cta" onClick={handleNewConcert}>+ Nou concert</button>
+        <NewEventButton bands={bands} selectedBandId={selectedBandId} defaultDate={today} />
       </div>
 
       {importOpen && (
@@ -292,8 +301,9 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, t
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>
       ) : (
         <div className="concerts-list">
-          <div className="t-row t-head concerts-cols">
-            <div>Data</div><div>Grup</div><div>Població</div><div>Ubicació</div><div>Festa/entitat</div><div>Estat</div>
+          <div className={"t-row t-head " + colsClass}>
+            <div>Data</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Festa/entitat</div>
+            <div style={{ textAlign: "center" }}>Membres</div><div>Estat</div>
             <div style={{ textAlign: "center" }}>FDR</div><div style={{ textAlign: "center" }}>Factura</div><div></div>
           </div>
           <div className="table-wrap no-clip">

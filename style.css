@@ -495,13 +495,13 @@ button { font-family: inherit; }
 /* ---------- FILTER BARS ---------- */
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .concerts-list, .contactes-list { display: flex; flex-direction: column; gap: 16px; }
-.t-head.concerts-cols, .t-head.contactes-cols {
+.t-head.concerts-cols, .t-head.contactes-cols, .t-head.ccols {
   position: sticky; top: 75px; z-index: 2; background: var(--bg-card);
   border-radius: var(--radius); border: 1px solid var(--border);
 }
 .t-head.db-cols { position: sticky; top: 75px; z-index: 2; background: var(--bg-card); }
 @media (max-width: 899px) {
-  .t-head.concerts-cols, .t-head.contactes-cols { top: 63px; }
+  .t-head.concerts-cols, .t-head.contactes-cols, .t-head.ccols { top: 63px; }
   .t-head.db-cols { top: 63px; }
 }
 .input, select.input {
@@ -773,7 +773,7 @@ button { font-family: inherit; }
   display: flex; align-items: center; justify-content: center; color: var(--text-faint);
 }
 .cf-sticky-header {
-  position: sticky; top: 0; z-index: 5;
+  position: sticky; top: 75px; z-index: 2;
   padding: 24px 24px 0; border-radius: 14px 14px 0 0;
   background: oklch(0.2 0.02 258);
 }
@@ -1100,7 +1100,7 @@ button { font-family: inherit; }
   box-shadow: 0 24px 60px -24px rgba(0, 0, 0, 0.65);
 }
 .glow .t-head { background: oklch(1 0 0 / 0.03); }
-.glow .t-head.concerts-cols, .glow .t-head.contactes-cols {
+.glow .t-head.concerts-cols, .glow .t-head.contactes-cols, .glow .t-head.ccols {
   background: var(--bg-card); border-color: oklch(1 0 0 / 0.09);
   box-shadow: 0 12px 30px -14px rgba(0, 0, 0, 0.6);
 }
@@ -4549,3 +4549,192 @@ button { font-family: inherit; }
 
 /* Detall de contacte al perfil */
 .pv-contact-details { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-faint); }
+
+/* ============ Nou esdeveniment (selector de tipus + popup ràpid) ============ */
+.ne-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.ne-kind {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 14px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  transition: border-color 0.15s, transform 0.15s, background 0.15s;
+}
+.ne-kind:hover { border-color: var(--kc, var(--accent)); background: oklch(1 0 0 / 0.04); transform: translateY(-1px); }
+.ne-kind-icon {
+  width: 40px; height: 40px; border-radius: 12px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 19px;
+  background: color-mix(in oklab, var(--kc, var(--accent)) 18%, transparent);
+}
+.ne-kind-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ne-kind-label { font-weight: 700; font-size: 14px; }
+.ne-kind-desc { font-size: 11.5px; color: var(--text-faint); line-height: 1.35; }
+@media (max-width: 560px) { .ne-kinds { grid-template-columns: 1fr; } }
+
+.ne-invite-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.ne-invitee {
+  display: inline-flex; align-items: center; gap: 7px;
+  border: 1.5px solid var(--border-input);
+  background: transparent;
+  border-radius: 999px;
+  padding: 5px 12px 5px 6px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  transition: all 0.15s;
+}
+.ne-invitee img { width: 22px; height: 22px; border-radius: 999px; }
+.ne-invitee.on { opacity: 1; border-color: var(--accent); color: var(--text); background: oklch(0.68 0.19 290 / 0.12); }
+
+/* ============ Vista anual del calendari ============ */
+.calx-year {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+@media (max-width: 1100px) { .calx-year { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 700px) { .calx-year { grid-template-columns: repeat(2, 1fr); } }
+.calx-year-month {
+  background: var(--bg-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  position: relative;
+  transition: border-color 0.15s, transform 0.15s;
+}
+.calx-year-month:hover { border-color: var(--accent); transform: translateY(-1px); }
+.calx-year-month-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12.5px; font-weight: 700; text-transform: capitalize; margin-bottom: 8px; }
+
+.calx-year-day {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  font-size: 8.5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-ghost);
+  min-width: 0;
+}
+
+.calx-year-day.today { outline: 1.5px solid var(--accent); }
+.calx-year-count {
+  flex-shrink: 0;
+  font-size: 10.5px; font-weight: 700;
+  background: oklch(0.68 0.19 290 / 0.18);
+  color: var(--accent-text);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+
+/* ============ Previsualització de pòster transparent ============ */
+.share-month-preview-wrap.poster-preview {
+  background:
+    linear-gradient(135deg, oklch(0.45 0.12 300 / 0.9), oklch(0.3 0.09 250 / 0.9)),
+    repeating-conic-gradient(oklch(1 0 0 / 0.08) 0% 25%, transparent 0% 50%) 0 0 / 24px 24px;
+}
+
+/* ============ Fix: mini calendari dins la barra lateral ============ */
+.calx-sidebar { min-width: 0; overflow: hidden; }
+.calx-mini-grid { min-width: 0; }
+.calx-mini-day { padding: 0; min-width: 0; }
+.calx-mini-wd { min-width: 0; }
+.calx-legend-swatch { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+
+/* ============ Pòster del concert (capçalera de la fitxa) ============ */
+.cd-poster {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  border: 1px solid var(--border-soft);
+  background:
+    radial-gradient(120% 160% at 20% 0%, color-mix(in oklab, var(--band-accent, #8b7bff) 30%, transparent), transparent 55%),
+    radial-gradient(120% 160% at 90% 100%, color-mix(in oklab, var(--band-accent, #8b7bff) 18%, transparent), transparent 60%),
+    var(--bg-card);
+  padding: 40px 36px 26px;
+  margin-bottom: 16px;
+  text-align: center;
+}
+.cd-poster-glow {
+  position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(60% 45% at 50% 0%, oklch(1 0 0 / 0.07), transparent 70%);
+}
+.cd-poster-kicker {
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.cd-poster-title {
+  font-family: var(--font-display, 'Space Grotesk'), sans-serif;
+  font-weight: 700;
+  font-size: clamp(34px, 6vw, 64px);
+  line-height: 1.02;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  background: linear-gradient(180deg, var(--text), color-mix(in oklab, var(--band-accent, #8b7bff) 60%, var(--text)));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+.cd-poster-date {
+  font-size: clamp(16px, 2.4vw, 22px);
+  font-weight: 600;
+  font-style: italic;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.cd-poster-place {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 14px; font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+.cd-poster-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: 20px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border-soft);
+  text-align: left;
+}
+.cd-poster-foot .cd-meters { display: flex; gap: 18px; min-width: 0; }
+.cd-poster-foot .cd-meter { width: 150px; }
+.cd-poster-share { white-space: nowrap; }
+@media (max-width: 700px) {
+  .cd-poster { padding: 28px 18px 20px; }
+  .cd-poster-foot { gap: 12px; }
+}
+
+/* Subpestanyes de la fitxa del concert */
+.cd-tabs { margin-bottom: 16px; }
+
+/* ============ Taula de concerts (columnes noves) ============ */
+.ccols { grid-template-columns: 128px 1.1fr 0.9fr 0.9fr 0.9fr 78px 96px 70px 90px 34px; min-width: 960px; }
+.ccols-noband { grid-template-columns: 132px 1fr 1fr 1fr 82px 100px 74px 92px 34px; min-width: 840px; }
+.cc-bold { font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-time { color: var(--text-faint); font-size: 12px; }
+.cc-fdr { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.cc-fdr-pct { font-size: 12.5px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.t-head.ccols {
+  border-radius: var(--radius); border: 1px solid var(--border);
+  position: sticky; top: 75px; z-index: 2;
+  background: var(--bg-card);
+}
