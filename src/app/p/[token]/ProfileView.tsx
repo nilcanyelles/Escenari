@@ -10,6 +10,7 @@ import { setMemberPermAction } from "@/app/(app)/grup/actions";
 import { DEFAULT_PERMS, PERM_LABELS } from "@/lib/perms";
 import type { MemberPerms } from "@/lib/types";
 import ProfileShareModal from "./ProfileShareModal";
+import InstrumentPicker from "@/components/InstrumentPicker";
 
 // Permisos del membre en un grup, editables pel gestor des del perfil.
 function BandPermsRow({ bandId, memberName, initial }: { bandId: string; memberName: string; initial: Partial<MemberPerms> }) {
@@ -111,7 +112,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState({
     name: data.name,
-    instruments: data.instruments.join(", "),
+    instruments: data.instruments,
     bio: data.bio,
     igHandle: data.igHandle,
     phone: data.phone,
@@ -135,7 +136,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
     if (canEditAll) {
       await updatePersonAction(data.token, {
         name: form.name,
-        instruments: form.instruments.split(",").map((s) => s.trim()).filter(Boolean),
+        instruments: form.instruments,
         phone: form.phone,
         email: form.email,
       });
@@ -327,8 +328,8 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                 <>
                   <div><label className="form-label">Nom</label>
                     <input className="field-input form-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
-                  <div><label className="form-label">Instruments (separats per comes)</label>
-                    <input className="field-input form-field" value={form.instruments} onChange={(e) => setForm({ ...form, instruments: e.target.value })} /></div>
+                  <div><label className="form-label">Instruments</label>
+                    <InstrumentPicker value={form.instruments} onChange={(next) => setForm({ ...form, instruments: next })} /></div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div><label className="form-label">Telèfon (trucades i WhatsApp)</label>
                       <input className="field-input form-field" placeholder="+34 600 000 000" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>

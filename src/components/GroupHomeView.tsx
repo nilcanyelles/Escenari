@@ -16,6 +16,7 @@ import type { MemberPerms } from "@/lib/types";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
+import InstrumentPicker from "@/components/InstrumentPicker";
 
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
@@ -147,7 +148,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists">("inici");
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
-  const [addForm, setAddForm] = useState({ name: "", instruments: "", role: "", phone: "", email: "" });
+  const [addForm, setAddForm] = useState<{ name: string; instruments: string[]; role: string; phone: string; email: string }>({ name: "", instruments: [], role: "", phone: "", email: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [joinCopied, setJoinCopied] = useState(false);
   const [backups, setBackups] = useState<BackupPerson[]>(() =>
@@ -193,11 +194,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       await addBandPersonAction(band.id, addKind, {
         name: addForm.name,
         role: addForm.role,
-        instruments: addForm.instruments.split(",").map((s) => s.trim()).filter(Boolean),
+        instruments: addForm.instruments,
         phone: addForm.phone,
         email: addForm.email,
       });
-      setAddForm({ name: "", instruments: "", role: "", phone: "", email: "" });
+      setAddForm({ name: "", instruments: [], role: "", phone: "", email: "" });
       setAddKind(null);
       router.refresh();
     } catch (err) {
@@ -405,9 +406,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="fin-form" style={{ marginTop: 14 }}>
             <div className="fin-form-grid">
               <input className="field-input compact-field" placeholder="Nom *" value={addForm.name} onChange={(e) => setAddForm({ ...addForm, name: e.target.value })} />
-              <input className="field-input compact-field" placeholder="Instruments (separats per comes)" value={addForm.instruments} onChange={(e) => setAddForm({ ...addForm, instruments: e.target.value })} />
               <input className="field-input compact-field" placeholder="Telèfon" value={addForm.phone} onChange={(e) => setAddForm({ ...addForm, phone: e.target.value })} />
               <input className="field-input compact-field" type="email" placeholder="Correu" value={addForm.email} onChange={(e) => setAddForm({ ...addForm, email: e.target.value })} />
+            </div>
+            <div>
+              <label className="form-label">Instruments</label>
+              <InstrumentPicker value={addForm.instruments} onChange={(next) => setAddForm({ ...addForm, instruments: next })} />
             </div>
             <div style={{ display: "flex", gap: 8 }}>
               <button type="button" className="btn-outline" onClick={() => setAddKind(null)}>Cancel·la</button>
@@ -520,9 +524,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="backup-add-form">
             <input className="field-input form-field compact-field" placeholder="Nom" value={backupDraft.name}
               onChange={(e) => setBackupDraft({ ...backupDraft, name: e.target.value })} />
-            <input className="field-input form-field compact-field" placeholder="Instruments (separats per comes)"
-              value={backupDraft.instruments.join(", ")}
-              onChange={(e) => setBackupDraft({ ...backupDraft, instruments: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
+            <InstrumentPicker value={backupDraft.instruments}
+              onChange={(next) => setBackupDraft({ ...backupDraft, instruments: next })} />
             <input className="field-input form-field compact-field" placeholder="Telèfon" value={backupDraft.phone}
               onChange={(e) => setBackupDraft({ ...backupDraft, phone: e.target.value })} />
             <div style={{ display: "flex", gap: 8 }}>
