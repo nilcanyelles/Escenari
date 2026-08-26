@@ -17,23 +17,26 @@ import FilesPanel from "@/components/FilesPanel";
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
 import { normalize } from "@/lib/text";
-import { personColorHue } from "@/lib/tags";
+import { bandColor } from "@/lib/tags";
 import type { Person } from "@/lib/types";
+import { openPersonProfileAction } from "@/app/p/profile-actions";
 
-// Targetes "chroma" per a l'equip: nom, instrument i @ estil Instagram.
-function personChromaItem(p: Person, concertCount: number | null): ChromaItem {
-  const h = personColorHue(p.name);
+// Targetes "chroma" per a l'equip: colors del grup, nom, instrument i @ estil
+// Instagram; el clic obre la pàgina de perfil del músic.
+function personChromaItem(p: Person, concertCount: number | null, band: Band, onOpen: (name: string) => void): ChromaItem {
   const handle = "@" + normalize(p.name).replace(/\s+/g, "");
   const inss = instrumentsFor(p);
+  const c1 = band.color1 || bandColor(band.id).color;
+  const c2 = band.color2 || "#241f38";
   return {
     image: personPhotoDataUri(p.name),
     title: p.name,
     subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
     handle,
     location: concertCount !== null ? `${concertCount} concerts` : undefined,
-    borderColor: `hsl(${h}, 62%, 58%)`,
-    gradient: `linear-gradient(145deg, hsl(${h}, 55%, 32%), #000)`,
-    url: `https://instagram.com/${handle.slice(1)}`,
+    borderColor: c1,
+    gradient: `linear-gradient(150deg, ${c1} 0%, ${c2} 78%)`,
+    onClick: () => onOpen(p.name),
   };
 }
 
@@ -92,6 +95,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const openRequests = backupRequests.filter((r) => r.status === "oberta");
   const concertsById: Record<string, Concert> = {};
   concerts.forEach((c) => { concertsById[c.id] = c; });
+
+  // Obre la pàgina de perfil compartible de la persona.
+  async function openProfile(name: string) {
+    const { token } = await openPersonProfileAction(name);
+    router.push(`/p/${token}`);
+  }
 
   async function persistBackups(next: BackupPerson[]) {
     setSavingBackups(true);
@@ -161,7 +170,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 <div className="bento-chroma">
                   <ChromaGrid
                     className="chroma-compact"
-                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null))}
+                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null, band, openProfile))}
                     columns={4}
                     cardWidth={104}
                     radius={150}
@@ -247,7 +256,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té membres — edita el grup per afegir-n&apos;hi.</div>
         ) : (
           <ChromaGrid
-            items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0))}
+            items={band.members.map((m) => personChromaItem(m, concertCountByPerson[m.name] || 0, band, openProfile))}
             columns={4}
             cardWidth={190}
             radius={240}
@@ -260,7 +269,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <div className="panel">
           <div className="panel-title" style={{ marginBottom: 14 }}>Equip tècnic</div>
           <ChromaGrid
-            items={band.crew.map((m) => personChromaItem(m, null))}
+            items={band.crew.map((m) => personChromaItem(m, null, band, openProfile))}
             columns={4}
             cardWidth={190}
             radius={240}

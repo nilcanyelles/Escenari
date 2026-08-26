@@ -5,6 +5,7 @@ import { bandPhotoDataUri } from "@/lib/tags";
 import Link from "next/link";
 import AttendanceButtons from "./AttendanceButtons";
 import FeedSubscribe from "./FeedSubscribe";
+import MyProfileButton from "./MyProfileButton";
 
 export const dynamic = "force-dynamic";
 
@@ -55,7 +56,10 @@ export default async function ArtistHomePage() {
     <div>
       <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div className="artist-section-title">Pròxims bolos</div>
-        {feedToken && <FeedSubscribe token={feedToken} />}
+        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <MyProfileButton />
+          {feedToken && <FeedSubscribe token={feedToken} />}
+        </div>
       </div>
       {upcoming.length === 0 ? (
         <div className="artist-empty">

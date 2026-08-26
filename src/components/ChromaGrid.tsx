@@ -15,6 +15,7 @@ export type ChromaItem = {
   borderColor?: string;
   gradient?: string;
   url?: string;
+  onClick?: () => void;
 };
 
 export default function ChromaGrid({
@@ -104,12 +105,13 @@ export default function ChromaGrid({
           onMouseMove={handleCardMove}
           onClick={(e) => {
             e.stopPropagation();
-            if (c.url) window.open(c.url, "_blank", "noopener,noreferrer");
+            if (c.onClick) c.onClick();
+            else if (c.url) window.open(c.url, "_blank", "noopener,noreferrer");
           }}
           style={{
             ["--card-border" as string]: c.borderColor || "transparent",
             ["--card-gradient" as string]: c.gradient || "linear-gradient(145deg, #444, #000)",
-            cursor: c.url ? "pointer" : "default",
+            cursor: c.onClick || c.url ? "pointer" : "default",
           }}
         >
           <div className="chroma-img-wrapper">

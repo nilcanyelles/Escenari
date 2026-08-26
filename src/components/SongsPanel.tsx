@@ -213,6 +213,22 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
   const [importOpen, setImportOpen] = useState(false);
   const [importText, setImportText] = useState("");
   const [importing, setImporting] = useState(false);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Reproducció ràpida estil Spotify des de la llista.
+  function togglePlay(songId: string, fileId: string) {
+    if (playingId === songId) {
+      audioRef.current?.pause();
+      setPlayingId(null);
+      return;
+    }
+    if (!audioRef.current) audioRef.current = new Audio();
+    audioRef.current.src = `/api/file/${fileId}`;
+    audioRef.current.play();
+    audioRef.current.onended = () => setPlayingId(null);
+    setPlayingId(songId);
+  }
 
   const q = normalize(search.trim());
   const list = songs.filter((s) => !q || normalize(s.title).includes(q) || normalize(s.artist).includes(q));
@@ -254,30 +270,51 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
         {list.length === 0 ? (
           <div className="empty-state">{songs.length ? "Cap cançó coincideix amb la cerca." : "Encara no hi ha cançons al repertori."}</div>
         ) : (
-          <div className="song-list">
-            <div className="t-row t-head song-cols"><div>Títol</div><div>Artista</div><div>To</div><div>Tempo</div><div>Durada</div><div>Adjunts</div><div></div></div>
-            {list.map((s) => (
-              <div key={s.id} className="t-row song-cols clickable" onClick={() => setEditing({ song: s })}>
-                <div className="t-strong">{s.title}{hasChords(s.lyrics) && <span className="song-chord-badge" title="Té acords">♪</span>}</div>
-                <div className="t-dim">{s.artist || "—"}</div>
-                <div className="t-dim">{s.songKey || "—"}</div>
-                <div className="t-dim">{s.tempo || "—"}</div>
-                <div className="t-dim">{s.duration || "—"}</div>
-                <div className="t-dim">{s.files.length ? `${s.files.length} 📎` : "—"}</div>
-                <div onClick={(e) => e.stopPropagation()}>
-                  {canEdit && (
-                    <button type="button" className="row-delete-btn" title="Elimina"
-                      onClick={async () => {
-                        if (!confirm(`Eliminar "${s.title}" del repertori?`)) return;
-                        await deleteSongAction(band.id, s.id);
-                        router.refresh();
-                      }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
-                  )}
+          <div className="sp-list">
+            <div className="sp-row sp-head">
+              <span className="sp-idx">#</span>
+              <span></span>
+              <span>Títol</span>
+              <span className="sp-band-col">To · BPM</span>
+              <span className="sp-dur">⏱</span>
+              <span className="sp-actions"></span>
+            </div>
+            {list.map((s, i) => {
+              const audio = s.files.find((f) => f.mime.startsWith("audio"));
+              const coverColor = band.color1 || "#8b7bff";
+              return (
+                <div key={s.id} className={"sp-row clickable" + (playingId === s.id ? " playing" : "")} onClick={() => setEditing({ song: s })}>
+                  <span className="sp-idx" onClick={(e) => e.stopPropagation()}>
+                    {audio ? (
+                      <button type="button" className="sp-play" title="Escolta la gravació" onClick={() => togglePlay(s.id, audio.id)}>
+                        {playingId === s.id ? "❚❚" : "▶"}
+                      </button>
+                    ) : (
+                      <span className="sp-num">{i + 1}</span>
+                    )}
+                  </span>
+                  <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${coverColor}, #17141f)` }}>♪</span>
+                  <span className="sp-title-wrap">
+                    <span className="sp-title">{s.title}{hasChords(s.lyrics) && <span className="song-chord-badge" title="Té acords">♪</span>}</span>
+                    <span className="sp-artist">{s.artist || band.name}{s.files.length ? ` · ${s.files.length} 📎` : ""}</span>
+                  </span>
+                  <span className="sp-band-col">{[s.songKey, s.tempo ? `${s.tempo} bpm` : ""].filter(Boolean).join(" · ") || "—"}</span>
+                  <span className="sp-dur">{s.duration || "—"}</span>
+                  <span className="sp-actions" onClick={(e) => e.stopPropagation()}>
+                    {canEdit && (
+                      <button type="button" className="row-delete-btn" title="Elimina"
+                        onClick={async () => {
+                          if (!confirm(`Eliminar "${s.title}" del repertori?`)) return;
+                          await deleteSongAction(band.id, s.id);
+                          router.refresh();
+                        }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      </button>
+                    )}
+                  </span>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
