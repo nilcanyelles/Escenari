@@ -4,8 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import type { Band, Concert, Person } from "@/lib/types";
 import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateLong, statusColors, today } from "@/lib/format";
-import { saveConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
-import { rsIsComplete } from "@/lib/route-sheet";
+import { saveConcertAction, deleteConcertAction, searchCitiesAction, searchVenuesAction } from "@/app/(app)/concerts/actions";
+import { rsIsComplete, rsCompletionPercent } from "@/lib/route-sheet";
 import { bandColorHue } from "@/lib/tags";
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import ShareStoryModal from "@/components/ShareStoryModal";
@@ -28,6 +28,21 @@ type Cf = {
 
 function personLabel(m: Person): string {
   return m.name + (m.role ? " — " + m.role : "");
+}
+
+// Vermell per sota del 15%, groc entre 15% i 80%, i a partir d'aquí una
+// transició progressiva cap a un verd intens al 100%.
+function rsProgressColor(percent: number, alpha = 1): string {
+  let l: number, c: number, h: number;
+  if (percent < 15) { l = 0.62; c = 0.19; h = 25; }
+  else if (percent < 80) { l = 0.8; c = 0.15; h = 90; }
+  else {
+    const t = (percent - 80) / 20;
+    h = 90 + (145 - 90) * t;
+    c = 0.15 + (0.19 - 0.15) * t;
+    l = 0.8 + (0.7 - 0.8) * t;
+  }
+  return `oklch(${l.toFixed(3)} ${c.toFixed(3)} ${h.toFixed(1)} / ${alpha})`;
 }
 
 export default function ConcertModal({
@@ -258,10 +273,68 @@ export default function ConcertModal({
   }
 
   const [routeSheetComplete, setRouteSheetComplete] = useState(() => mode === "edit" && concert ? rsIsComplete(concert) : false);
+  const [routeSheetPercent, setRouteSheetPercent] = useState(() => mode === "edit" && concert ? rsCompletionPercent(concert) : 0);
+
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
+  const [cityResults, setCityResults] = useState<{ description: string; placeId: string }[]>([]);
+  const [citySearching, setCitySearching] = useState(false);
+  const citySearchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current);
+    const q = citySearch.trim();
+    if (q.length < 2) { setCityResults([]); setCitySearching(false); return; }
+    setCitySearching(true);
+    citySearchTimer.current = window.setTimeout(async () => {
+      const results = await searchCitiesAction(q);
+      setCityResults(results);
+      setCitySearching(false);
+    }, 300);
+    return () => { if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current); };
+  }, [citySearch]);
+
+  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
+  const [venueSearch, setVenueSearch] = useState("");
+  const [venueResults, setVenueResults] = useState<{ description: string; name: string; placeId: string }[]>([]);
+  const [venueSearching, setVenueSearching] = useState(false);
+  const venueSearchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current);
+    const q = venueSearch.trim();
+    if (q.length < 2) { setVenueResults([]); setVenueSearching(false); return; }
+    setVenueSearching(true);
+    venueSearchTimer.current = window.setTimeout(async () => {
+      const results = await searchVenuesAction(q);
+      setVenueResults(results);
+      setVenueSearching(false);
+    }, 300);
+    return () => { if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current); };
+  }, [venueSearch]);
 
   const bandHue = cf.bandId ? bandColorHue(cf.bandId) : null;
-  const modalStyle = bandHue !== null
-    ? { background: `linear-gradient(160deg, oklch(0.32 0.1 ${bandHue} / 0.55) 0%, oklch(0.2 0.02 258) 55%), oklch(0.2 0.02 258)` }
+  // Degradat vertical amb aturades en píxels (no percentatges) i una mida
+  // fixa, perquè es pugui repartir de manera idèntica entre el modal i la
+  // capçalera fixa tot i tenir alçades diferents — així la capçalera pot
+  // "lliscar" per aquest mateix degradat en fer scroll i sempre hi coincideix.
+  const gradientImage = bandHue !== null
+    ? `linear-gradient(to bottom, oklch(0.32 0.1 ${bandHue} / 0.55) 0px, oklch(0.2 0.02 258) 320px)`
+    : null;
+  const gradientSize = "100% 1400px";
+  const modalStyle = gradientImage
+    ? { backgroundImage: gradientImage, backgroundSize: gradientSize, backgroundRepeat: "no-repeat" as const, backgroundColor: "oklch(0.2 0.02 258)" }
+    : undefined;
+
+  const modalScrollRef = useRef<HTMLDivElement>(null);
+  const [headerScrollY, setHeaderScrollY] = useState(0);
+  useEffect(() => {
+    const el = modalScrollRef.current;
+    if (!el) return;
+    function onScroll() { setHeaderScrollY(el!.scrollTop); }
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
+  const headerStyle = gradientImage
+    ? { backgroundImage: gradientImage, backgroundSize: gradientSize, backgroundRepeat: "no-repeat" as const, backgroundPosition: `0 ${-headerScrollY}px`, backgroundColor: "oklch(0.2 0.02 258)" }
     : undefined;
 
   useEffect(() => {
@@ -284,7 +357,8 @@ export default function ConcertModal({
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
         </button>
       )}
-      <div className="modal concert-modal" style={modalStyle} onClick={(e) => e.stopPropagation()}>
+      <div className="modal concert-modal" ref={modalScrollRef} style={modalStyle} onClick={(e) => e.stopPropagation()}>
+        <div className="cf-sticky-header" style={headerStyle}>
         <div className="modal-head">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div className="modal-title">{mode === "new" ? "Nou concert" : "Detall del concert"}</div>
@@ -343,15 +417,16 @@ export default function ConcertModal({
           {mode === "edit" && (
             <div className="cf-rs-tab-wrap">
               {!routeSheetComplete && (
-                <div className="cf-rs-warning-badge">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-                  <span>Inacabat</span>
+                <div className="cf-rs-warning-badge" style={{ color: rsProgressColor(routeSheetPercent), borderColor: rsProgressColor(routeSheetPercent, 0.4), background: rsProgressColor(routeSheetPercent, 0.14) }}>
+                  <span className="cf-rs-progress"><span className="cf-rs-progress-fill" style={{ width: `${routeSheetPercent}%`, background: rsProgressColor(routeSheetPercent) }}></span></span>
+                  <span>{routeSheetPercent}%</span>
                 </div>
               )}
               <button type="button" className={activeTab === "routesheet" ? "active" : ""} onClick={() => setActiveTab("routesheet")}>Full de ruta</button>
             </div>
           )}
           <button type="button" className={activeTab === "attendance" ? "active" : ""} onClick={() => setActiveTab("attendance")}>Assistència</button>
+        </div>
         </div>
 
         <div className="modal-form">
@@ -414,8 +489,50 @@ export default function ConcertModal({
                   </div>
                 </div>
                 <div className="form-row">
-                  <div><label className="form-label">Ubicació</label><input className="field-input form-field" type="text" value={cf.venue} onChange={(e) => setCf((prev) => ({ ...prev, venue: e.target.value }))} /></div>
-                  <div><label className="form-label">Població</label><input className="field-input form-field" type="text" value={cf.city} onChange={(e) => setCf((prev) => ({ ...prev, city: e.target.value }))} /></div>
+                  <div style={{ position: "relative" }}>
+                    <label className="form-label">Ubicació</label>
+                    <input className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca un recinte…"
+                      value={venueDropdownOpen ? venueSearch : cf.venue}
+                      onFocus={(e) => { setVenueSearch(""); setVenueDropdownOpen(true); e.target.select(); }}
+                      onChange={(e) => setVenueSearch(e.target.value)} />
+                    {venueDropdownOpen && (
+                      <>
+                        <div className="year-picker-overlay" onClick={() => setVenueDropdownOpen(false)}></div>
+                        <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
+                          {venueSearch.trim().length < 2 ? (
+                            <div className="cf-band-noresults">Escriu almenys 2 lletres…</div>
+                          ) : venueSearching ? (
+                            <div className="cf-band-noresults">Cercant…</div>
+                          ) : venueResults.length ? venueResults.map((v) => (
+                            <button key={v.placeId} type="button" className={"year-option" + (v.name === cf.venue ? " active" : "")}
+                              onClick={() => { setCf((prev) => ({ ...prev, venue: v.name })); setVenueDropdownOpen(false); }}>{v.description}</button>
+                          )) : <div className="cf-band-noresults">Cap recinte coincideix</div>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <div style={{ position: "relative" }}>
+                    <label className="form-label">Població</label>
+                    <input className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca una població…"
+                      value={cityDropdownOpen ? citySearch : cf.city}
+                      onFocus={(e) => { setCitySearch(""); setCityDropdownOpen(true); e.target.select(); }}
+                      onChange={(e) => setCitySearch(e.target.value)} />
+                    {cityDropdownOpen && (
+                      <>
+                        <div className="year-picker-overlay" onClick={() => setCityDropdownOpen(false)}></div>
+                        <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
+                          {citySearch.trim().length < 2 ? (
+                            <div className="cf-band-noresults">Escriu almenys 2 lletres…</div>
+                          ) : citySearching ? (
+                            <div className="cf-band-noresults">Cercant…</div>
+                          ) : cityResults.length ? cityResults.map((c) => (
+                            <button key={c.placeId} type="button" className={"year-option" + (c.description === cf.city ? " active" : "")}
+                              onClick={() => { setCf((prev) => ({ ...prev, city: c.description })); setCityDropdownOpen(false); }}>{c.description}</button>
+                          )) : <div className="cf-band-noresults">Cap població coincideix</div>}
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
                 <div className="form-row">
                   <div><label className="form-label">Colla/Festa</label><input className="field-input form-field" type="text" value={cf.festaEntitat} onChange={(e) => setCf((prev) => ({ ...prev, festaEntitat: e.target.value }))} /></div>
@@ -445,7 +562,7 @@ export default function ConcertModal({
           )}
 
           {activeTab === "routesheet" && mode === "edit" && concert && (
-            <RouteSheetEditor concert={concert} onCompleteChange={setRouteSheetComplete} onSaved={() => { everSavedRef.current = true; }} />
+            <RouteSheetEditor concert={concert} onCompleteChange={setRouteSheetComplete} onPercentChange={setRouteSheetPercent} onSaved={() => { everSavedRef.current = true; }} />
           )}
 
           {activeTab === "attendance" && (

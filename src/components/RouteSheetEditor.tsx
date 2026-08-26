@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import type { Concert } from "@/lib/types";
 import {
   type RouteSheet, type LlocItem, type HospitalitatItem, type TecnicItem,
-  normalizeRouteSheet, rsBlankItem, rsIsComplete, RS_SECTION_ICONS,
+  normalizeRouteSheet, rsBlankItem, rsIsComplete, rsCompletionPercent, RS_SECTION_ICONS,
 } from "@/lib/route-sheet";
 import { saveRouteSheetAction } from "@/app/(app)/concerts/actions";
 
@@ -46,7 +46,7 @@ function TimePairInput({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-export default function RouteSheetEditor({ concert, onCompleteChange, onSaved }: { concert: Concert; onCompleteChange?: (complete: boolean) => void; onSaved?: () => void }) {
+export default function RouteSheetEditor({ concert, onCompleteChange, onPercentChange, onSaved }: { concert: Concert; onCompleteChange?: (complete: boolean) => void; onPercentChange?: (percent: number) => void; onSaved?: () => void }) {
   const router = useRouter();
   const [rsf, setRsf] = useState<RouteSheet>(() => normalizeRouteSheet(concert.routeSheet as RouteSheet | null, concert));
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
@@ -103,7 +103,9 @@ export default function RouteSheetEditor({ concert, onCompleteChange, onSaved }:
   }, [rsf]);
 
   const complete = rsIsComplete({ ...concert, routeSheet: rsf });
+  const percent = rsCompletionPercent({ ...concert, routeSheet: rsf });
   useEffect(() => { onCompleteChange?.(complete); }, [complete, onCompleteChange]);
+  useEffect(() => { onPercentChange?.(percent); }, [percent, onPercentChange]);
 
   // ---- Lloc ----
   const RS_LINK_FIELDS: Record<string, boolean> = { "adreça": true, "descàrrega": true, "parking": true };

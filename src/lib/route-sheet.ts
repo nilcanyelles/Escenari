@@ -117,6 +117,30 @@ function rsTecnicComplete(items: TecnicItem[] | undefined): boolean {
   });
 }
 
+// Percentatge de camps emplenats del full de ruta (0-100). Només compta els
+// camps que l'usuari ha d'omplir de debò — l'etiqueta/fase ja ve preomplerta
+// per defecte (Recinte, Arribada, Dietes...), així que no compta com a
+// progrés; sí que compten el valor de cada camp de lloc/hospitalitat/tècnic,
+// les hores d'inici i fi de cada fase de l'horari, i els contactes (que no
+// tenen cap valor per defecte).
+export function rsCompletionPercent(c: Concert): number {
+  const rs = c.routeSheet as RouteSheet | null | undefined;
+  if (!rs) return 0;
+  let total = 0, filled = 0;
+  const check = (v: unknown) => { total++; if (v && String(v).trim()) filled++; };
+
+  (rs.lloc || []).forEach((it) => { check(it.value); });
+  (rs.contacts || []).forEach((it) => { check(it.role); check(it.name); check(it.phone); check(it.company); });
+  (rs.schedule || []).forEach((it) => { check(it.start); check(it.end); });
+  (rs.hospitalitat || []).forEach((it) => { check(it.value); });
+  (rs.tecnic || []).forEach((it) => {
+    if (!(it.label && it.label.trim().toLowerCase() === "pantalla led")) check(it.value);
+  });
+
+  if (!total) return 0;
+  return Math.round((filled / total) * 100);
+}
+
 export function rsIsComplete(c: Concert): boolean {
   const rs = c.routeSheet as RouteSheet | null | undefined;
   if (!rs) return false;

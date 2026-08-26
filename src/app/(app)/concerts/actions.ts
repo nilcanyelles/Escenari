@@ -134,3 +134,77 @@ export async function deleteConcertAction(id: string) {
   await pool.query("delete from concerts where id=$1 and workspace_id=$2", [id, workspaceId]);
   revalidateAll();
 }
+
+// Cerca de poblacions reals de tot el món via Photon (photon.komoot.io), una
+// API de geocodificació gratuïta basada en OpenStreetMap que no necessita
+// clau. Es filtra per type="city" (la classificació pròpia de Photon per a
+// nuclis de població: ciutats, viles i pobles), descartant carrers, comarques
+// i altres resultats que no siguin una població.
+export async function searchCitiesAction(query: string): Promise<{ description: string; placeId: string }[]> {
+  await requireManagerAction();
+  const q = (query || "").trim();
+  if (!q || q.length < 2) return [];
+  const url = new URL("https://photon.komoot.io/api/");
+  url.searchParams.set("q", q);
+  url.searchParams.set("limit", "8");
+  url.searchParams.set("lang", "en");
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    const features: { properties: Record<string, unknown> }[] = data.features || [];
+    const seen = new Set<string>();
+    const out: { description: string; placeId: string }[] = [];
+    for (const f of features) {
+      const p = f.properties || {};
+      if (p.type !== "city") continue;
+      const name = String(p.name || "").trim();
+      if (!name) continue;
+      const description = [name, p.state, p.country].filter(Boolean).join(", ");
+      const key = description.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ description, placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}` });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+// Cerca de recintes/llocs reals (sales, places, pavellons...) via Photon,
+// la mateixa API gratuïta que la de poblacions. Aquí no es filtra per
+// type="city" perquè un recinte és un punt d'interès concret, no una
+// població — es descarten només els resultats sense nom.
+export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; placeId: string }[]> {
+  await requireManagerAction();
+  const q = (query || "").trim();
+  if (!q || q.length < 2) return [];
+  const url = new URL("https://photon.komoot.io/api/");
+  url.searchParams.set("q", q);
+  url.searchParams.set("limit", "8");
+  url.searchParams.set("lang", "en");
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) return [];
+    const data = await res.json();
+    const features: { properties: Record<string, unknown> }[] = data.features || [];
+    const seen = new Set<string>();
+    const out: { description: string; name: string; placeId: string }[] = [];
+    for (const f of features) {
+      const p = f.properties || {};
+      const name = String(p.name || "").trim();
+      if (!name) continue;
+      const city = String(p.city || "").trim();
+      const context = [city || p.state, p.country].filter(Boolean).join(", ");
+      const description = context ? `${name}, ${context}` : name;
+      const key = description.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ description, name, placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}` });
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
