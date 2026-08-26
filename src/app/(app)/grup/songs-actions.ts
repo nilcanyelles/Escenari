@@ -38,6 +38,7 @@ export type SaveSongInput = {
   duration: string;
   notes: string;
   lyrics: string;
+  coverUrl?: string;
 };
 
 export async function saveSongAction(input: SaveSongInput): Promise<{ id: string }> {
@@ -45,23 +46,103 @@ export async function saveSongAction(input: SaveSongInput): Promise<{ id: string
   const pool = db();
   if (input.id) {
     await pool.query(
-      `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7
-       where id=$8 and band_id=$9`,
+      `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7, cover_url=$8
+       where id=$9 and band_id=$10`,
       [(input.title || "Sense títol").trim(), input.artist || "", input.tempo || 0, input.songKey || "",
-        input.duration || "", input.notes || "", input.lyrics || "", input.id, input.bandId]
+        input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "", input.id, input.bandId]
     );
     revalidateSongs(input.bandId);
     return { id: input.id };
   }
   const id = "sg" + Date.now() + Math.floor(Math.random() * 1000);
   await pool.query(
-    `insert into songs (id, workspace_id, band_id, title, artist, tempo, song_key, duration, notes, lyrics)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+    `insert into songs (id, workspace_id, band_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
     [id, workspaceId, input.bandId, (input.title || "Sense títol").trim(), input.artist || "",
-      input.tempo || 0, input.songKey || "", input.duration || "", input.notes || "", input.lyrics || ""]
+      input.tempo || 0, input.songKey || "", input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || ""]
   );
   revalidateSongs(input.bandId);
   return { id };
+}
+
+// ---------- Autocompletat amb APIs obertes ----------
+// iTunes Search (caràtula, artista, durada) + Deezer (BPM) + LRCLIB (lletra).
+// Totes gratuïtes i sense clau. Per als acords no hi ha cap API oberta legal
+// (Acords Catalans / Ultimate Guitar no en tenen): la lletra arriba neta i
+// els acords s'hi afegeixen a mà amb [claudàtors].
+export type SongLookupResult = {
+  found: boolean;
+  artist?: string;
+  title?: string;
+  duration?: string;
+  coverUrl?: string;
+  bpm?: number;
+  lyrics?: string;
+};
+
+export async function lookupSongAction(bandId: string, title: string, artist: string): Promise<SongLookupResult> {
+  await requireBandAccess(bandId);
+  const q = `${title} ${artist}`.trim();
+  if (!q) return { found: false };
+  const out: SongLookupResult = { found: false };
+
+  // iTunes: metadades + caràtula gran.
+  try {
+    const res = await fetch(`https://itunes.apple.com/search?term=${encodeURIComponent(q)}&entity=song&limit=1&country=ES`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      const t = data.results?.[0];
+      if (t) {
+        out.found = true;
+        out.artist = t.artistName;
+        out.title = t.trackName;
+        out.coverUrl = (t.artworkUrl100 || "").replace("100x100", "600x600");
+        if (t.trackTimeMillis) {
+          const secs = Math.round(t.trackTimeMillis / 1000);
+          out.duration = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, "0")}`;
+        }
+      }
+    }
+  } catch { /* segueix amb la resta */ }
+
+  // Deezer: BPM (i caràtula de reserva).
+  try {
+    const res = await fetch(`https://api.deezer.com/search?q=${encodeURIComponent(q)}&limit=1`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      const t = data.data?.[0];
+      if (t) {
+        out.found = true;
+        out.artist = out.artist || t.artist?.name;
+        out.title = out.title || t.title;
+        out.coverUrl = out.coverUrl || t.album?.cover_big || "";
+        if (t.id) {
+          const det = await fetch(`https://api.deezer.com/track/${t.id}`, { cache: "no-store" });
+          if (det.ok) {
+            const td = await det.json();
+            if (td.bpm && td.bpm > 0) out.bpm = Math.round(td.bpm);
+          }
+        }
+      }
+    }
+  } catch { /* segueix */ }
+
+  // LRCLIB: lletra completa (sense acords).
+  try {
+    const params = new URLSearchParams({ track_name: out.title || title });
+    if (out.artist || artist) params.set("artist_name", out.artist || artist);
+    const res = await fetch(`https://lrclib.net/api/search?${params}`, { cache: "no-store" });
+    if (res.ok) {
+      const data = await res.json();
+      const hit = Array.isArray(data) ? data.find((d: { plainLyrics?: string }) => d.plainLyrics) : null;
+      if (hit?.plainLyrics) {
+        out.found = true;
+        out.lyrics = hit.plainLyrics;
+      }
+    }
+  } catch { /* res */ }
+
+  return out;
 }
 
 export async function deleteSongAction(bandId: string, songId: string) {

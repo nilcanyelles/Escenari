@@ -33,6 +33,7 @@ export type ProfileSong = {
   bandId: string;
   bandName: string;
   bandColor: string;
+  coverUrl: string;
   audioFileId: string | null;
 };
 
@@ -139,7 +140,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     });
 
     const sRows = (await pool.query(
-      `select s.id, s.title, s.artist, s.duration, s.song_key, s.band_id,
+      `select s.id, s.title, s.artist, s.duration, s.song_key, s.band_id, s.cover_url,
               (select f.id from files f where f.song_id = s.id and f.mime like 'audio%' order by f.created_at limit 1) as audio_id
        from songs s where s.band_id = any($1) order by lower(s.title)`,
       [visibleIds]
@@ -149,6 +150,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
       return {
         id: s.id, title: s.title, artist: s.artist, duration: s.duration, songKey: s.song_key,
         bandId: s.band_id, bandName: band?.name || "", bandColor: band?.color1 || "#8b7bff",
+        coverUrl: s.cover_url || "",
         audioFileId: s.audio_id || null,
       };
     });

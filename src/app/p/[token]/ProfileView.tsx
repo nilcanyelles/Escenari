@@ -6,6 +6,7 @@ import type { PersonProfileData } from "@/lib/person-profile";
 import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDate } from "@/lib/format";
 import { personPhotoDataUri, bandPhotoDataUri, instrumentIconFor } from "@/lib/tags";
 import { updateProfileInfoAction, uploadProfilePhotoAction, updatePersonAction } from "../profile-actions";
+import ProfileShareModal from "./ProfileShareModal";
 
 // Calendari mensual amb l'estat d'assistència de la persona a cada bolo.
 function AttendanceCalendar({ concerts, today }: { concerts: PersonProfileData["concerts"]; today: string }) {
@@ -90,12 +91,14 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
     hidden: new Set(data.hiddenBands),
   });
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
+  const [localPhoto, setLocalPhoto] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
 
-  const photoUrl = data.photoFileId ? `/api/file/${data.photoFileId}` : personPhotoDataUri(data.name);
+  // localPhoto: vista prèvia immediata just després de pujar una foto nova.
+  const photoUrl = localPhoto || (data.photoFileId ? `/api/file/${data.photoFileId}?v=${data.photoFileId}` : personPhotoDataUri(data.name));
   const upcoming = data.concerts.filter((c) => c.date >= today);
   const signedIn = isOwner || isManager;
 
@@ -136,19 +139,16 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
     <div className="pv">
       {/* Barra superior */}
       <div className="pv-topbar">
-        <span className="pf-brand" style={{ margin: 0 }}>ESCENARI</span>
+        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+          {isManager && <button type="button" className="cd-back" style={{ border: "none", background: "transparent", cursor: "pointer", font: "inherit" }} onClick={() => router.push("/grup")}>← Torna al grup</button>}
+          {isOwner && !isManager && <button type="button" className="cd-back" style={{ border: "none", background: "transparent", cursor: "pointer", font: "inherit" }} onClick={() => router.push("/artista")}>← Els meus bolos</button>}
+          <span className="pf-brand" style={{ margin: 0 }}>ESCENARI</span>
+        </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
           {(isOwner || isManager) && !editOpen && (
             <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el perfil</button>
           )}
-          <button
-            type="button" className="btn-save"
-            onClick={async () => {
-              await navigator.clipboard.writeText(window.location.href);
-              setCopied(true);
-              window.setTimeout(() => setCopied(false), 1600);
-            }}
-          >{copied ? "Enllaç copiat ✓" : "Comparteix"}</button>
+          <button type="button" className="btn-save" onClick={() => setShareOpen(true)}>Comparteix</button>
         </div>
       </div>
 
@@ -169,6 +169,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                     fd.set("file", f);
                     const res = await uploadProfilePhotoAction(fd);
                     if (!res.ok) alert(res.error);
+                    else setLocalPhoto(URL.createObjectURL(f)); // vista prèvia immediata
                     router.refresh();
                     e.target.value = "";
                   }} />
@@ -245,7 +246,11 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                         <span className="sp-num">{i + 1}</span>
                       )}
                     </span>
-                    <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${s.bandColor}, #17141f)` }}>♪</span>
+                    {s.coverUrl ? (
+                      <img className="sp-cover sp-cover-img" src={s.coverUrl} alt="" loading="lazy" />
+                    ) : (
+                      <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${s.bandColor}, #17141f)` }}>♪</span>
+                    )}
                     <span className="sp-title-wrap">
                       <span className="sp-title">{s.title}</span>
                       <span className="sp-artist">{s.artist || s.bandName}</span>
@@ -314,6 +319,8 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
           </div>
         </div>
       )}
+
+      {shareOpen && <ProfileShareModal data={data} photoUrl={photoUrl} onClose={() => setShareOpen(false)} />}
 
       <div className="pf-footer" style={{ paddingBottom: 28 }}>Perfil de músic generat amb Escenari</div>
     </div>

@@ -19,6 +19,7 @@ export type Song = {
   tags: string[];
   notes: string;
   lyrics: string; // format ChordPro: acords [Am] dins de la lletra
+  coverUrl: string;
   files: SongFile[];
   updatedAt: string;
 };
@@ -50,6 +51,7 @@ export async function getSongs(bandId: string): Promise<Song[]> {
     tags: r.tags || [],
     notes: r.notes,
     lyrics: r.lyrics,
+    coverUrl: r.cover_url || "",
     files: (r.file_list || []).map((f: Record<string, unknown>) => ({ ...f, createdAt: String(f.createdAt) })) as SongFile[],
     updatedAt: iso(r.updated_at),
   }));

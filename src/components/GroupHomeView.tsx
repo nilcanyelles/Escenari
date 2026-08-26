@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
-import { tagColors, bandPhotoDataUri, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
+import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColored, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
@@ -27,15 +27,15 @@ function personChromaItem(p: Person, concertCount: number | null, band: Band, on
   const handle = "@" + normalize(p.name).replace(/\s+/g, "");
   const inss = instrumentsFor(p);
   const c1 = band.color1 || bandColor(band.id).color;
-  const c2 = band.color2 || "#241f38";
+  const c2 = band.color2 || bandColor(band.id + "x").color;
   return {
-    image: personPhotoDataUri(p.name),
+    image: personPhotoDataUriColored(p.name, c1, c2),
     title: p.name,
     subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
     handle,
     location: concertCount !== null ? `${concertCount} concerts` : undefined,
     borderColor: c1,
-    gradient: `linear-gradient(150deg, ${c1} 0%, ${c2} 78%)`,
+    gradient: `linear-gradient(150deg, ${c1}, ${c2})`,
     onClick: () => onOpen(p.name),
   };
 }

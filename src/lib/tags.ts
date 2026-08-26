@@ -168,6 +168,21 @@ export function personColorHue(name: string): number {
   return hashStr(name) % 360;
 }
 
+// Variant amb els colors del grup (per a les targetes chroma de l'equip).
+export function personPhotoDataUriColored(name: string, c1: string, c2: string): string {
+  const svg = (
+    `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300">` +
+    `<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">` +
+    `<stop offset="0" stop-color="${xmlEscape(c1)}"/>` +
+    `<stop offset="1" stop-color="${xmlEscape(c2)}"/>` +
+    `</linearGradient></defs>` +
+    `<rect width="300" height="300" fill="url(#g)"/>` +
+    `<text x="150" y="172" font-family="Space Grotesk,Arial,sans-serif" font-size="86" font-weight="700" fill="white" fill-opacity="0.95" text-anchor="middle">${xmlEscape(bandInitials(name))}</text>` +
+    `</svg>`
+  );
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
 export function personPhotoDataUri(name: string): string {
   const h = personColorHue(name);
   const h2 = (h + 35 + (hashStr(name + "x") % 25)) % 360;
