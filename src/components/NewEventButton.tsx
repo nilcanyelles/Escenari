@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band } from "@/lib/types";
+import type { Band, Concert } from "@/lib/types";
 import { saveConcertAction, createEventAction } from "@/app/(app)/concerts/actions";
 import { personPhotoDataUri } from "@/lib/tags";
+import { normalize } from "@/lib/text";
 
 const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon: string; desc: string }[] = [
   { kind: "bolo", label: "Bolo", icon: "🎤", desc: "Concert amb tota la fitxa: caixet, full de ruta, factura…" },
@@ -16,8 +17,9 @@ const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon
 // "+ Nou esdeveniment": primer es tria el tipus. Un bolo obre la fitxa
 // completa; assaig/reunió/altre es creen en un moment des d'un popup amb
 // data, convidats i repetició estil Google Calendar.
-export default function NewEventButton({ bands, selectedBandId = "", defaultDate }: {
+export default function NewEventButton({ bands, concerts = [], selectedBandId = "", defaultDate }: {
   bands: Band[];
+  concerts?: Concert[];
   selectedBandId?: string;
   defaultDate?: string;
 }) {
@@ -28,12 +30,28 @@ export default function NewEventButton({ bands, selectedBandId = "", defaultDate
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(defaultDate || new Date().toISOString().slice(0, 10));
   const [time, setTime] = useState("20:00");
+  const [city, setCity] = useState("");
+  const [venue, setVenue] = useState("");
   const [invited, setInvited] = useState<Set<string>>(new Set());
   const [freq, setFreq] = useState<"cap" | "setmanal" | "quinzenal" | "mensual">("cap");
   const [count, setCount] = useState(4);
   const [busy, setBusy] = useState(false);
 
   const band = bands.find((b) => b.id === bandId) || null;
+
+  // Ubicacions ja usades pel grup (local d'assaig, sales…): es proposen en
+  // crear el següent esdeveniment.
+  const pastVenues = useMemo(() => {
+    const seen = new Map<string, { venue: string; city: string }>();
+    concerts
+      .filter((c) => c.bandId === bandId && c.venue.trim())
+      .sort((a, b) => b.date.localeCompare(a.date))
+      .forEach((c) => {
+        const key = normalize(c.venue);
+        if (!seen.has(key)) seen.set(key, { venue: c.venue, city: c.city });
+      });
+    return Array.from(seen.values()).slice(0, 30);
+  }, [concerts, bandId]);
 
   async function chooseKind(k: "bolo" | "assaig" | "reunio" | "altre") {
     if (k === "bolo") {
@@ -57,7 +75,7 @@ export default function NewEventButton({ bands, selectedBandId = "", defaultDate
     if (!bandId) return;
     setBusy(true);
     const { created } = await createEventAction({
-      bandId, kind, title, date, time,
+      bandId, kind, title, date, time, city, venue,
       invited: Array.from(invited),
       repeat: { freq, count },
     });
@@ -120,6 +138,27 @@ export default function NewEventButton({ bands, selectedBandId = "", defaultDate
                   <input className="field-input form-field" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
                 <div><label className="form-label">Hora</label>
                   <input className="field-input form-field" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div>
+                  <label className="form-label">Ubicació</label>
+                  <input
+                    className="field-input form-field" list="ne-venues" placeholder="Local d'assaig, sala…"
+                    value={venue}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setVenue(v);
+                      // En triar una ubicació coneguda, la població s'omple sola.
+                      const known = pastVenues.find((p) => normalize(p.venue) === normalize(v));
+                      if (known && known.city) setCity(known.city);
+                    }}
+                  />
+                  <datalist id="ne-venues">
+                    {pastVenues.map((p) => <option key={p.venue} value={p.venue}>{p.city ? p.city.split(",")[0] : ""}</option>)}
+                  </datalist>
+                </div>
+                <div><label className="form-label">Població</label>
+                  <input className="field-input form-field" placeholder={band?.city || "Població"} value={city} onChange={(e) => setCity(e.target.value)} /></div>
               </div>
 
               {/* Convidats */}

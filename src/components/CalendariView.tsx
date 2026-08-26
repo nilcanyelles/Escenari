@@ -32,7 +32,7 @@ function groupByDate(list: Concert[]) {
   return { byDate, dates };
 }
 
-export default function CalendariView({ bands, concerts, selectedBandId = "", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; today: string }) {
+export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; today: string }) {
   const router = useRouter();
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week" | "year">("month");
@@ -138,7 +138,11 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", to
                 title={`${c.bandName} · ${c.city || c.venue || "—"}${c.time ? ` · ${c.time}h` : ""}`}
                 onClick={(e) => { e.stopPropagation(); router.push(`/concerts/${c.id}`); }}
               >
-                <span className="calx-ev-text">{(c.city || c.venue || c.bandName).split(",")[0]}</span>
+                <span className="calx-ev-text">
+                  {kindOf(c) !== "bolo"
+                    ? KIND_META[kindOf(c)].label + (c.festaEntitat ? ` · ${c.festaEntitat}` : "")
+                    : (c.city || c.venue || c.bandName).split(",")[0]}
+                </span>
                 {c.time && <span className="calx-ev-time">{c.time}</span>}
               </button>
             );
@@ -263,7 +267,19 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", to
           <button className={"stats-tab" + (calViewMode === "year" ? " active" : "")} onClick={() => setCalViewMode("year")}>Any</button>
         </div>
         <div className="cal-view-pills-right">
-          <NewEventButton bands={bands} selectedBandId={selectedBandId} defaultDate={calSelectedDate || today} />
+          {icsToken && (
+            <button
+              type="button" className="gcal-btn"
+              title="Afegeix tots els concerts (lloc, hora i grup) al teu Google Calendar — s'actualitza sol quan canviïn"
+              onClick={() => {
+                // Google necessita poder llegir el feed: cal el domini públic
+                // (amb localhost no pot). El format webcal:// és el que espera.
+                const feed = `webcal://${window.location.host}/api/ics/${icsToken}`;
+                window.open(`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(feed)}`, "_blank");
+              }}
+            >📅 Afegeix-ho tot a Google Calendar</button>
+          )}
+          <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} defaultDate={calSelectedDate || today} />
         </div>
       </div>
 

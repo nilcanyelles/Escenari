@@ -4727,8 +4727,8 @@ button { font-family: inherit; }
 .cd-tabs { margin-bottom: 16px; }
 
 /* ============ Taula de concerts (columnes noves) ============ */
-.ccols { grid-template-columns: 128px 1.1fr 0.9fr 0.9fr 0.9fr 78px 96px 70px 90px 34px; min-width: 960px; }
-.ccols-noband { grid-template-columns: 132px 1fr 1fr 1fr 82px 100px 74px 92px 34px; min-width: 840px; }
+.ccols { grid-template-columns: 128px 72px 1.1fr 0.9fr 0.9fr 0.9fr 78px 96px 70px 90px 34px; min-width: 1030px; }
+.ccols-noband { grid-template-columns: 132px 72px 1fr 1fr 1fr 82px 100px 74px 92px 34px; min-width: 910px; }
 .cc-bold { font-weight: 650; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cc-time { color: var(--text-faint); font-size: 12px; }
 .cc-fdr { display: flex; align-items: center; justify-content: center; gap: 7px; }
@@ -4778,4 +4778,96 @@ button { font-family: inherit; }
   border: 1px solid var(--border-input);
   font-size: 13px;
   display: inline-flex; align-items: center; justify-content: center;
+}
+
+.cc-kind { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 3px 9px; white-space: nowrap; }
+
+/* ============ Pàgina pública "Comparteix per confirmar" ============ */
+.cfm-page {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  padding: 32px 16px 60px;
+  background:
+    radial-gradient(90% 60% at 50% 0%, color-mix(in oklab, var(--c1, #8b7bff) 22%, transparent), transparent 60%),
+    var(--bg);
+}
+.cfm-card { width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 18px; }
+.cfm-hero { text-align: center; padding: 18px 0 4px; }
+.cfm-logo { width: 74px; height: 74px; border-radius: 20px; object-fit: cover; margin-bottom: 12px; border: 1px solid var(--border-soft); }
+.cfm-kind {
+  font-size: 11.5px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--text-faint); font-weight: 700; margin-bottom: 6px;
+}
+.cfm-band {
+  font-family: var(--font-display, 'Space Grotesk'), sans-serif;
+  font-size: clamp(28px, 7vw, 40px); font-weight: 700; line-height: 1.05;
+  background: linear-gradient(180deg, var(--text), color-mix(in oklab, var(--c1, #8b7bff) 55%, var(--text)));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+  margin-bottom: 8px;
+}
+.cfm-when { font-size: 15px; font-weight: 600; font-style: italic; color: var(--text-muted); }
+.cfm-place { font-size: 13.5px; color: var(--text-muted); margin-top: 4px; }
+.cfm-question { font-size: 14px; font-weight: 600; text-align: center; }
+.cfm-members { display: flex; flex-direction: column; gap: 8px; }
+.cfm-member {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border-soft);
+  border-radius: 14px;
+  padding: 10px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--text);
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+}
+.cfm-member:hover { border-color: var(--c1, var(--accent)); }
+.cfm-member.selected { border-color: var(--c1, var(--accent)); background: color-mix(in oklab, var(--c1, #8b7bff) 10%, var(--bg-card)); }
+.cfm-member img { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+.cfm-member-main { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.cfm-member-name { font-weight: 700; font-size: 14px; }
+.cfm-member-ins { font-size: 11.5px; color: var(--text-faint); }
+.cfm-badge { font-size: 11px; font-weight: 700; border-radius: 999px; padding: 4px 10px; white-space: nowrap; flex-shrink: 0; }
+.cfm-badge.yes { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.75 0.15 155); }
+.cfm-badge.no { background: oklch(0.62 0.19 25 / 0.14); color: oklch(0.7 0.18 25); }
+.cfm-badge.pending { background: oklch(1 0 0 / 0.06); color: var(--text-faint); }
+.cfm-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-soft);
+  border-radius: 16px;
+  padding: 18px;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.cfm-note { font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+.cfm-cta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.cfm-cta { text-decoration: none; display: inline-flex; align-items: center; justify-content: center; }
+.cfm-answer {
+  flex: 1; min-width: 130px;
+  border-radius: 12px;
+  padding: 13px 16px;
+  font-family: inherit; font-size: 15px; font-weight: 700;
+  cursor: pointer;
+  border: 1.5px solid transparent;
+  transition: transform 0.12s;
+}
+.cfm-answer:hover { transform: translateY(-1px); }
+.cfm-answer.yes { background: oklch(0.72 0.15 155 / 0.18); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.4); }
+.cfm-answer.no { background: oklch(0.62 0.19 25 / 0.14); color: oklch(0.72 0.18 25); border-color: oklch(0.62 0.19 25 / 0.35); }
+.cfm-done { font-size: 15px; font-weight: 600; text-align: center; padding: 8px 0; }
+.cfm-done.yes { color: oklch(0.78 0.15 155); }
+.cfm-done.no { color: var(--text-muted); }
+.cfm-error { font-size: 13px; color: oklch(0.7 0.18 25); }
+.cfm-footer { text-align: center; font-size: 12px; color: var(--text-ghost); letter-spacing: 0.06em; }
+
+/* Caixa "comparteix per confirmar" dins la fitxa del concert */
+.cfm-share-box {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }

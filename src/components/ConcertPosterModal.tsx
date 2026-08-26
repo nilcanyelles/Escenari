@@ -200,7 +200,16 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
   }, [concert, band]);
 
   async function toBlob(): Promise<Blob | null> {
-    return new Promise((resolve) => canvasRef.current?.toBlob((b) => resolve(b), "image/png") ?? resolve(null));
+    return new Promise((resolve) => {
+      const c = canvasRef.current;
+      if (!c) return resolve(null);
+      try {
+        c.toBlob((b) => resolve(b), "image/png");
+      } catch {
+        // Canvas "tainted" (una rajola del mapa sense CORS): no es pot exportar.
+        resolve(null);
+      }
+    });
   }
 
   async function handleDownload() {

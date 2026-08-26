@@ -203,6 +203,8 @@ export async function createEventAction(input: {
   title: string;
   date: string;
   time: string;
+  city: string;
+  venue: string;
   invited: string[];
   repeat: { freq: "cap" | "setmanal" | "quinzenal" | "mensual"; count: number };
 }): Promise<{ created: number; firstId: string | null }> {
@@ -228,8 +230,9 @@ export async function createEventAction(input: {
     await pool.query(
       `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount,
                              attendance, substitutes, no_substitute, workspace_id, kind, invited)
-       values ($1,$2,$3,'',$4,$5,$6,$7,$8,'confirmat',0,'{}','{}','{}',$9,$10,$11)`,
-      [id, dateStr, input.time || "20:00", band.city || "", (input.title || "").trim(), band.id, band.name,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'confirmat',0,'{}','{}','{}',$10,$11,$12)`,
+      [id, dateStr, input.time || "20:00", (input.venue || "").trim(), (input.city || "").trim() || band.city || "",
+        (input.title || "").trim(), band.id, band.name,
         JSON.stringify(band.tags || []), workspaceId, input.kind, JSON.stringify(input.invited || [])]
     );
     created++;

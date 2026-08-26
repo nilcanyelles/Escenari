@@ -148,7 +148,11 @@ export default function ProfileShareModal({ data, photoUrl, onClose }: {
   }, [data, photoUrl]);
 
   async function toBlob(): Promise<Blob | null> {
-    return new Promise((resolve) => canvasRef.current?.toBlob((b) => resolve(b), "image/png") ?? resolve(null));
+    return new Promise((resolve) => {
+      const c = canvasRef.current;
+      if (!c) return resolve(null);
+      c.toBlob((b) => resolve(b), "image/png");
+    });
   }
 
   async function handleDownload() {

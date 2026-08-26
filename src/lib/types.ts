@@ -43,6 +43,7 @@ export type Concert = {
   setlistId?: string | null;
   kind?: "bolo" | "assaig" | "reunio" | "altre";
   invited?: string[];
+  attToken?: string;
 };
 
 export type Invoice = {

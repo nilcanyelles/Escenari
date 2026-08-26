@@ -23,6 +23,7 @@ import ChecklistSection from "@/components/ChecklistSection";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
 import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction } from "@/app/(app)/concerts/share-actions";
+import { createAttendanceLinkAction } from "@/app/conf/actions";
 import { publishBackupRequestAction, setBackupRequestStatusAction } from "@/app/(app)/grup/actions";
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
@@ -150,6 +151,33 @@ export default function ConcertDetailView({
   // ---- Pagaments ----
   const [payouts, setPayouts] = useState<Record<string, number>>({ ...(concert.payouts || {}) });
   const [payoutsSaving, setPayoutsSaving] = useState(false);
+
+  // ---- Comparteix per confirmar (assistència) ----
+  const [attToken, setAttToken] = useState(concert.attToken || "");
+  const [attBusy, setAttBusy] = useState(false);
+  const [attCopied, setAttCopied] = useState(false);
+
+  async function ensureAttToken(): Promise<string> {
+    if (attToken) return attToken;
+    setAttBusy(true);
+    const { token } = await createAttendanceLinkAction(concert.id);
+    setAttToken(token);
+    setAttBusy(false);
+    return token;
+  }
+
+  async function copyAttLink() {
+    const t = await ensureAttToken();
+    await navigator.clipboard.writeText(`${window.location.origin}/conf/${t}`);
+    setAttCopied(true);
+    window.setTimeout(() => setAttCopied(false), 1600);
+  }
+
+  async function waAttLink() {
+    const t = await ensureAttToken();
+    const text = `Hola! Confirmeu si sereu al ${concert.kind === "assaig" ? "assaig" : concert.kind === "reunio" ? "la reunió" : "bolo"} de ${concert.bandName} el ${capitalize(formatDateFull(concert.date))}${concert.city ? " a " + concert.city.split(",")[0] : ""}: ${window.location.origin}/conf/${t}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+  }
 
   // ---- Rider i setlist ----
   const [riderId, setRiderId] = useState<string>(concert.riderId || "");
@@ -407,7 +435,7 @@ export default function ConcertDetailView({
 
       {/* Subpestanyes */}
       <div className="stats-tabs cd-tabs">
-        {([["info", "Informació"], ["assistencia", "Assistència"], ["ruta", "Full de ruta"], ["facturacio", "Facturació"]] as const).map(([k, label]) => (
+        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Assistència"], ["facturacio", "Facturació"]] as const).map(([k, label]) => (
           <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
@@ -571,6 +599,28 @@ export default function ConcertDetailView({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* Comparteix per confirmar */}
+        {members.length > 0 && (
+          <div className="cfm-share-box">
+            <div>
+              <div className="cd-subtitle" style={{ marginBottom: 4 }}>Comparteix per confirmar</div>
+              <div className="t-dim" style={{ fontSize: 12.5 }}>
+                Un enllaç per al grup: cada músic es marca i confirma si hi serà.
+                Qui no tingui compte se&apos;l crea en un moment i queda vinculat al grup.
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button type="button" className="btn-outline" disabled={attBusy} onClick={copyAttLink}>
+                {attCopied ? "Copiat ✓" : attBusy ? "Creant…" : "Copia l'enllaç"}
+              </button>
+              <button type="button" className="btn-outline cd-wa-btn" disabled={attBusy} onClick={waAttLink}>WhatsApp</button>
+              {attToken && (
+                <button type="button" className="btn-outline" onClick={() => window.open(`/conf/${attToken}`, "_blank")}>Obre</button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -955,8 +1005,8 @@ export default function ConcertDetailView({
       </div>
       )}
 
-      {/* Comparteix */}
-      {tab === "info" && (
+      {/* Comparteix: a Informació i també al final del Full de ruta */}
+      {(tab === "info" || tab === "ruta") && (
       <div className="panel cd-section" id="cd-comparteix">
         <div className="panel-header-row cd-section-title">
           <div className="panel-title">Comparteix — formularis per omplir dades</div>

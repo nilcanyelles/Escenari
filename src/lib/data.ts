@@ -52,6 +52,7 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     setlistId: r.setlist_id || null,
     kind: r.kind || "bolo",
     invited: r.invited || [],
+    attToken: r.att_token || "",
   }));
 }
 

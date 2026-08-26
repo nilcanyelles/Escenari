@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatDate, statusColors } from "@/lib/format";
+import { KIND_META } from "@/components/CalendariView";
 import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { rsCompletionPercent } from "@/lib/route-sheet";
@@ -172,6 +173,12 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
     return (
       <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`/concerts/${c.id}`)}>
         <div className="t-dim">{formatDate(c.date)}{c.time ? <span className="cc-time"> · {c.time}</span> : ""}</div>
+        <div>
+          {(() => {
+            const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
+            return <span className="cc-kind" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>{KIND_META[k].label}</span>;
+          })()}
+        </div>
         {!inBand && <div className="t-strong">{c.bandName}</div>}
         <div className="cc-bold">{c.city ? c.city.split(",")[0] : "—"}</div>
         <div className="cc-bold">{c.venue || "—"}</div>
@@ -274,7 +281,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>
-        <NewEventButton bands={bands} selectedBandId={selectedBandId} defaultDate={today} />
+        <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} defaultDate={today} />
       </div>
 
       {importOpen && (
@@ -302,7 +309,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
       ) : (
         <div className="concerts-list">
           <div className={"t-row t-head " + colsClass}>
-            <div>Data</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Festa/entitat</div>
+            <div>Data</div><div>Tipus</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Festa/entitat</div>
             <div style={{ textAlign: "center" }}>Membres</div><div>Estat</div>
             <div style={{ textAlign: "center" }}>FDR</div><div style={{ textAlign: "center" }}>Factura</div><div></div>
           </div>

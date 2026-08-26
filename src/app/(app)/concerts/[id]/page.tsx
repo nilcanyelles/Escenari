@@ -37,21 +37,21 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
   const transactions = await getTransactions(workspaceId);
   const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
 
-  // Conflictes: mateix grup el mateix dia, o un membre compromès amb un altre
-  // grup el mateix dia (grups que comparteixen el mateix nom de músic).
+  // Conflictes: només quan coincideixen dia I hora — mateix grup, o un membre
+  // compromès amb un altre grup a la mateixa hora.
   const clashes: string[] = [];
   if (concert.status !== "cancel·lat") {
     const memberNames = new Set((band?.members || []).map((m) => m.name.toLowerCase()));
     concerts.forEach((o) => {
-      if (o.id === id || o.date !== concert.date || o.status === "cancel·lat") return;
+      if (o.id === id || o.date !== concert.date || o.time !== concert.time || o.status === "cancel·lat") return;
       if (o.bandId === concert.bandId) {
-        clashes.push(`${concert.bandName} ja té un altre esdeveniment aquest dia: ${o.city || o.venue || o.id} (${o.status}).`);
+        clashes.push(`${concert.bandName} ja té un altre esdeveniment el mateix dia i hora: ${o.city || o.venue || o.id} (${o.status}).`);
         return;
       }
       const otherBand = bands.find((b) => b.id === o.bandId);
       const shared = (otherBand?.members || []).filter((m) => memberNames.has(m.name.toLowerCase())).map((m) => m.name);
       if (shared.length) {
-        clashes.push(`${shared.join(", ")} també ${shared.length === 1 ? "toca" : "toquen"} amb ${o.bandName} aquest dia (${o.city || o.venue || "—"}).`);
+        clashes.push(`${shared.join(", ")} també ${shared.length === 1 ? "toca" : "toquen"} amb ${o.bandName} a la mateixa hora (${o.city || o.venue || "—"}).`);
       }
     });
   }
