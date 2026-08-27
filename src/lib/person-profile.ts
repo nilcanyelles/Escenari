@@ -82,12 +82,27 @@ export async function getOrCreatePersonProfile(workspaceId: string, personName: 
     [workspaceId, personName]
   )).rows[0];
 
+  // Entre la comprovació de dalt i aquest insert, una altra petició en
+  // paral·lel (dues pestanyes, o dues pàgines carregant-se alhora just
+  // després d'entrar) pot haver creat ja el mateix perfil — abans es
+  // deixava petar amb un error de clau duplicada (que arribava a bloquejar
+  // l'entrada a l'app just després d'iniciar sessió). Amb ON CONFLICT DO
+  // NOTHING mai peta: si ha guanyat l'altra petició, es reutilitza la seva
+  // fila en comptes de la que s'anava a crear aquí.
   const id = "p_" + randomBytes(10).toString("base64url");
-  await pool.query(
-    "insert into person_profiles (id, workspace_id, person_name, clerk_user_id) values ($1,$2,$3,$4)",
+  const inserted = (await pool.query(
+    `insert into person_profiles (id, workspace_id, person_name, clerk_user_id)
+     values ($1,$2,$3,$4)
+     on conflict (workspace_id, lower(person_name)) do nothing
+     returning id`,
     [id, workspaceId, personName, linked?.clerk_user_id || null]
-  );
-  return id;
+  )).rows[0];
+  if (inserted) return inserted.id;
+  const winner = (await pool.query(
+    "select id from person_profiles where workspace_id=$1 and lower(person_name)=lower($2)",
+    [workspaceId, personName]
+  )).rows[0];
+  return winner.id;
 }
 
 // El gestor apareix automàticament com a "Mànager" a l'equip tècnic de tots
