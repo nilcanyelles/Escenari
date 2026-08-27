@@ -1736,6 +1736,37 @@ button { font-family: inherit; }
 }
 .share-month-canvas { display: block; width: 100%; height: auto; }
 .share-month-controls { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+/* Dins d'una columna flex, .stats-tabs s'estiraria per omplir tota
+   l'amplada disponible (comportament per defecte, útil en altres vistes);
+   aquí el selector Calendari/Mapa ha de quedar just del mateix ample que
+   el seu text, no estirar-se fins al final del panell. */
+.share-month-controls .stats-tabs { align-self: flex-start; }
+/* El selector de període (1 mes / tria l'interval / històric). */
+.share-month-period-tabs { flex-wrap: wrap; row-gap: 4px; }
+/* Calendari lineal de l'interval personalitzat: una sola línia de 12
+   mesos — l'any es navega amb fletxes, no cal fer-los caber tots alhora. */
+.share-month-timeline { display: flex; flex-direction: column; gap: 8px; user-select: none; }
+.share-month-timeline-nav { display: flex; align-items: center; justify-content: center; gap: 12px; }
+.share-month-timeline-year { font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; min-width: 40px; text-align: center; }
+.share-month-timeline-months { display: flex; gap: 3px; }
+.share-month-timeline-cell {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  border: 1px solid var(--border-input);
+  background: var(--bg-card);
+  border-radius: 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 0;
+}
+.share-month-timeline-cell:hover { border-color: oklch(0.68 0.19 290 / 0.5); color: var(--text); }
+.share-month-timeline-cell.in-range { background: oklch(0.68 0.19 290 / 0.28); border-color: oklch(0.68 0.19 290 / 0.55); color: var(--text); }
+.share-month-timeline-cell.anchor { outline: 2px solid var(--accent); outline-offset: 1px; }
+.share-month-timeline-cell.edge { background: var(--accent); border-color: var(--accent); color: oklch(0.99 0.01 330); }
 .share-month-nav { display: flex; align-items: center; gap: 10px; }
 .share-month-label { font-family: "Space Grotesk", sans-serif; font-weight: 600; font-size: 15px; text-transform: capitalize; }
 .share-month-accents { display: flex; gap: 8px; }
@@ -1744,7 +1775,31 @@ button { font-family: inherit; }
   border: 2px solid transparent; cursor: pointer; padding: 0;
 }
 .share-accent-dot.active { border-color: white; box-shadow: 0 0 0 2px oklch(0 0 0 / 0.4); }
+.share-month-regions { display: flex; flex-wrap: wrap; gap: 6px; }
+.share-month-region-btn {
+  padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-input);
+  background: var(--bg-card-2); color: var(--text-muted); font-size: 12px; font-weight: 600; cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.share-month-region-btn.active { background: oklch(0.68 0.19 290 / 0.22); border-color: oklch(0.68 0.19 290 / 0.55); color: var(--text); }
 .share-month-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
+.share-month-picklist {
+  display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto;
+  border: 1px solid var(--border-input); border-radius: 10px; padding: 6px;
+}
+.share-month-pick-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 5px 6px; border-radius: 7px; font-size: 12px;
+}
+.share-month-pick-row:hover { background: var(--bg-card-2); }
+.share-month-pick-row.excluded { opacity: 0.45; }
+.share-month-pick-row.excluded .share-month-pick-label { text-decoration: line-through; }
+.share-month-pick-main { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 0; cursor: pointer; }
+.share-month-pick-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-month-pick-tba {
+  flex: none; display: flex; align-items: center; gap: 4px;
+  font-size: 10.5px; font-weight: 600; color: var(--text-faint); cursor: pointer;
+}
 .share-month-actions { display: flex; gap: 10px; }
 @media (max-width: 700px) {
   .share-month-body { flex-direction: column; align-items: center; }
@@ -4165,22 +4220,43 @@ button { font-family: inherit; }
 
 /* ============ Grup: capcalera estil LinkedIn + editor d'aparenca ============ */
 .group-hero-li {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   overflow: hidden;
+  min-height: 210px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
+/* El degradat/foto ocupa TOTA la bombolla (no només una franja de dalt) —
+   es col·loca a sota de tot, cobrint el fons del requadre sencer. */
 .group-cover {
-  height: 170px;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
+}
+/* Ombra fosca de baix a dalt perquè el nom, les etiquetes i el logo es
+   llegeixin bé encara que la foto/degradat de sota sigui clar. */
+.group-hero-li::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: linear-gradient(to top, rgba(6, 5, 12, 0.85), rgba(6, 5, 12, 0) 70%);
+  pointer-events: none;
 }
 .group-hero-li-row {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: flex-end;
   gap: 18px;
   padding: 0 24px 18px;
-  margin-top: -42px;
   flex-wrap: wrap;
 }
 .group-hero-li-logo {
@@ -4199,10 +4275,12 @@ button { font-family: inherit; }
 .ga-body { display: flex; flex-direction: column; gap: 18px; }
 .ga-preview { position: relative; }
 .ga-cover {
+  width: 100%;
   height: 150px;
   border-radius: 14px;
   background-size: cover;
   background-position: center;
+  background-repeat: no-repeat;
   cursor: pointer;
   position: relative;
   overflow: hidden;
