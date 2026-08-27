@@ -1735,7 +1735,15 @@ button { font-family: inherit; }
   border: 1px solid var(--border);
 }
 .share-month-canvas { display: block; width: 100%; height: auto; }
-.share-month-controls { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-top: 4px; }
+/* Amb tots els controls (període, calendari lineal, colors, llista de
+   bolos...) el panell pot ser més alt que la finestra — es limita la seva
+   pròpia alçada a l'espai que li queda dins el modal, perquè mai calgui
+   fer scroll a TOT el modal: només la llista de bolos, que ja és
+   internament desplaçable, s'encongeix i absorbeix l'espai que falta. */
+.share-month-controls { flex: 1; display: flex; flex-direction: column; gap: 16px; padding-top: 4px; max-height: calc(88vh - 100px); overflow: hidden; }
+/* Cap altre control es vol encongir per fer lloc — només la llista de
+   bolos (.share-month-picklist, que sobreescriu flex més avall). */
+.share-month-controls > * { flex-shrink: 0; }
 /* Dins d'una columna flex, .stats-tabs s'estiraria per omplir tota
    l'amplada disponible (comportament per defecte, útil en altres vistes);
    aquí el selector Calendari/Mapa ha de quedar just del mateix ample que
@@ -1743,16 +1751,23 @@ button { font-family: inherit; }
 .share-month-controls .stats-tabs { align-self: flex-start; }
 /* El selector de període (1 mes / tria l'interval / històric). */
 .share-month-period-tabs { flex-wrap: wrap; row-gap: 4px; }
-/* Calendari lineal de l'interval personalitzat: una sola línia de 12
-   mesos — l'any es navega amb fletxes, no cal fer-los caber tots alhora. */
+/* Calendari lineal de l'interval personalitzat: una sola línia contínua
+   de mesos (desembre i el gener següent, un al costat de l'altre, sense
+   cap fletxa ni salt de pàgina) que fa scroll horitzontal — l'any només
+   s'hi marca a la casella de gener de cada any, com un fita per
+   orientar-se mentre es desplaça. */
 .share-month-timeline { display: flex; flex-direction: column; gap: 8px; user-select: none; }
-.share-month-timeline-nav { display: flex; align-items: center; justify-content: center; gap: 12px; }
-.share-month-timeline-year { font-size: 13px; font-weight: 700; color: var(--text); font-variant-numeric: tabular-nums; min-width: 40px; text-align: center; }
-.share-month-timeline-months { display: flex; gap: 3px; }
+.share-month-timeline-scroll { overflow-x: auto; overflow-y: hidden; margin: 0 -2px; padding: 2px; }
+.share-month-timeline-months { display: flex; gap: 4px; width: max-content; }
 .share-month-timeline-cell {
-  flex: 1;
-  min-width: 0;
-  height: 30px;
+  flex: 0 0 auto;
+  width: 42px;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
   border: 1px solid var(--border-input);
   background: var(--bg-card);
   border-radius: 6px;
@@ -1763,6 +1778,7 @@ button { font-family: inherit; }
   cursor: pointer;
   padding: 0;
 }
+.share-month-timeline-cell-year { font-size: 8.5px; font-weight: 700; opacity: 0.75; letter-spacing: 0.02em; }
 .share-month-timeline-cell:hover { border-color: oklch(0.68 0.19 290 / 0.5); color: var(--text); }
 .share-month-timeline-cell.in-range { background: oklch(0.68 0.19 290 / 0.28); border-color: oklch(0.68 0.19 290 / 0.55); color: var(--text); }
 .share-month-timeline-cell.anchor { outline: 2px solid var(--accent); outline-offset: 1px; }
@@ -1784,7 +1800,7 @@ button { font-family: inherit; }
 .share-month-region-btn.active { background: oklch(0.68 0.19 290 / 0.22); border-color: oklch(0.68 0.19 290 / 0.55); color: var(--text); }
 .share-month-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-dim); cursor: pointer; }
 .share-month-picklist {
-  display: flex; flex-direction: column; gap: 2px; max-height: 220px; overflow-y: auto;
+  display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 64px; max-height: 220px; overflow-y: auto;
   border: 1px solid var(--border-input); border-radius: 10px; padding: 6px;
 }
 .share-month-pick-row {

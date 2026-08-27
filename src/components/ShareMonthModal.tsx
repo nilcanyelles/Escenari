@@ -237,15 +237,32 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
   const todayYear = parseInt(today.slice(0, 4), 10);
   const yearRangeMin = Math.min(todayYear, ...(concertYears.length ? concertYears : [todayYear])) - 1;
   const yearRangeMax = Math.max(todayYear, ...(concertYears.length ? concertYears : [todayYear])) + 1;
-  // Calendari lineal de l'interval personalitzat: una sola línia de 12
-  // mesos (l'any que toca es navega amb fletxes, com el mes normal), on es
-  // clica primer el mes d'inici i després el de final — es pot canviar
-  // d'any pel mig amb les fletxes sense perdre l'inici ja triat, així que
-  // un interval que travessa un canvi d'any es tria igual de fàcil.
-  const [timelineYear, setTimelineYear] = useState(() => parseInt(today.slice(0, 4), 10));
+  // Calendari lineal de l'interval personalitzat: una sola línia contínua
+  // que fa scroll horitzontal — no una fila per any amb fletxes, sinó tots
+  // els mesos seguits, de manera que després de desembre ve directament
+  // el gener de l'any següent sense cap botó pel mig. Es clica (o
+  // s'arrossega) el mes d'inici i el de final.
+  const timelineScrollRef = useRef<HTMLDivElement>(null);
+  const timelineMonths: { y: number; mi: number; ym: number }[] = [];
+  for (let y = yearRangeMin; y <= yearRangeMax; y++) {
+    for (let mi = 0; mi < 12; mi++) timelineMonths.push({ y, mi, ym: y * 12 + mi });
+  }
+  // rangeAnchorYm: un inici que ha quedat pendent d'un clic senzill (sense
+  // arrossegar), a l'espera d'un segon clic que el tanqui — permet triar
+  // un interval llunyà (es navega fent scroll entre l'un clic i l'altre).
+  // isDragging/dragStart* són només mentre es té el botó premut, per
+  // arrossegar directament d'un mes a un altre.
   const [rangeAnchorYm, setRangeAnchorYm] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartYmRef = useRef<number | null>(null);
+  const dragMovedRef = useRef(false);
+  // En obrir "Tria l'interval", desplaça el scroll perquè el mes ja
+  // seleccionat (el "fins a" actual) quedi a la vista de seguida, en
+  // comptes de començar sempre pel principi de tot l'interval d'anys.
   useEffect(() => {
-    if (period === "custom") setTimelineYear(year);
+    if (period !== "custom") return;
+    const el = timelineScrollRef.current?.querySelector<HTMLElement>(`[data-ym="${year * 12 + monthIdx}"]`);
+    el?.scrollIntoView({ inline: "center", block: "nearest" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [period]);
   function setCustomRangeFromYm(aYm: number, bYm: number) {
@@ -255,17 +272,37 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
     setCustomStartYear(sYear); setCustomStartMonthIdx(sMonth);
     setYear(eYear); setMonthIdx(eMonth);
   }
-  function handleTimelineCellClick(ym: number) {
-    if (rangeAnchorYm === null) {
-      // Primer clic: fixa l'inici (de moment, un únic mes seleccionat).
-      setRangeAnchorYm(ym);
-      setCustomRangeFromYm(ym, ym);
-    } else {
-      // Segon clic (potser després de canviar d'any): tanca l'interval.
-      setCustomRangeFromYm(rangeAnchorYm, ym);
-      setRangeAnchorYm(null);
-    }
+  function handleTimelineCellDown(ym: number) {
+    dragStartYmRef.current = ym;
+    dragMovedRef.current = false;
+    setIsDragging(true);
+    setCustomRangeFromYm(rangeAnchorYm ?? ym, ym);
   }
+  function handleTimelineCellEnter(ym: number) {
+    if (!isDragging || dragStartYmRef.current === null) return;
+    if (ym !== dragStartYmRef.current) dragMovedRef.current = true;
+    setCustomRangeFromYm(rangeAnchorYm ?? dragStartYmRef.current, ym);
+  }
+  useEffect(() => {
+    if (!isDragging) return;
+    function onUp() {
+      setIsDragging(false);
+      if (dragMovedRef.current) {
+        // Arrossegament de veres: l'interval ja ha quedat tancat en viu.
+        setRangeAnchorYm(null);
+      } else if (rangeAnchorYm === null) {
+        // Primer clic sense arrossegar: fixa l'inici i espera un segon
+        // clic (potser en un altre any) que el tanqui.
+        setRangeAnchorYm(dragStartYmRef.current);
+      } else {
+        // Segon clic: l'interval ja ha quedat tancat en viu.
+        setRangeAnchorYm(null);
+      }
+    }
+    window.addEventListener("mouseup", onUp);
+    return () => window.removeEventListener("mouseup", onUp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isDragging]);
 
   const [cityCoords, setCityCoords] = useState<Record<string, { lat: number; lon: number } | null>>({});
   const [geocoding, setGeocoding] = useState(false);
@@ -1117,34 +1154,33 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
             </div>
             {period === "custom" && (
               <div className="share-month-timeline">
-                <div className="share-month-timeline-nav">
-                  <button className="cal-nav-btn" disabled={timelineYear <= yearRangeMin} onClick={() => setTimelineYear((y) => Math.max(yearRangeMin, y - 1))}>‹</button>
-                  <span className="share-month-timeline-year">{timelineYear}</span>
-                  <button className="cal-nav-btn" disabled={timelineYear >= yearRangeMax} onClick={() => setTimelineYear((y) => Math.min(yearRangeMax, y + 1))}>›</button>
-                </div>
-                <div className="share-month-timeline-months">
-                  {MONTH_FULL.map((m, mi) => {
-                    const ym = timelineYear * 12 + mi;
-                    const inRange = ym >= startYm && ym <= endYm;
-                    const isEdge = ym === startYm || ym === endYm;
-                    const isAnchor = ym === rangeAnchorYm;
-                    return (
-                      <button
-                        key={mi}
-                        type="button"
-                        className={"share-month-timeline-cell" + (inRange ? " in-range" : "") + (isEdge ? " edge" : "") + (isAnchor ? " anchor" : "")}
-                        onClick={() => handleTimelineCellClick(ym)}
-                        title={`${m} ${timelineYear}`}
-                      >
-                        {m.slice(0, 1)}
-                      </button>
-                    );
-                  })}
+                <div className="share-month-timeline-scroll" ref={timelineScrollRef}>
+                  <div className="share-month-timeline-months">
+                    {timelineMonths.map(({ y, mi, ym }) => {
+                      const inRange = ym >= startYm && ym <= endYm;
+                      const isEdge = ym === startYm || ym === endYm;
+                      const isAnchor = ym === rangeAnchorYm;
+                      return (
+                        <button
+                          key={ym}
+                          type="button"
+                          data-ym={ym}
+                          className={"share-month-timeline-cell" + (inRange ? " in-range" : "") + (isEdge ? " edge" : "") + (isAnchor ? " anchor" : "")}
+                          onMouseDown={() => handleTimelineCellDown(ym)}
+                          onMouseEnter={() => handleTimelineCellEnter(ym)}
+                          title={`${MONTH_FULL[mi]} ${y}`}
+                        >
+                          {mi === 0 && <span className="share-month-timeline-cell-year">{y}</span>}
+                          <span className="share-month-timeline-cell-month">{MONTH_FULL[mi].slice(0, 3)}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="t-dim" style={{ fontSize: 12 }}>
                   {rangeAnchorYm === null
-                    ? "Clica el mes d'inici."
-                    : "Ara clica el mes final — canvia d'any amb les fletxes si cal."}
+                    ? "Arrossega d'un mes a un altre, o clica el mes d'inici (fes scroll per canviar d'any)."
+                    : "Ara clica (o arrossega fins) el mes final."}
                 </div>
               </div>
             )}
