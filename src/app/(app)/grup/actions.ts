@@ -93,15 +93,18 @@ export async function removeBandPersonAction(bandId: string, kind: "member" | "c
 
 // ---------- Permisos per membre (el gestor decideix què pot fer) ----------
 
+// La persona pot ser tant un músic com de l'equip tècnic — es busca a
+// totes dues llistes i s'actualitza la que la tingui (mai cal saber-ho
+// d'entrada des d'on es truca).
 export async function setMemberPermAction(bandId: string, memberName: string, key: keyof MemberPerms, on: boolean) {
   const { workspaceId } = await requireManagerAction();
-  const band = (await db().query("select members from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  const band = (await db().query("select members, crew from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
-  const members = (band.members || []).map((m: { name: string; perms?: Partial<MemberPerms> }) => {
-    if (normalize(m.name) !== normalize(memberName)) return m;
-    return { ...m, perms: { ...(m.perms || {}), [key]: on } };
-  });
-  await db().query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
+  const setPerm = (list: { name: string; perms?: Partial<MemberPerms> }[]) =>
+    list.map((m) => (normalize(m.name) !== normalize(memberName) ? m : { ...m, perms: { ...(m.perms || {}), [key]: on } }));
+  const members = setPerm(band.members || []);
+  const crew = setPerm(band.crew || []);
+  await db().query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), bandId]);
   revalidatePath("/grup");
 }
 

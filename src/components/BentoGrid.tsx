@@ -406,6 +406,7 @@ export type BentoCard = {
   onClick?: () => void;
   colSpan?: number;
   rowSpan?: number;
+  className?: string;
 };
 
 export default function BentoGrid({
@@ -429,7 +430,7 @@ export default function BentoGrid({
         {cards.map(card => (
           <ParticleCard
             key={card.key}
-            className={"magic-bento-card magic-bento-card--border-glow" + (card.onClick ? " clickable" : "")}
+            className={"magic-bento-card magic-bento-card--border-glow" + (card.onClick ? " clickable" : "") + (card.className ? " " + card.className : "")}
             style={{
               ["--glow-color" as string]: glowColor,
               gridColumn: card.colSpan && card.colSpan > 1 ? `span ${card.colSpan}` : undefined,

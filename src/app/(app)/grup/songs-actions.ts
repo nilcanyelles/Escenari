@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireBandAccess as requirePerm } from "@/lib/band-access";
 
-const MAX_FILE_BYTES = 15 * 1024 * 1024; // 15 MB per fitxer
+const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per fitxer (backing tracks en WAV poden pesar bastant)
 
 // Repertori i fitxers: el gestor del workspace o un membre del grup amb el
 // permís "Cançons" actiu (per defecte el tenen).
@@ -173,7 +173,7 @@ export async function uploadFileAction(formData: FormData): Promise<{ ok: boolea
   const file = formData.get("file") as File | null;
   if (!bandId || !file) return { ok: false, error: "Falta el fitxer" };
   const { workspaceId, who } = await requireBandAccess(bandId);
-  if (file.size > MAX_FILE_BYTES) return { ok: false, error: "Màxim 15 MB per fitxer" };
+  if (file.size > MAX_FILE_BYTES) return { ok: false, error: "Màxim 100 MB per fitxer" };
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
   await db().query(

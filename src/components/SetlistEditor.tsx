@@ -13,6 +13,7 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
   const [songs, setSongs] = useState<Song[]>(setlist?.songs?.length ? setlist.songs : [{ title: "", duration: "", key: "", notes: "" }]);
   const [setlistId, setSetlistId] = useState<string | null>(setlist?.id || null);
   const [saving, setSaving] = useState(false);
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
   const saveTimer = useRef<number | null>(null);
   const isFirst = useRef(true);
 
@@ -43,6 +44,23 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
   function update(i: number, patch: Partial<Song>) {
     setSongs((prev) => prev.map((s, j) => (j === i ? { ...s, ...patch } : s)));
   }
+
+  function addBlank() {
+    setSongs((prev) => prev.concat([{ title: "", duration: "", key: "", notes: "" }]));
+  }
+
+  function addFromLibrary(s: LibrarySong) {
+    setSongs((prev) => {
+      const base = prev.length === 1 && !prev[0].title.trim() ? [] : prev;
+      return base.concat([{ title: s.title, duration: s.duration, key: s.songKey, notes: "", songId: s.id }]);
+    });
+  }
+
+  // Cançons del repertori que encara no són en aquesta setlist — es
+  // recalcula sol a mesura que n'afegeixes, així els suggeriments sempre
+  // reflecteixen el que falta.
+  const addedSongIds = new Set(songs.map((s) => s.songId).filter(Boolean));
+  const librarySuggestions = librarySongs.filter((s) => !addedSongIds.has(s.id));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -78,24 +96,30 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
               </div>
             ))}
           </div>
-          <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-            <button type="button" className="btn-outline"
-              onClick={() => setSongs(songs.concat([{ title: "", duration: "", key: "", notes: "" }]))}>+ Afegeix cançó</button>
-            {librarySongs.length > 0 && (
-              <select
-                className="field-input compact-field" value=""
-                onChange={(e) => {
-                  const s = librarySongs.find((x) => x.id === e.target.value);
-                  if (!s) return;
-                  setSongs((prev) => {
-                    const base = prev.length === 1 && !prev[0].title.trim() ? [] : prev;
-                    return base.concat([{ title: s.title, duration: s.duration, key: s.songKey, notes: "", songId: s.id }]);
-                  });
-                }}
-              >
-                <option value="">+ Del repertori…</option>
-                {librarySongs.map((s) => <option key={s.id} value={s.id}>{s.title}{s.duration ? ` (${s.duration})` : ""}</option>)}
-              </select>
+          <div>
+            <button type="button" className="btn-outline" onClick={() => setAddMenuOpen((o) => !o)}>
+              {addMenuOpen ? "Amaga els suggeriments ▲" : "+ Afegeix cançó…"}
+            </button>
+            {addMenuOpen && (
+              <div className="instr-panel">
+                <div>
+                  <div className="instr-cat-title">Del repertori</div>
+                  {librarySuggestions.length > 0 ? (
+                    <div className="access-box-list">
+                      {librarySuggestions.map((s) => (
+                        <button key={s.id} type="button" className="access-chip" onClick={() => addFromLibrary(s)}>
+                          {s.title}{s.duration ? ` · ${s.duration}` : ""}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="t-dim" style={{ fontSize: 12 }}>
+                      {librarySongs.length === 0 ? "Encara no hi ha cap cançó al repertori." : "Ja hi són totes les cançons del repertori."}
+                    </div>
+                  )}
+                </div>
+                <button type="button" className="btn-ghost-sm" onClick={addBlank}>+ Entrada en blanc (fora del repertori)</button>
+              </div>
             )}
           </div>
         </div>

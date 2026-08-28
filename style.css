@@ -2347,8 +2347,11 @@ button { font-family: inherit; }
 .access-chip.active { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
 
 /* Editor de rider */
-.rider-editor, .setlist-editor { max-width: 880px; width: min(880px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
+.rider-editor { max-width: 880px; width: min(880px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
+.setlist-editor { max-width: 1180px; width: min(1180px, 96vw); height: 96vh; max-height: 96vh; display: flex; flex-direction: column; }
 .rider-editor-body, .setlist-editor-body {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -2376,6 +2379,7 @@ button { font-family: inherit; }
 .rider-table { display: flex; flex-direction: column; gap: 6px; }
 .rider-table-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
 .rider-table-head, .rider-table-row { display: grid; gap: 8px; align-items: center; }
+.rider-table-row > * { min-width: 0; }
 .rider-input-cols { grid-template-columns: 46px 1.4fr 1fr 0.8fr 1.2fr 28px; }
 .rider-monitor-cols { grid-template-columns: 1.2fr 0.9fr 1.6fr 28px; }
 .rider-backline-cols { grid-template-columns: 1.6fr 1fr 1.4fr 28px; }
@@ -2694,6 +2698,17 @@ button { font-family: inherit; }
   white-space: nowrap;
 }
 .studio-name { max-width: 380px; }
+.studio-name-display {
+  flex: 1;
+  min-width: 0;
+  font-family: "Space Grotesk", sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .studio-topbar-right { margin-left: auto; display: flex; align-items: center; gap: 14px; }
 
 .studio-tabs {
@@ -3052,7 +3067,7 @@ button { font-family: inherit; }
 .ck-templates { display: flex; flex-direction: column; gap: 4px; margin-top: 12px; max-width: 420px; }
 
 /* Mode escenari (performance) */
-.perform { min-height: 100vh; background: #08070e; color: #f2f0fa; display: flex; flex-direction: column; }
+.perform { height: 100vh; background: #08070e; color: #f2f0fa; display: flex; flex-direction: column; overflow: hidden; }
 .perform-topbar {
   display: flex; align-items: center; gap: 16px; padding: 12px 20px;
   border-bottom: 1px solid oklch(1 0 0 / 0.07); position: sticky; top: 0;
@@ -3069,6 +3084,7 @@ button { font-family: inherit; }
 .perform-ctl.active { background: oklch(0.68 0.19 290 / 0.22); color: white; border-color: var(--accent); }
 .perform-transpose { gap: 8px; }
 .perform-transpose button { border: none; background: transparent; color: inherit; cursor: pointer; font-family: inherit; font-size: 13px; padding: 0 3px; }
+.perform-transpose button:disabled { opacity: 0.3; cursor: default; }
 .perform-list {
   position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
@@ -3084,22 +3100,100 @@ button { font-family: inherit; }
 .perform-list-item:hover { background: oklch(1 0 0 / 0.06); }
 .perform-list-item.active { background: oklch(0.68 0.19 290 / 0.18); color: white; }
 .perform-list-num { color: var(--text-ghost); font-size: 12px; min-width: 20px; }
-.perform-body { flex: 1; overflow-y: auto; padding: 30px clamp(18px, 8vw, 120px); scroll-behavior: auto; }
+.perform-body { flex: 1; min-height: 0; overflow-y: auto; padding: 30px clamp(18px, 8vw, 120px); scroll-behavior: auto; }
 .perform-song-head h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.6em; margin: 0 0 6px; }
 .perform-song-meta { color: var(--text-faint); font-size: 0.6em; margin-bottom: 26px; }
-.perform-body .lyrics-view { background: transparent; border: none; padding: 0; font-size: 1em; line-height: 1.65; }
+.perform-body .lyrics-view { background: transparent; border: none; padding: 0; font-size: 1em; line-height: 1.65; text-align: center; }
+.perform-body .lyrics-line-chords { justify-content: center; }
 .perform-no-lyrics { color: var(--text-ghost); font-size: 0.7em; }
+.perform-bottom { position: sticky; bottom: 0; background: #08070e; z-index: 15; }
 .perform-nav {
   display: flex; justify-content: space-between; padding: 12px 20px;
-  border-top: 1px solid oklch(1 0 0 / 0.07); position: sticky; bottom: 0; background: #08070e;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
 }
-.perform-nav button {
+.perform-nav-btn {
   border: 1px solid oklch(1 0 0 / 0.14); background: transparent; color: var(--text-dim);
-  font-size: 14px; font-weight: 600; border-radius: 12px; padding: 10px 26px;
-  cursor: pointer; font-family: inherit;
+  width: 42px; height: 42px; border-radius: 50%; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
 }
-.perform-nav button:disabled { opacity: 0.3; cursor: default; }
+.perform-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: white; }
+.perform-nav-btn:disabled { opacity: 0.3; cursor: default; }
 .perform-empty { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+
+/* Reproductor multipista (mode escenari) */
+.perform-audiobar {
+  display: flex; flex-direction: column; gap: 6px; padding: 8px 20px 14px;
+  border-top: 1px solid oklch(1 0 0 / 0.07);
+}
+.perform-audio-seek { display: flex; align-items: center; gap: 10px; }
+.perform-audio-seek input[type="range"] { flex: 1; accent-color: var(--accent); }
+.perform-audio-time { flex: none; font-size: 11px; color: var(--text-ghost); font-variant-numeric: tabular-nums; min-width: 30px; }
+.perform-audio-time:last-child { text-align: right; }
+.perform-audio-controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px; }
+.perform-audio-info { min-width: 0; font-size: 12px; color: var(--text-faint); justify-self: start; }
+.perform-transport { display: flex; align-items: center; gap: 16px; justify-self: center; }
+.perform-audio-play {
+  flex: none; width: 44px; height: 44px; border-radius: 50%;
+  border: 1px solid var(--accent); background: oklch(0.68 0.19 290 / 0.25); color: white;
+  font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+}
+.perform-audio-play:disabled { opacity: 0.5; cursor: default; }
+.perform-audio-seek input:disabled { opacity: 0.4; }
+.perform-audio-spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 2px solid oklch(1 0 0 / 0.3); border-top-color: white;
+  animation: performAudioSpin 0.7s linear infinite;
+}
+@keyframes performAudioSpin { to { transform: rotate(360deg); } }
+
+/* Fletxeta fixa al centre-dreta de la pantalla per obrir/tancar la mescla. */
+.perform-mixer-tab {
+  position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+  width: 26px; height: 54px; border-radius: 10px 0 0 10px;
+  border: 1px solid oklch(1 0 0 / 0.16); border-right: none;
+  background: #14111f; color: var(--text-dim); font-size: 15px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 50; transition: color 0.15s, border-color 0.15s;
+}
+.perform-mixer-tab.open { color: white; border-color: var(--accent); transform: translateY(-50%) rotate(180deg); }
+
+.perform-mixer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 60;
+  display: flex; justify-content: flex-end;
+}
+.perform-mixer-panel {
+  width: min(360px, 92vw); height: 100%; background: #0e0c17; border-left: 1px solid oklch(1 0 0 / 0.1);
+  display: flex; flex-direction: column; padding: 18px; gap: 18px; overflow-y: auto;
+  animation: performMixerIn 0.18s ease-out;
+}
+@keyframes performMixerIn { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.perform-mixer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.perform-mixer-master {
+  display: flex; align-items: center; gap: 10px; padding: 12px; margin-bottom: 4px;
+  background: oklch(0.75 0.16 55 / 0.14); border: 1px solid oklch(0.75 0.16 55 / 0.4); border-radius: 12px;
+}
+.perform-mixer-master-label { flex: none; font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; color: oklch(0.8 0.15 55); text-transform: uppercase; }
+.perform-mixer-master input[type="range"] { flex: 1; accent-color: oklch(0.75 0.16 55); }
+.perform-mixer-master .perform-mixer-vol { color: oklch(0.8 0.15 55); }
+.perform-mixer-title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 15px; color: white; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.perform-mixer-tracks { display: flex; flex-direction: column; gap: 18px; }
+.perform-mixer-track { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid oklch(1 0 0 / 0.07); }
+.perform-mixer-track:last-child { border-bottom: none; padding-bottom: 0; }
+.perform-mixer-name {
+  background: transparent; border: none; border-bottom: 1px dashed oklch(1 0 0 / 0.2);
+  color: white; font-size: 13.5px; font-weight: 600; padding: 3px 2px; font-family: inherit; outline: none;
+}
+.perform-mixer-row { display: flex; align-items: center; gap: 8px; }
+.perform-mixer-btn {
+  flex: none; width: 28px; height: 28px; border-radius: 8px;
+  border: 1px solid oklch(1 0 0 / 0.16); background: transparent; color: var(--text-dim);
+  font-size: 11px; font-weight: 700; cursor: pointer; font-family: inherit;
+}
+.perform-mixer-btn.active { background: oklch(0.7 0.19 30 / 0.3); border-color: oklch(0.7 0.19 30); color: white; }
+.perform-mixer-strike { text-decoration: line-through; text-decoration-thickness: 1.5px; }
+.perform-mixer-btn.perform-mixer-solo.active { background: oklch(0.78 0.15 95 / 0.32); border-color: oklch(0.78 0.15 95); color: white; }
+.perform-mixer-row input[type="range"] { flex: 1; accent-color: var(--accent); }
+.perform-mixer-vol { flex: none; width: 38px; text-align: right; font-size: 11.5px; color: var(--text-faint); }
 
 /* Pràctica */
 .practice-days { display: flex; gap: 10px; align-items: flex-end; height: 120px; }
@@ -3515,6 +3609,9 @@ button { font-family: inherit; }
   --glow-color: 139, 123, 255;
 }
 .magic-bento-card.clickable { cursor: pointer; }
+/* La targeta d'Equip necessita que la targeteta ampliada en passar-hi el
+   ratolí per sobre pugui sortir per fora del seu propi requadre. */
+.bento-card-team { overflow: visible; }
 .magic-bento-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
@@ -3864,7 +3961,7 @@ button { font-family: inherit; }
   width: var(--card-w, 200px);
   max-width: 100%;
   height: auto;
-  border-radius: 16px;
+  border-radius: 22px;
   overflow: hidden;
   border: 1px solid oklch(1 0 0 / 0.14);
   transition: border-color 0.3s ease;
@@ -3887,30 +3984,31 @@ button { font-family: inherit; }
 }
 .chroma-card:hover::before { opacity: 1; }
 
+/* La foto queda com una "polaroid": amb marge tot al voltant, on es veu
+   el degradat dels colors propis del grup (el fons de la targeta) —
+   no s'estén fins a les vores de la targeta. */
 .chroma-img-wrapper {
   position: relative;
   z-index: 1;
-  padding: 8px;
+  padding: 12px;
   box-sizing: border-box;
 }
 .chroma-img-wrapper img {
   width: 100%;
   aspect-ratio: 1 / 1;
   object-fit: cover;
-  border-radius: 10px;
+  border-radius: 16px;
   display: block;
 }
 
 .chroma-info {
   position: relative;
   z-index: 1;
-  padding: 0.15rem 0.8rem 0.7rem;
+  padding: 0.2rem 0.95rem 0.8rem;
   color: #fff;
   display: grid;
-  grid-template-columns: 1fr auto;
-  row-gap: 0.15rem;
-  column-gap: 0.5rem;
-  align-items: baseline;
+  grid-template-columns: 1fr;
+  row-gap: 0.2rem;
 }
 .chroma-info .name {
   margin: 0;
@@ -3920,13 +4018,14 @@ button { font-family: inherit; }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Insígnia de "compte vinculat a Escenari" al costat del nom. */
+.verified-badge { width: 13px; height: 13px; flex: none; color: var(--accent-text, #a99df5); vertical-align: -2px; margin-left: 3px; }
 .chroma-info .handle {
   color: rgba(255, 255, 255, 0.62);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 90px;
 }
 .chroma-info .role {
   margin: 0;
@@ -3935,7 +4034,11 @@ button { font-family: inherit; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
+.chroma-info .role-icon { width: 13px; height: 13px; flex: none; object-fit: contain; }
 .chroma-info .location {
   color: rgba(255, 255, 255, 0.5);
   font-size: 10.5px;
@@ -3978,20 +4081,93 @@ button { font-family: inherit; }
   transition: opacity 0.25s ease;
 }
 
-/* Variant compacta (targeta Equip del bento) */
-.bento-chroma { width: 100%; }
-.chroma-compact { gap: 0.45rem; justify-content: flex-start; }
-.chroma-compact .chroma-card { border-radius: 12px; }
-.chroma-compact .chroma-img-wrapper { padding: 5px; }
-.chroma-compact .chroma-img-wrapper img { border-radius: 8px; }
-.chroma-compact .chroma-info {
-  padding: 0 0.5rem 0.5rem;
-  grid-template-columns: 1fr;
-  row-gap: 0.05rem;
+/* Variant compacta (targeta Equip del bento): targetetes petites, la foto
+   a sobre del nom, que es posen una al costat de l'altra sense ocupar
+   gaire espai — no files llargues d'una sola columna. */
+.bento-chroma { width: 100%; min-width: 0; }
+/* La primera targeta sempre a l'esquerra de tot, mai centrada dins l'espai
+   sobrant quan n'hi ha menys de les que caben en una línia. */
+.bento-chroma .chroma-grid { justify-content: flex-start; margin: 0; }
+/* Animació de desplaçament cada cop que es passa d'una persona a una
+   altra amb les fletxes — les targetes entren lliscant des del costat cap
+   on s'avança. */
+@keyframes bentoTeamSlideNext {
+  from { transform: translateX(28px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
 }
-.chroma-compact .chroma-info .name { font-size: 11px; }
-.chroma-compact .chroma-info .handle { font-size: 9px; max-width: 100%; }
-.chroma-compact .chroma-info .role { font-size: 9.5px; }
+@keyframes bentoTeamSlidePrev {
+  from { transform: translateX(-28px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.bento-chroma-slide-next .chroma-card { animation: bentoTeamSlideNext 0.28s ease; }
+.bento-chroma-slide-prev .chroma-card { animation: bentoTeamSlidePrev 0.28s ease; }
+.bento-chroma-slide-next .chroma-card:nth-child(2),
+.bento-chroma-slide-prev .chroma-card:nth-child(2) { animation-delay: 0.03s; }
+.bento-chroma-slide-next .chroma-card:nth-child(3),
+.bento-chroma-slide-prev .chroma-card:nth-child(3) { animation-delay: 0.06s; }
+.bento-chroma-slide-next .chroma-card:nth-child(4),
+.bento-chroma-slide-prev .chroma-card:nth-child(4) { animation-delay: 0.09s; }
+.bento-chroma-slide-next .chroma-card:nth-child(5),
+.bento-chroma-slide-prev .chroma-card:nth-child(5) { animation-delay: 0.12s; }
+/* Fletxes per passar, d'una persona en una, entre tot l'equip a la
+   previsualització compacta — ancorades als extrems de la secció, no
+   centrades sota la graella, i sense haver de canviar a la pestanya
+   Equip. */
+.bento-chroma-row { display: flex; align-items: center; gap: 8px; }
+.bento-chroma-nav-btn {
+  flex: none;
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--border-input);
+  background: var(--bg-card-2);
+  color: var(--text-dim);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.bento-chroma-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.bento-chroma-nav-btn:disabled { opacity: 0.35; cursor: default; }
+.bento-chroma-nav-wrap { position: relative; display: flex; align-items: center; flex: none; }
+.bento-chroma-peek-card {
+  position: absolute; top: 100%; left: 50%; margin-top: 6px; transform: translateX(-50%);
+  filter: blur(4px); opacity: 0.45; pointer-events: none; z-index: 0;
+}
+.chroma-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; justify-content: flex-start; }
+.chroma-compact .chroma-card { width: 100%; border-radius: 12px; }
+.chroma-compact .chroma-img-wrapper { padding: 6px; }
+.chroma-compact .chroma-img-wrapper img { width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; }
+.chroma-compact .chroma-info {
+  padding: 0 0.6rem 0.6rem;
+  grid-template-columns: 1fr;
+  row-gap: 0.1rem;
+}
+/* Que el nom i el rol es puguin veure sencers (fent salt de línia si cal)
+   en comptes de retallar-se amb "…" per no caber en una targeta petita. */
+.chroma-compact .chroma-info .name { font-size: 12px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
+.chroma-compact .chroma-info .handle { display: none; }
+.chroma-compact .chroma-info .role { font-size: 10.5px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; align-items: flex-start; }
+.chroma-compact .chroma-info .role-icon { display: none; }
+/* En passar el ratolí per una targeta petita, apareix literalment la
+   targeta grossa (la mateixa que a la pestanya Equip) flotant per sobre
+   — via portal a <body> (.bento-chroma-flyout), no amb un simple
+   transform, així es veu exactament igual i mai queda tapada per res. La
+   pròpia targeteta petita només fa un lleuger realç mentre s'hi passa
+   per sobre. */
+.chroma-compact .chroma-card { transition: box-shadow 0.15s ease; }
+.chroma-compact .chroma-card:hover { box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35); }
+@keyframes bentoChromaFlyoutOpen {
+  from { transform: translate(-50%, -50%) scale(0.82); opacity: 0; }
+  to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+.bento-chroma-flyout {
+  position: fixed;
+  z-index: 9999;
+  transform: translate(-50%, -50%);
+  transform-origin: center center;
+  pointer-events: auto;
+  filter: drop-shadow(0 24px 60px rgba(0, 0, 0, 0.55));
+  animation: bentoChromaFlyoutOpen 0.16s ease-out;
+}
 @media (max-width: 480px) {
   .chroma-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
@@ -4367,7 +4543,7 @@ button { font-family: inherit; }
   z-index: 5;
   display: flex;
   gap: 6px;
-  padding: 0 0.7rem 0.7rem;
+  padding: 0 0.95rem 0.85rem;
 }
 .chroma-action {
   width: 30px; height: 30px;
@@ -4423,9 +4599,26 @@ button { font-family: inherit; }
 .ss-meta-grid { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .ss-score-block { border-top: 1px dashed var(--border-soft); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
 .ss-score-block:first-of-type { border-top: none; padding-top: 0; }
+.ss-backing-block { margin-top: 8px; border-top: 1px solid var(--border-soft); padding-top: 14px; }
 .ss-score-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ss-score-ins { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
 .ss-score-ins img { width: 17px; height: 17px; object-fit: contain; }
+.ss-audios-toggle {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--text);
+  background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;
+}
+.ss-audios-arrow { display: inline-block; font-size: 10px; color: var(--text-muted); transition: transform 0.15s; }
+.ss-audios-arrow.open { transform: rotate(90deg); }
+.ss-audios-list { display: flex; flex-direction: column; gap: 6px; }
+.ss-audio-row {
+  display: flex; align-items: center; gap: 10px;
+  background: var(--bg-card-2); border: 1px solid var(--border-soft);
+  border-radius: var(--radius-sm); padding: 8px 12px;
+}
+.ss-audio-name { flex: 1; min-width: 0; color: var(--text); text-decoration: none; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-audio-name:hover { color: var(--accent-text); }
+.ss-audio-duration { flex: none; font-size: 12px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ss-upload-btn { display: inline-flex; align-items: center; gap: 7px; }
 @media (max-width: 900px) {
   .ss-body { grid-template-columns: 1fr; }
   .ss-lyrics { min-height: 34vh; }
@@ -4436,15 +4629,16 @@ button { font-family: inherit; }
 .pv-contact-btn {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
   background: oklch(1 0 0 / 0.06);
   border: 1px solid var(--border-soft);
-  border-radius: 999px;
-  padding: 6px 13px;
-  font-size: 12.5px;
-  font-weight: 600;
+  border-radius: 50%;
   color: var(--text-dim);
   text-decoration: none;
+  cursor: pointer;
+  font: inherit;
 }
 .pv-contact-btn:hover { border-color: var(--accent); color: var(--text); }
 
@@ -4642,7 +4836,6 @@ button { font-family: inherit; }
 .gcal-btn:hover { background: oklch(0.68 0.19 290 / 0.2); }
 
 /* Detall de contacte al perfil */
-.pv-contact-details { display: flex; flex-direction: column; gap: 3px; font-size: 12px; color: var(--text-faint); }
 
 /* ============ Nou esdeveniment (selector de tipus + popup ràpid) ============ */
 .ne-kinds { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

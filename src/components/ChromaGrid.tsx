@@ -7,7 +7,7 @@ import { useRef, useEffect } from "react";
 import { gsap } from "gsap";
 
 export type ChromaAction = {
-  icon: string;
+  icon: React.ReactNode;
   title: string;
   href?: string;
   onClick?: () => void;
@@ -17,12 +17,16 @@ export type ChromaItem = {
   image: string;
   title: string;
   subtitle: string;
+  subtitleIcon?: string | null;
+  verified?: boolean;
   handle?: string;
   location?: string;
   borderColor?: string;
   gradient?: string;
   url?: string;
   onClick?: () => void;
+  onMouseEnter?: (rect: DOMRect) => void;
+  onMouseLeave?: () => void;
   actions?: ChromaAction[];
   footer?: React.ReactNode;
 };
@@ -112,6 +116,8 @@ export default function ChromaGrid({
           key={i}
           className="chroma-card"
           onMouseMove={handleCardMove}
+          onMouseEnter={c.onMouseEnter ? (e) => c.onMouseEnter!(e.currentTarget.getBoundingClientRect()) : undefined}
+          onMouseLeave={c.onMouseLeave}
           onClick={(e) => {
             e.stopPropagation();
             if (c.onClick) c.onClick();
@@ -127,9 +133,20 @@ export default function ChromaGrid({
             <img src={c.image} alt={c.title} loading="lazy" />
           </div>
           <footer className="chroma-info">
-            <h3 className="name">{c.title}</h3>
+            <h3 className="name">
+              {c.title}
+              {c.verified && (
+                <svg className="verified-badge" width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-label="Compte vinculat">
+                  <path d="M12 1l2.6 2.02 3.3-.34 1.02 3.16 3.02 1.46-.66 3.28 2.02 2.62-2.02 2.62.66 3.28-3.02 1.46-1.02 3.16-3.3-.34L12 23l-2.6-2.02-3.3.34-1.02-3.16-3.02-1.46.66-3.28L.7 11.8l2.02-2.62-.66-3.28 3.02-1.46 1.02-3.16 3.3.34L12 1z"></path>
+                  <path d="M8.5 12.3l2.4 2.4 4.6-4.9" stroke="#0b0a14" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"></path>
+                </svg>
+              )}
+            </h3>
+            <p className="role">
+              {c.subtitleIcon && <img className="role-icon" src={c.subtitleIcon} alt="" />}
+              {c.subtitle}
+            </p>
             {c.handle && <span className="handle">{c.handle}</span>}
-            <p className="role">{c.subtitle}</p>
             {c.location && <span className="location">{c.location}</span>}
           </footer>
           {c.actions && c.actions.length > 0 && (

@@ -7,11 +7,17 @@ export const dynamic = "force-dynamic";
 // Serveix un fitxer del magatzem: el gestor del workspace o un membre del
 // grup. Excepció pública: les fotos de perfil de músic (les referencia un
 // person_profiles, que és una pàgina compartible).
-export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const row = (await db().query("select * from files where id=$1", [id])).rows[0];
-  if (!row) return new NextResponse("No trobat", { status: 404 });
+  // Primer només les metadades (sense "data"): decidir si l'accés és
+  // permès no ha de costar arrossegar tot el fitxer (que pot pesar molts
+  // MB) — abans es feia amb un "select *" i una petició no autoritzada
+  // igualment baixava el blob sencer de la base de dades.
+  const meta = (await db().query(
+    "select workspace_id, band_id, name, mime, size from files where id=$1", [id]
+  )).rows[0];
+  if (!meta) return new NextResponse("No trobat", { status: 404 });
 
   // Imatges públiques per disseny: fotos de perfil de músic i logos/portades
   // de grup (surten a pàgines compartibles).
@@ -26,21 +32,51 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   if (!isPublicImage) {
     const profile = await getProfile();
     if (!profile) return new NextResponse("No autoritzat", { status: 401 });
-    let allowed = profile.role === "manager" && profile.workspaceId === row.workspace_id;
-    if (!allowed && row.band_id) {
+    let allowed = profile.role === "manager" && profile.workspaceId === meta.workspace_id;
+    if (!allowed && meta.band_id) {
       const member = (await db().query(
-        "select 1 from band_members where band_id=$1 and clerk_user_id=$2", [row.band_id, profile.clerkUserId]
+        "select 1 from band_members where band_id=$1 and clerk_user_id=$2", [meta.band_id, profile.clerkUserId]
       )).rows[0];
       allowed = !!member;
     }
     if (!allowed) return new NextResponse("No autoritzat", { status: 403 });
   }
 
-  return new NextResponse(new Uint8Array(row.data), {
-    headers: {
-      "Content-Type": row.mime || "application/octet-stream",
-      "Content-Disposition": `inline; filename="${encodeURIComponent(row.name)}"`,
-      "Cache-Control": "private, max-age=3600",
-    },
+  // Suport a "Range" (bytes=…): imprescindible per a àudio/vídeo. En lloc
+  // de baixar el fitxer sencer de Postgres i retallar-lo a Node, es demana
+  // directament el tros necessari amb substring() — estalvia arrossegar
+  // desenes de MB per llegir només la capçalera d'un àudio, per exemple.
+  const total: number = meta.size;
+  const baseHeaders: Record<string, string> = {
+    "Content-Type": meta.mime || "application/octet-stream",
+    "Content-Disposition": `inline; filename="${encodeURIComponent(meta.name)}"`,
+    "Cache-Control": "private, max-age=3600",
+    "Accept-Ranges": "bytes",
+  };
+
+  const range = req.headers.get("range");
+  const m = range && /bytes=(\d*)-(\d*)/.exec(range);
+  if (m) {
+    let start = m[1] ? parseInt(m[1], 10) : 0;
+    let end = m[2] ? parseInt(m[2], 10) : total - 1;
+    if (isNaN(start) || start < 0) start = 0;
+    if (isNaN(end) || end >= total) end = total - 1;
+    if (start > end) start = 0;
+    const len = end - start + 1;
+    const r = await db().query(
+      "select substring(data from $2::int for $3::int) as chunk from files where id=$1",
+      [id, start + 1, len]
+    );
+    const chunk: Buffer = r.rows[0].chunk;
+    return new NextResponse(new Uint8Array(chunk), {
+      status: 206,
+      headers: { ...baseHeaders, "Content-Range": `bytes ${start}-${end}/${total}`, "Content-Length": String(chunk.length) },
+    });
+  }
+
+  const r = await db().query("select data from files where id=$1", [id]);
+  const data: Buffer = r.rows[0].data;
+  return new NextResponse(new Uint8Array(data), {
+    headers: { ...baseHeaders, "Content-Length": String(total) },
   });
 }

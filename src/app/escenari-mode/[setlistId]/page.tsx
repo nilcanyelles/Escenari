@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
+import { getSongs } from "@/lib/songs";
 import PerformView, { type PerformSong } from "./PerformView";
 
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export default async function PerformPage({ params }: { params: Promise<{ setlis
   }
   if (!allowed) notFound();
 
-  const lib = (await db().query("select id, title, tempo, song_key, lyrics, duration from songs where band_id=$1", [sl.band_id])).rows;
+  const lib = await getSongs(sl.band_id);
   const byId: Record<string, typeof lib[number]> = {};
   const byTitle: Record<string, typeof lib[number]> = {};
   lib.forEach((s) => { byId[s.id] = s; byTitle[s.title.toLowerCase()] = s; });
@@ -37,13 +38,17 @@ export default async function PerformPage({ params }: { params: Promise<{ setlis
     .filter((s: { title: string }) => (s.title || "").trim())
     .map((s: { title: string; duration: string; key: string; notes: string; songId?: string }) => {
       const match = (s.songId && byId[s.songId]) || byTitle[(s.title || "").toLowerCase()];
+      const tracks = (match?.files || [])
+        .filter((f) => f.mime.startsWith("audio"))
+        .map((f) => ({ id: f.id, name: f.name || f.instrument }));
       return {
         title: s.title,
         duration: s.duration || match?.duration || "",
-        key: s.key || match?.song_key || "",
+        key: s.key || match?.songKey || "",
         notes: s.notes || "",
         tempo: match?.tempo || 0,
         lyrics: match?.lyrics || "",
+        tracks,
       };
     });
 

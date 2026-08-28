@@ -35,7 +35,16 @@ export default function ProfileShareModal({ data, photoUrl, onClose }: {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const accent = data.bands[0]?.color1 || "#8b7bff";
+    const accent = data.bands[0]?.color1 || data.crewRoles[0]?.color1 || "#8b7bff";
+
+    // Grups on hi ets músic i grups on hi ets crew, junts (sense repetir-ne
+    // cap si en resulta que ets totes dues coses del mateix grup).
+    const groupsById = new Map<string, { id: string; name: string; color1: string }>();
+    data.bands.forEach((b) => groupsById.set(b.id, { id: b.id, name: b.name, color1: b.color1 }));
+    data.crewRoles.forEach((c) => {
+      if (!groupsById.has(c.bandId)) groupsById.set(c.bandId, { id: c.bandId, name: c.bandName, color1: c.color1 });
+    });
+    const allGroups = Array.from(groupsById.values());
 
     const draw = (photo: HTMLImageElement | null) => {
       // Fons
@@ -104,14 +113,14 @@ export default function ProfileShareModal({ data, photoUrl, onClose }: {
         y += 150;
       }
 
-      // Grups
-      if (data.bands.length) {
+      // Grups (músic i/o crew)
+      if (allGroups.length) {
         ctx.fillStyle = "rgba(255,255,255,0.45)";
         ctx.font = "600 26px Inter, sans-serif";
         ctx.letterSpacing = "6px";
         ctx.fillText("GRUPS", W / 2, y);
         ctx.letterSpacing = "0px";
-        data.bands.slice(0, 4).forEach((b, i) => {
+        allGroups.slice(0, 4).forEach((b, i) => {
           const by = y + 60 + i * 62;
           ctx.fillStyle = b.color1 || accent;
           ctx.beginPath();
@@ -121,7 +130,7 @@ export default function ProfileShareModal({ data, photoUrl, onClose }: {
           ctx.font = "600 42px Inter, sans-serif";
           ctx.fillText(b.name, W / 2, by);
         });
-        y += 60 + Math.min(data.bands.length, 4) * 62 + 60;
+        y += 60 + Math.min(allGroups.length, 4) * 62 + 60;
       }
 
       // Concerts

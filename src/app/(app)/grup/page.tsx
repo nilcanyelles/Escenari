@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import GroupHomeView from "@/components/GroupHomeView";
 import { getBands, getConcerts } from "@/lib/data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
@@ -61,21 +62,23 @@ export default async function GrupPage() {
   });
 
   return (
-    <GroupHomeView
-      band={band}
-      allBands={bands}
-      concerts={concerts.filter((c) => c.bandId === bandId)}
-      linkedMembers={linkedMembers}
-      backupRequests={backupRequests}
-      concertCountByPerson={concertCountByPerson}
-      riders={riders}
-      setlists={setlists}
-      editors={editors}
-      songs={songs}
-      files={files}
-      photosByName={photosByName}
-      igByName={igByName}
-      today={today()}
-    />
+    <Suspense fallback={null}>
+      <GroupHomeView
+        band={band}
+        allBands={bands}
+        concerts={concerts.filter((c) => c.bandId === bandId)}
+        linkedMembers={linkedMembers}
+        backupRequests={backupRequests}
+        concertCountByPerson={concertCountByPerson}
+        riders={riders}
+        setlists={setlists}
+        editors={editors}
+        songs={songs}
+        files={files}
+        photosByName={photosByName}
+        igByName={igByName}
+        today={today()}
+      />
+    </Suspense>
   );
 }

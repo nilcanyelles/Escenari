@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 import GroupHomeView from "@/components/GroupHomeView";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
@@ -65,24 +66,26 @@ export default async function ArtistGrupPage() {
   });
 
   return (
-    <GroupHomeView
-      band={band}
-      allBands={bands}
-      concerts={concerts.filter((c) => c.bandId === bandId)}
-      linkedMembers={linkedMembers}
-      backupRequests={backupRequests}
-      concertCountByPerson={concertCountByPerson}
-      riders={riders}
-      setlists={setlists}
-      editors={editors}
-      songs={songs}
-      files={files}
-      photosByName={photosByName}
-      igByName={igByName}
-      viewer="artist"
-      caps={caps}
-      myName={myName}
-      today={today()}
-    />
+    <Suspense fallback={null}>
+      <GroupHomeView
+        band={band}
+        allBands={bands}
+        concerts={concerts.filter((c) => c.bandId === bandId)}
+        linkedMembers={linkedMembers}
+        backupRequests={backupRequests}
+        concertCountByPerson={concertCountByPerson}
+        riders={riders}
+        setlists={setlists}
+        editors={editors}
+        songs={songs}
+        files={files}
+        photosByName={photosByName}
+        igByName={igByName}
+        viewer="artist"
+        caps={caps}
+        myName={myName}
+        today={today()}
+      />
+    </Suspense>
   );
 }

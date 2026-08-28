@@ -85,9 +85,16 @@ const INSTRUMENT_ICON_FILES: Record<string, string> = {
   "saxofon tenor": "saxo-tenor.png",
 };
 
-export function instrumentIconFor(name: string): string | null {
+// Nota musical genèrica per als instruments que encara no tenen una icona
+// pròpia dibuixada (p. ex. "Gralla dolça", "Trombó"...) — així totes les
+// bombolles d'instrument en tenen sempre una, mai en queda cap sense.
+const GENERIC_INSTRUMENT_ICON = "data:image/svg+xml;utf8," + encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>'
+);
+
+export function instrumentIconFor(name: string): string {
   const file = INSTRUMENT_ICON_FILES[(name || "").trim().toLowerCase()];
-  return file ? "/instruments/" + file : null;
+  return file ? "/instruments/" + file : GENERIC_INSTRUMENT_ICON;
 }
 
 export const TAG_HUE: Record<string, number> = {

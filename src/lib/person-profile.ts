@@ -13,6 +13,18 @@ export type ProfileBand = {
   perms?: Partial<import("./types").MemberPerms>;
 };
 
+// Càrrec dins l'equip tècnic d'un grup — una persona pot ser-hi músic,
+// crew, o totes dues coses alhora (a vegades en grups diferents).
+export type ProfileCrewRole = {
+  bandId: string;
+  bandName: string;
+  logo: string;
+  color1: string;
+  color2: string;
+  role: string;
+  perms?: Partial<import("./types").MemberPerms>;
+};
+
 export type ProfileConcert = {
   id: string;
   date: string;
@@ -51,6 +63,7 @@ export type PersonProfileData = {
   email: string;
   hiddenBands: string[];
   bands: ProfileBand[];        // només les visibles
+  crewRoles: ProfileCrewRole[]; // càrrecs a l'equip tècnic (només els visibles)
   allBandIds: { id: string; name: string }[]; // totes (per a l'editor de visibilitat)
   instruments: string[];
   concerts: ProfileConcert[];  // dels grups visibles
@@ -140,17 +153,25 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
   const nameKey = normalize(row.person_name);
   const hiddenBands: string[] = row.hidden_bands || [];
 
+  // Una persona pot ser músic, de l'equip tècnic, o totes dues coses (a
+  // vegades en grups diferents) — es busca a totes dues llistes per separat.
   const bandsRows = (await pool.query("select * from bands where workspace_id=$1", [row.workspace_id])).rows;
   const memberBands = bandsRows.filter((b) =>
     (b.members || []).some((m: { name: string }) => normalize(m.name) === nameKey)
   );
-  const allBandIds = memberBands.map((b) => ({ id: b.id, name: b.name }));
+  const crewBands = bandsRows.filter((b) =>
+    (b.crew || []).some((m: { name: string }) => normalize(m.name) === nameKey)
+  );
+  const allBandsInvolved = Array.from(new Map([...memberBands, ...crewBands].map((b) => [b.id, b])).values());
+  const allBandIds = allBandsInvolved.map((b) => ({ id: b.id, name: b.name }));
   const visible = memberBands.filter((b) => !hiddenBands.includes(b.id));
+  const crewVisible = crewBands.filter((b) => !hiddenBands.includes(b.id));
 
-  // Telèfon i correu: primera dada no buida entre tots els grups.
+  // Telèfon i correu: primera dada no buida entre tots els grups (com a
+  // músic o com a crew).
   let phone = "";
   let email = "";
-  memberBands.forEach((b) => {
+  allBandsInvolved.forEach((b) => {
     const me = (b.members || []).find((m: { name: string }) => normalize(m.name) === nameKey) ||
       (b.crew || []).find((m: { name: string }) => normalize(m.name) === nameKey);
     if (me?.phone && !phone) phone = me.phone;
@@ -167,6 +188,14 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
       id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "", color2: b.color2 || "",
       instruments: ins, role: me?.role || "",
       perms: me?.perms || {},
+    };
+  });
+
+  const crewRoles: ProfileCrewRole[] = crewVisible.map((b) => {
+    const me = (b.crew || []).find((m: { name: string }) => normalize(m.name) === nameKey);
+    return {
+      bandId: b.id, bandName: b.name, logo: b.logo || "", color1: b.color1 || "", color2: b.color2 || "",
+      role: me?.role || "", perms: me?.perms || {},
     };
   });
 
@@ -227,6 +256,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     email,
     hiddenBands,
     bands,
+    crewRoles,
     allBandIds,
     instruments,
     concerts,

@@ -21,12 +21,12 @@ export default async function SongStudioPage({ params }: { params: Promise<{ son
   if (!row) notFound();
 
   let allowed = profile.role === "manager" && profile.workspaceId === row.workspace_id;
-  let backHref = "/grup";
+  let backHref = "/grup?tab=cancons";
   if (!allowed) {
     const member = (await db().query(
       "select 1 from band_members where band_id=$1 and clerk_user_id=$2", [row.band_id, profile.clerkUserId]
     )).rows[0];
-    if (member) { allowed = true; backHref = "/artista"; }
+    if (member) { allowed = true; backHref = "/artista/grup?tab=cancons"; }
   }
   if (!allowed) notFound();
 

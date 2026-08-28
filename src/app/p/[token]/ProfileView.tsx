@@ -123,13 +123,37 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
   const [shareOpen, setShareOpen] = useState(false);
   const [localPhoto, setLocalPhoto] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
+  const [emailCopied, setEmailCopied] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
+
+  function copyEmail(email: string) {
+    navigator.clipboard.writeText(email).then(() => {
+      setEmailCopied(true);
+      window.setTimeout(() => setEmailCopied(false), 1500);
+    });
+  }
 
   // localPhoto: vista prèvia immediata just després de pujar una foto nova.
   const photoUrl = localPhoto || (data.photoFileId ? `/api/file/${data.photoFileId}?v=${data.photoFileId}` : personPhotoDataUri(data.name));
   const upcoming = data.concerts.filter((c) => c.date >= today);
   const signedIn = isOwner || isManager;
+
+  // Grups del perfil: si és músic i crew del mateix grup alhora, una sola
+  // entrada amb els dos rols junts, no dues de separades.
+  const groupEntries = (() => {
+    const byBandId = new Map<string, { bandId: string; name: string; logo: string; color1: string; roleText: string }>();
+    data.bands.forEach((b) => {
+      byBandId.set(b.id, { bandId: b.id, name: b.name, logo: b.logo, color1: b.color1, roleText: b.instruments.join(", ") || b.role });
+    });
+    data.crewRoles.forEach((c) => {
+      const crewText = c.role || "Crew";
+      const existing = byBandId.get(c.bandId);
+      if (existing) existing.roleText = `${existing.roleText} · ${crewText}`;
+      else byBandId.set(c.bandId, { bandId: c.bandId, name: c.bandName, logo: c.logo, color1: c.color1, roleText: crewText });
+    });
+    return Array.from(byBandId.values());
+  })();
 
   async function handleSave() {
     setSaving(true);
@@ -214,18 +238,36 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
           )}
           {data.bio && <p className="pv-bio">{data.bio}</p>}
 
-          {(data.phone || data.email) && (
-            <>
+          {(data.phone || data.email || data.igHandle) && (
               <div className="pv-contact">
-                {data.phone && <a className="pv-contact-btn" href={`tel:${data.phone.replace(/\s/g, "")}`} title={data.phone}>📞 Truca</a>}
-                {data.phone && <a className="pv-contact-btn" href={`https://wa.me/${data.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer">💬 WhatsApp</a>}
-                {data.email && <a className="pv-contact-btn" href={`mailto:${data.email}`} title={data.email}>✉️ Correu</a>}
+                {data.phone && (
+                  <a className="pv-contact-btn" href={`tel:${data.phone.replace(/\s/g, "")}`} title={`Truca — ${data.phone}`}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+                  </a>
+                )}
+                {data.phone && (
+                  <a className="pv-contact-btn" href={`https://wa.me/${data.phone.replace(/[^\d]/g, "")}`} target="_blank" rel="noreferrer" title="WhatsApp">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                  </a>
+                )}
+                {data.email && (
+                  <span style={{ position: "relative" }}>
+                    <button type="button" className="pv-contact-btn" title={emailCopied ? "Correu copiat" : `Copia el correu — ${data.email}`} onClick={() => copyEmail(data.email)}>
+                      {emailCopied ? (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      ) : (
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 6-10 7L2 6"></path></svg>
+                      )}
+                    </button>
+                    {emailCopied && <span className="copy-email-toast">{data.email} copiat</span>}
+                  </span>
+                )}
+                {data.igHandle && (
+                  <a className="pv-contact-btn" href={`https://instagram.com/${data.igHandle}`} target="_blank" rel="noreferrer" title={`Instagram — @${data.igHandle}`}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+                  </a>
+                )}
               </div>
-              <div className="pv-contact-details">
-                {data.phone && <span>📞 {data.phone}</span>}
-                {data.email && <span>✉️ {data.email}</span>}
-              </div>
-            </>
           )}
 
           <div className="pv-stats">
@@ -244,21 +286,19 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
 
           <div className="pv-section-title">Grups</div>
           <div className="pv-bands">
-            {data.bands.map((b) => (
-              <div key={b.id} className="pv-band" style={{ ["--pv-accent" as string]: b.color1 || "#8b7bff", flexWrap: "wrap" }}>
-                <img src={b.logo || bandPhotoDataUri(b)} alt="" />
+            {/* Com a músic i com a crew: si és totes dues coses del mateix
+                grup, una sola entrada amb els dos rols junts (instrument i
+                càrrec); si són grups diferents, una entrada per cada un. */}
+            {groupEntries.map((g) => (
+              <div key={g.bandId} className="pv-band" style={{ ["--pv-accent" as string]: g.color1 || "#8b7bff", flexWrap: "wrap" }}>
+                <img src={g.logo || bandPhotoDataUri({ id: g.bandId, name: g.name })} alt="" />
                 <div>
-                  <div className="pv-band-name">{b.name}</div>
-                  <div className="pv-band-role">{b.instruments.join(", ") || b.role}</div>
+                  <div className="pv-band-name">{g.name}</div>
+                  <div className="pv-band-role">{g.roleText}</div>
                 </div>
-                {isManager && (
-                  <div style={{ width: "100%" }}>
-                    <BandPermsRow bandId={b.id} memberName={data.name} initial={b.perms || {}} />
-                  </div>
-                )}
               </div>
             ))}
-            {data.bands.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}
+            {groupEntries.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}
           </div>
         </aside>
 

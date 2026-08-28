@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
@@ -24,6 +25,69 @@ import { normalize } from "@/lib/text";
 import { bandColor } from "@/lib/tags";
 import type { Person } from "@/lib/types";
 import { openPersonProfileAction } from "@/app/p/profile-actions";
+
+// Icones de línia (mateix estil que la fitxa de perfil pública) per als
+// botons de contacte ràpid de les targetes "chroma" — abans eren emojis.
+const ICON_PHONE = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
+);
+const ICON_WHATSAPP = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+);
+const ICON_MAIL = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 6-10 7L2 6"></path></svg>
+);
+const ICON_INSTAGRAM = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+);
+const ICON_LINK = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+);
+const ICON_CHECK = (
+  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+);
+
+// Fila de músics o de crew a la pestanya Equip: sempre en una sola línia
+// (mai es trenca en diverses files) — si n'hi ha més dels que hi caben,
+// unes fletxes hi passen d'un en un, amb la mateixa animació de
+// desplaçament que la previsualització de la pestanya Inici.
+function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4 }: {
+  people: Person[];
+  renderItem: (p: Person) => ChromaItem;
+  cardWidth: number;
+  radius: number;
+  visibleCount?: number;
+}) {
+  const [start, setStart] = useState(0);
+  const [dir, setDir] = useState<"next" | "prev">("next");
+  const maxStart = Math.max(0, people.length - visibleCount);
+  const s = Math.min(start, maxStart);
+  const pageItems = people.slice(s, s + visibleCount);
+  const canNav = people.length > visibleCount;
+  return (
+    <div className="bento-chroma-row">
+      {canNav && (
+        <button
+          type="button"
+          className="bento-chroma-nav-btn"
+          disabled={s === 0}
+          onClick={() => { setDir("prev"); setStart((p) => Math.max(0, p - 1)); }}
+        >‹</button>
+      )}
+      <div className={"bento-chroma bento-chroma-slide-" + dir} key={s}>
+        <ChromaGrid items={pageItems.map(renderItem)} columns={visibleCount} cardWidth={cardWidth} radius={radius} />
+      </div>
+      {canNav && (
+        <button
+          type="button"
+          className="bento-chroma-nav-btn"
+          disabled={s >= maxStart}
+          onClick={() => { setDir("next"); setStart((p) => Math.min(maxStart, p + 1)); }}
+        >›</button>
+      )}
+    </div>
+  );
+}
 
 // Fila de permisos que el gestor commuta a la targeta de cada membre: què
 // pot crear (cançons, riders, setlists), si pot afegir gent i esdeveniments.
@@ -61,6 +125,8 @@ function personChromaItem(
   linked: boolean,
   onInvite?: (name: string) => void,
   footer?: React.ReactNode,
+  copiedEmailKey?: string | null,
+  onCopyEmail?: (key: string, email: string) => void,
 ): ChromaItem {
   const realIg = igByName[normalize(p.name)] || "";
   const handle = "@" + (realIg || normalize(p.name).replace(/\s+/g, ""));
@@ -77,22 +143,28 @@ function personChromaItem(
   };
   const actions: ChromaItem["actions"] = [
     p.phone
-      ? { icon: "📞", title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` }
-      : { icon: "📞", title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
+      ? { icon: ICON_PHONE, title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` }
+      : { icon: ICON_PHONE, title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
     (p.whatsapp || p.phone)
-      ? { icon: "💬", title: "WhatsApp", href: `https://wa.me/${(p.whatsapp || p.phone || "").replace(/[^\d]/g, "")}` }
-      : { icon: "💬", title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
+      ? { icon: ICON_WHATSAPP, title: "WhatsApp", href: `https://wa.me/${(p.whatsapp || p.phone || "").replace(/[^\d]/g, "")}` }
+      : { icon: ICON_WHATSAPP, title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
     p.email
-      ? { icon: "✉️", title: `Escriu a ${p.email}`, href: `mailto:${p.email}` }
-      : { icon: "✉️", title: "Sense correu — afegeix-lo al perfil", onClick: missing("el correu") },
-    { icon: "📸", title: `Instagram ${handle}`, href: `https://instagram.com/${handle.slice(1)}` },
+      ? {
+          icon: copiedEmailKey === p.name ? ICON_CHECK : ICON_MAIL,
+          title: copiedEmailKey === p.name ? "Correu copiat" : `Copia el correu — ${p.email}`,
+          onClick: () => onCopyEmail?.(p.name, p.email!),
+        }
+      : { icon: ICON_MAIL, title: "Sense correu — afegeix-lo al perfil", onClick: missing("el correu") },
+    { icon: ICON_INSTAGRAM, title: `Instagram ${handle}`, href: `https://instagram.com/${handle.slice(1)}` },
   ];
-  if (!linked && onInvite) actions.push({ icon: "🔗", title: "Convida a reclamar aquest perfil", onClick: () => onInvite(p.name) });
+  if (!linked && onInvite) actions.push({ icon: ICON_LINK, title: "Convida a reclamar aquest perfil", onClick: () => onInvite(p.name) });
 
   return {
     image: photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(p.name, c1, c2),
     title: p.name,
+    verified: linked,
     subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
+    subtitleIcon: inss.length ? instrumentIconFor(inss[0]) : null,
     handle,
     location: concertCount !== null ? `${concertCount} concerts` : undefined,
     borderColor: c1,
@@ -140,17 +212,64 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   today: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const isMgr = viewer === "manager";
   const base = isMgr ? "" : "/artista"; // rutes de l'àrea d'artista
   const can: MemberPerms = isMgr
     ? { songs: true, riders: true, setlists: true, members: true, events: true }
     : (caps || { songs: true, riders: true, setlists: true, members: false, events: false });
-  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "riders" | "setlists">("inici");
+  // La pestanya inicial es pot indicar per URL (p. ex. ?tab=cancons), com
+  // quan es torna de l'editor d'una cançó cap a l'apartat de cançons del grup.
+  const initialTabParam = searchParams.get("tab");
+  const initialTab = initialTabParam === "equip" || initialTabParam === "cancons" || initialTabParam === "documents" ? initialTabParam : "inici";
+  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "documents">(initialTab);
+  // En passar el ratolí per una targeta petita de la previsualització, es
+  // mostra literalment la targeta grossa (la mateixa que a la pestanya
+  // Equip) flotant per sobre — a través d'un portal a <body>, perquè cap
+  // altre element de la pàgina la pugui tapar mai.
+  const [hoveredTeam, setHoveredTeam] = useState<{ person: Person; rect: DOMRect } | null>(null);
+  // Petit marge abans de tancar-la de veres: com que la targeta flotant no
+  // ocupa exactament el mateix espai que la petita, en moure el ratolí de
+  // l'una a l'altra hi hauria un instant sense cap de les dues sota el
+  // punter que la tancaria de seguida — s'espera un moment per si l'altra
+  // banda ja l'ha reobert abans de fer-ho.
+  const hoverCloseTimer = useRef<number | null>(null);
+  function scheduleHoverClose(name: string) {
+    if (hoverCloseTimer.current) window.clearTimeout(hoverCloseTimer.current);
+    hoverCloseTimer.current = window.setTimeout(() => {
+      setHoveredTeam((h) => (h?.person.name === name ? null : h));
+    }, 150);
+  }
+  function cancelHoverClose() {
+    if (hoverCloseTimer.current) { window.clearTimeout(hoverCloseTimer.current); hoverCloseTimer.current = null; }
+  }
+  // La targeta grossa només s'obre si el ratolí s'hi queda mig segon a
+  // sobre — evita que aparegui sense voler en passar-hi per damunt.
+  const hoverOpenTimer = useRef<number | null>(null);
+  function scheduleHoverOpen(person: Person, rect: DOMRect) {
+    if (hoverOpenTimer.current) window.clearTimeout(hoverOpenTimer.current);
+    hoverOpenTimer.current = window.setTimeout(() => { setHoveredTeam({ person, rect }); }, 500);
+  }
+  function cancelHoverOpen() {
+    if (hoverOpenTimer.current) { window.clearTimeout(hoverOpenTimer.current); hoverOpenTimer.current = null; }
+  }
+  // Previsualització de l'equip a la pestanya Inici: només s'hi veuen 4
+  // persones de cop, però amb fletxes es pot passar a la resta sense
+  // haver de canviar de pestanya.
+  const [teamPreviewPage, setTeamPreviewPage] = useState(0);
+  const [teamPreviewDir, setTeamPreviewDir] = useState<"next" | "prev">("next");
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
   const [addForm, setAddForm] = useState<{ name: string; instruments: string[]; role: string; phone: string; email: string }>({ name: "", instruments: [], role: "", phone: "", email: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [joinCopied, setJoinCopied] = useState(false);
+  const [copiedEmailKey, setCopiedEmailKey] = useState<string | null>(null);
+  function copyEmail(key: string, email: string) {
+    navigator.clipboard.writeText(email).then(() => {
+      setCopiedEmailKey(key);
+      window.setTimeout(() => setCopiedEmailKey((k) => (k === key ? null : k)), 1500);
+    });
+  }
   const [backups, setBackups] = useState<BackupPerson[]>(() =>
     ((band as unknown as { backups?: BackupPerson[] }).backups || []).map((b) => ({ name: b.name || "", instruments: b.instruments || [], phone: b.phone || "", email: b.email || "" }))
   );
@@ -255,8 +374,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <button className={"stats-tab" + (tab === "inici" ? " active" : "")} onClick={() => setTab("inici")}>Inici</button>
         <button className={"stats-tab" + (tab === "equip" ? " active" : "")} onClick={() => setTab("equip")}>Equip</button>
         <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
-        <button className={"stats-tab" + (tab === "riders" ? " active" : "")} onClick={() => setTab("riders")}>Riders</button>
-        <button className={"stats-tab" + (tab === "setlists" ? " active" : "")} onClick={() => setTab("setlists")}>Setlists</button>
+        <button className={"stats-tab" + (tab === "documents" ? " active" : "")} onClick={() => setTab("documents")}>Documents</button>
 
       </div>
 
@@ -265,23 +383,100 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           cards={([
             {
               key: "membres",
+              className: "bento-card-team",
               label: "Equip",
-              title: `${band.members.length} integrants`,
-              description: `${linkedMembers.length} amb compte d'Escenari${band.crew.length ? ` · ${band.crew.length} crew` : ""}`,
+              title: `${band.members.length + band.crew.length} integrants`,
+              description: `${band.members.length} músics${band.crew.length ? `, ${band.crew.length} crew` : ""}`,
               colSpan: 2,
               rowSpan: 2,
               onClick: () => setTab("equip"),
-              content: (
-                <div className="bento-chroma">
-                  <ChromaGrid
-                    className="chroma-compact"
-                    items={band.members.slice(0, 4).map((m) => personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name]))}
-                    columns={4}
-                    cardWidth={104}
-                    radius={150}
-                  />
-                </div>
-              ),
+              content: (() => {
+                const allTeam = [...band.members, ...band.crew];
+                const isMusician = (p: Person) => band.members.some((x) => x.name === p.name);
+                const countFor = (p: Person) => (isMusician(p) ? concertCountByPerson[p.name] || 0 : null);
+                const visibleCount = 4;
+                const maxStart = Math.max(0, allTeam.length - visibleCount);
+                const start = Math.min(teamPreviewPage, maxStart);
+                const pageTeam = allTeam.slice(start, start + visibleCount);
+                const canNav = allTeam.length > visibleCount;
+                const peekCard = (p: Person, side: "prev" | "next") => (
+                  <div className={"bento-chroma-peek-card bento-chroma-peek-" + side} aria-hidden="true">
+                    <ChromaGrid
+                      className="chroma-compact"
+                      items={[personChromaItem(p, null, band, openProfile, photosByName, igByName, false)]}
+                      columns={1}
+                      cardWidth={104}
+                      radius={150}
+                    />
+                  </div>
+                );
+                const prevPeek = start > 0 ? allTeam[start - 1] : null;
+                const nextPeek = start + visibleCount < allTeam.length ? allTeam[start + visibleCount] : null;
+                return (
+                  <div className="bento-chroma-row">
+                    {canNav && (
+                      <div className="bento-chroma-nav-wrap">
+                        <button
+                          type="button"
+                          className="bento-chroma-nav-btn"
+                          disabled={start === 0}
+                          onClick={(e) => { e.stopPropagation(); setTeamPreviewDir("prev"); setTeamPreviewPage((p) => Math.max(0, p - 1)); }}
+                        >‹</button>
+                        {prevPeek && peekCard(prevPeek, "prev")}
+                      </div>
+                    )}
+                    <div className={"bento-chroma bento-chroma-slide-" + teamPreviewDir} key={start}>
+                      <ChromaGrid
+                        className="chroma-compact"
+                        items={pageTeam.map((m) => {
+                          const item = personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name], undefined, undefined, copiedEmailKey, copyEmail);
+                          return {
+                            ...item,
+                            onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
+                            onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
+                          };
+                        })}
+                        columns={4}
+                        cardWidth={104}
+                        radius={150}
+                      />
+                    </div>
+                    {canNav && (
+                      <div className="bento-chroma-nav-wrap">
+                        <button
+                          type="button"
+                          className="bento-chroma-nav-btn"
+                          disabled={start >= maxStart}
+                          onClick={(e) => { e.stopPropagation(); setTeamPreviewDir("next"); setTeamPreviewPage((p) => Math.min(maxStart, p + 1)); }}
+                        >›</button>
+                        {nextPeek && peekCard(nextPeek, "next")}
+                      </div>
+                    )}
+                    {hoveredTeam && typeof document !== "undefined" && createPortal(
+                      <div
+                        className="bento-chroma-flyout"
+                        style={{
+                          top: hoveredTeam.rect.top + hoveredTeam.rect.height / 2,
+                          left: hoveredTeam.rect.left + hoveredTeam.rect.width / 2,
+                        }}
+                        onMouseEnter={cancelHoverClose}
+                        onMouseLeave={() => setHoveredTeam(null)}
+                      >
+                        <ChromaGrid
+                          items={[personChromaItem(
+                            hoveredTeam.person, countFor(hoveredTeam.person), band, openProfile, photosByName, igByName,
+                            !!linkedByName[hoveredTeam.person.name], undefined, undefined, copiedEmailKey, copyEmail,
+                          )]}
+                          columns={1}
+                          cardWidth={190}
+                          radius={240}
+                        />
+                      </div>,
+                      document.body
+                    )}
+                  </div>
+                );
+              })(),
             },
             {
               key: "bolos",
@@ -334,14 +529,14 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               label: "Tècnica",
               title: `${riders.length} riders`,
               description: "Plànol d'escenari i aprovacions",
-              onClick: () => setTab("riders"),
+              onClick: () => setTab("documents"),
             },
             {
               key: "setlists",
               label: "Directe",
               title: `${setlists.length} setlists`,
               description: "Amb mode escenari",
-              onClick: () => setTab("setlists"),
+              onClick: () => setTab("cancons"),
             },
             {
               key: "ritme",
@@ -354,19 +549,23 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         />
       )}
 
-      {tab === "cancons" && <SongsPanel band={band} songs={songs} canEdit={can.songs} />}
-
-      {tab === "riders" && (
-        <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={can.riders} isManager={isMgr} />
+      {tab === "cancons" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <SongsPanel band={band} songs={songs} canEdit={can.songs} />
+          <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isMgr} songs={songs} />
+        </div>
       )}
-      {tab === "setlists" && (
-        <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isMgr} songs={songs} />
+
+      {tab === "documents" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+          <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={can.riders} isManager={isMgr} />
+        </div>
       )}
 
       {tab === "equip" && (<>
       {/* KPIs */}
       <div className="kpi-grid kpi-grid-4">
-        <div className="card card-centered"><div className="card-title">Integrants</div><div className="card-value">{band.members.length}</div></div>
+        <div className="card card-centered"><div className="card-title">Integrants</div><div className="card-value">{band.members.length + band.crew.length}</div></div>
         <div className="card card-centered"><div className="card-title">Concerts totals</div><div className="card-value">{total}</div></div>
         <div className="card card-centered"><div className="card-title">Pròxims bolos</div><div className="card-value">{upcoming.length}</div></div>
         <div className="card card-centered"><div className="card-title">Suplents</div><div className="card-value">{backups.length}</div></div>
@@ -375,7 +574,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {/* Membres */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
-          <div className="panel-title">Membres</div>
+          <div className="panel-title">Músics</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {memberEmails.length > 0 && (
               <a className="btn-outline" style={{ textDecoration: "none" }} title={`Correu a tot el grup (${memberEmails.length} adreces)`}
@@ -390,15 +589,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té membres — afegeix-ne amb el botó de dalt.</div>
         ) : (
           band.members.length > 0 && (
-            <ChromaGrid
-              items={band.members.map((m) => personChromaItem(
-                m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
-                !!linkedByName[m.name], isMgr ? handleInvite : undefined,
-                isMgr ? <PermsRow bandId={band.id} member={m} /> : undefined,
-              ))}
-              columns={4}
+            <TeamRow
+              people={band.members}
               cardWidth={190}
               radius={240}
+              visibleCount={5}
+              renderItem={(m) => personChromaItem(
+                m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
+                !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                undefined,
+                copiedEmailKey, copyEmail,
+              )}
             />
           )
         )}
@@ -421,17 +622,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         )}
       </div>
 
-      {/* Equip tècnic */}
+      {/* Crew */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
-          <div className="panel-title">Equip tècnic</div>
+          <div className="panel-title">Crew</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {band.crew.some((c) => c.email) && (
-              <a className="btn-outline" style={{ textDecoration: "none" }} title="Correu a tot l'equip tècnic"
-                href={`mailto:?bcc=${encodeURIComponent(band.crew.map((c) => c.email).filter(Boolean).join(","))}&subject=${encodeURIComponent(band.name)}`}>
-                ✉️ Correu al tècnic
-              </a>
-            )}
             {can.members && addKind !== "crew" && <button type="button" className="btn-outline" onClick={() => setAddKind("crew")}>+ Afegeix tècnic</button>}
           </div>
         </div>
@@ -439,11 +634,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="t-dim" style={{ fontSize: 13 }}>Sense equip tècnic encara.</div>
         ) : (
           band.crew.length > 0 && (
-            <ChromaGrid
-              items={band.crew.map((m) => personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name], isMgr ? handleInvite : undefined))}
-              columns={4}
+            <TeamRow
+              people={band.crew}
               cardWidth={190}
               radius={240}
+              visibleCount={5}
+              renderItem={(m) => personChromaItem(
+                m, null, band, openProfile, photosByName, igByName,
+                !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                undefined,
+                copiedEmailKey, copyEmail,
+              )}
             />
           )
         )}
