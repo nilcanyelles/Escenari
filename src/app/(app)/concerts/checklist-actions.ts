@@ -28,14 +28,16 @@ async function ownChecklist(checklistId: string, workspaceId: string) {
   return cl;
 }
 
-export async function addChecklistItemAction(checklistId: string, parentId: string | null, text: string): Promise<{ id: string }> {
+// "assignee" per defecte és qui crea la tasca (normalment el gestor, des de
+// la pestanya del concert) — sempre es pot canviar després.
+export async function addChecklistItemAction(checklistId: string, parentId: string | null, text: string, assignee = ""): Promise<{ id: string }> {
   const { workspaceId } = await requireManagerAction();
   const cl = await ownChecklist(checklistId, workspaceId);
   const id = "ci" + Date.now() + Math.floor(Math.random() * 1000);
   const max = (await db().query("select coalesce(max(position),0)+1 as p from checklist_items where checklist_id=$1", [checklistId])).rows[0].p;
   await db().query(
-    "insert into checklist_items (id, checklist_id, parent_id, text, position) values ($1,$2,$3,$4,$5)",
-    [id, checklistId, parentId, (text || "").trim(), max]
+    "insert into checklist_items (id, checklist_id, parent_id, text, assignee, position) values ($1,$2,$3,$4,$5,$6)",
+    [id, checklistId, parentId, (text || "").trim(), assignee, max]
   );
   if (cl.concert_id) revalidatePath(`/concerts/${cl.concert_id}`);
   return { id };

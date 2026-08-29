@@ -11,8 +11,8 @@ import {
 const STATUS_CYCLE: ChecklistItem["status"][] = ["pendent", "en curs", "fet"];
 const STATUS_ICON: Record<string, string> = { pendent: "○", "en curs": "◐", fet: "●" };
 
-function ItemRow({ checklist, item, depth, memberNames, onRefresh }: {
-  checklist: Checklist; item: ChecklistItem; depth: number; memberNames: string[]; onRefresh: () => void;
+function ItemRow({ checklist, item, depth, assigneeOptions, managerName, onRefresh }: {
+  checklist: Checklist; item: ChecklistItem; depth: number; assigneeOptions: string[]; managerName: string; onRefresh: () => void;
 }) {
   const [subText, setSubText] = useState("");
   const [addingSub, setAddingSub] = useState(false);
@@ -37,7 +37,7 @@ function ItemRow({ checklist, item, depth, memberNames, onRefresh }: {
           onChange={async (e) => { await updateChecklistItemAction(checklist.id, item.id, { assignee: e.target.value }); onRefresh(); }}
         >
           <option value="">— ningú —</option>
-          {memberNames.map((n) => <option key={n}>{n}</option>)}
+          {assigneeOptions.map((n) => <option key={n}>{n}</option>)}
         </select>
         <input
           type="date" className={"ck-due" + (overdue ? " overdue" : "")} value={item.due || ""}
@@ -54,7 +54,7 @@ function ItemRow({ checklist, item, depth, memberNames, onRefresh }: {
           onSubmit={async (e) => {
             e.preventDefault();
             if (!subText.trim()) return;
-            await addChecklistItemAction(checklist.id, item.id, subText);
+            await addChecklistItemAction(checklist.id, item.id, subText, managerName);
             setSubText(""); setAddingSub(false); onRefresh();
           }}
         >
@@ -62,16 +62,19 @@ function ItemRow({ checklist, item, depth, memberNames, onRefresh }: {
           <button type="submit" className="btn-outline">Afegeix</button>
         </form>
       )}
-      {children.map((ch) => <ItemRow key={ch.id} checklist={checklist} item={ch} depth={depth + 1} memberNames={memberNames} onRefresh={onRefresh} />)}
+      {children.map((ch) => <ItemRow key={ch.id} checklist={checklist} item={ch} depth={depth + 1} assigneeOptions={assigneeOptions} managerName={managerName} onRefresh={onRefresh} />)}
     </>
   );
 }
 
-export default function ChecklistSection({ concertId, checklists, memberNames }: { concertId: string; checklists: Checklist[]; memberNames: string[] }) {
+export default function ChecklistSection({ concertId, checklists, memberNames, managerName }: { concertId: string; checklists: Checklist[]; memberNames: string[]; managerName: string }) {
   const router = useRouter();
   const [newText, setNewText] = useState("");
   const [templates, setTemplates] = useState<{ id: string; name: string; concertLabel: string }[] | null>(null);
   const cl = checklists[0] || null;
+  // El gestor sempre és una opció triable (i el valor per defecte de les
+  // tasques noves), encara que no sigui cap "membre" del grup.
+  const assigneeOptions = managerName && !memberNames.includes(managerName) ? [managerName, ...memberNames] : memberNames;
 
   const refresh = () => router.refresh();
 
@@ -122,7 +125,7 @@ export default function ChecklistSection({ concertId, checklists, memberNames }:
       )}
 
       <div className="ck-list">
-        {roots.map((it) => <ItemRow key={it.id} checklist={cl} item={it} depth={0} memberNames={memberNames} onRefresh={refresh} />)}
+        {roots.map((it) => <ItemRow key={it.id} checklist={cl} item={it} depth={0} assigneeOptions={assigneeOptions} managerName={managerName} onRefresh={refresh} />)}
       </div>
 
       <form
@@ -130,7 +133,7 @@ export default function ChecklistSection({ concertId, checklists, memberNames }:
         onSubmit={async (e) => {
           e.preventDefault();
           if (!newText.trim()) return;
-          await addChecklistItemAction(cl.id, null, newText);
+          await addChecklistItemAction(cl.id, null, newText, managerName);
           setNewText(""); refresh();
         }}
       >

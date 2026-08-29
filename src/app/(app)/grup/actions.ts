@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { normalize } from "@/lib/text";
-import type { MemberPerms } from "@/lib/types";
+import type { MemberPerms, Vehicle } from "@/lib/types";
+import { uploadFileBlob } from "@/lib/blob-storage";
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
 
@@ -15,6 +16,17 @@ export async function saveBandBackupsAction(bandId: string, backups: BackupPerso
   await db().query(
     "update bands set backups=$1 where id=$2 and workspace_id=$3",
     [JSON.stringify(backups || []), bandId, workspaceId]
+  );
+  revalidatePath("/grup");
+}
+
+// Desa la llista de vehicles del grup (tipus, color, propietari, matrícula) — es fan servir per
+// triar-los ràpid a "Matrícules autoritzades" del full de ruta.
+export async function saveBandVehiclesAction(bandId: string, vehicles: Vehicle[]) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update bands set vehicles=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(vehicles || []), bandId, workspaceId]
   );
   revalidatePath("/grup");
 }
@@ -33,9 +45,10 @@ export async function uploadBandImageAction(formData: FormData): Promise<{ ok: b
   if (file.size > 8 * 1024 * 1024) return { ok: false, error: "Màxim 8 MB" };
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const blobUrl = await uploadFileBlob("files/" + id, buf, file.type);
   await db().query(
-    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by) values ($1,$2,$3,null,$4,$5,$6,$7,'')",
-    [id, workspaceId, bandId, file.name || kind, file.type, file.size, buf]
+    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,$3,null,$4,$5,$6,null,'',$7)",
+    [id, workspaceId, bandId, file.name || kind, file.type, file.size, blobUrl]
   );
   const url = `/api/file/${id}`;
   await db().query(
@@ -134,6 +147,39 @@ export async function setShowFeesAction(bandId: string, show: boolean) {
   await db().query("update bands set show_fees=$1 where id=$2 and workspace_id=$3", [show, bandId, workspaceId]);
   revalidatePath("/grup");
   revalidatePath("/artista");
+}
+
+// Percentatges de repartiment del caixet predeterminats del grup (nom -> %):
+// es fan servir per omplir el repartiment dels concerts que encara no en
+// tinguin cap de desat.
+export async function saveDefaultPayoutSplitAction(bandId: string, split: Record<string, number>) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update bands set default_payout_split=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(split || {}), bandId, workspaceId]
+  );
+  revalidatePath("/concerts");
+  revalidatePath("/grup");
+}
+
+// Desa una secció del full de ruta com a plantilla predeterminada del grup
+// (només les seves "opcions" — etiquetes/fases/càrrecs i interruptors — mai
+// detalls ni enllaços concrets, que ja s'han retallat abans de cridar això).
+// Es fusiona amb la resta de seccions ja desades sense tocar-les.
+export async function saveDefaultRouteSheetSectionAction(bandId: string, section: string, items: unknown[]) {
+  const { workspaceId } = await requireManagerAction();
+  const { rows } = await db().query<{ default_route_sheet: Record<string, unknown> | null }>(
+    "select default_route_sheet from bands where id=$1 and workspace_id=$2",
+    [bandId, workspaceId]
+  );
+  const current = (rows[0]?.default_route_sheet as Record<string, unknown> | null) || {};
+  const next = { ...current, [section]: items };
+  await db().query(
+    "update bands set default_route_sheet=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(next), bandId, workspaceId]
+  );
+  revalidatePath("/concerts");
+  revalidatePath("/grup");
 }
 
 // Publica una cerca de suplent per a un concert (visible a la borsa de músics).

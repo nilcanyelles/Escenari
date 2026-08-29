@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
+import { uploadFileBlob } from "@/lib/blob-storage";
 
 export type SaveTransactionInput = {
   id: string | null;
@@ -55,9 +56,11 @@ export async function uploadReceiptAction(formData: FormData): Promise<{ ok: boo
   if (!owns) return { ok: false, error: "Moviment no trobat" };
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const mime = file.type || "application/octet-stream";
+  const blobUrl = await uploadFileBlob("files/" + id, buf, mime);
   await db().query(
-    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by) values ($1,$2,null,null,$3,$4,$5,$6,$7)",
-    [id, workspaceId, file.name || "rebut", file.type || "application/octet-stream", file.size, buf, name]
+    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+    [id, workspaceId, file.name || "rebut", mime, file.size, name, blobUrl]
   );
   await db().query("update transactions set receipt_file_id=$1 where id=$2", [id, transactionId]);
   revalidatePath("/estadistiques");

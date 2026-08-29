@@ -3,8 +3,32 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireBandAccess as requirePerm } from "@/lib/band-access";
+import { uploadFileBlob, deleteFileBlob } from "@/lib/blob-storage";
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per fitxer (backing tracks en WAV poden pesar bastant)
+const MAX_TRACKS_PER_SONG = 10;
+const MAX_TRACKS_PER_BAND = 150;
+
+// Comprova els límits de pistes d'àudio (no compta partitures/imatges/etc.,
+// només fitxers d'àudio lligats a una cançó) abans de deixar pujar-ne una
+// de nova. Retorna un missatge d'error si s'ha arribat al límit.
+export async function checkTrackLimits(bandId: string, songId: string | null): Promise<string | null> {
+  if (songId) {
+    const { rows } = await db().query(
+      "select count(*)::int as n from files where song_id=$1 and mime like 'audio%'", [songId]
+    );
+    if (rows[0].n >= MAX_TRACKS_PER_SONG) {
+      return `Aquesta cançó ja té el màxim de ${MAX_TRACKS_PER_SONG} pistes d'àudio. Elimina'n alguna abans d'afegir-ne una de nova.`;
+    }
+  }
+  const { rows } = await db().query(
+    "select count(*)::int as n from files where band_id=$1 and song_id is not null and mime like 'audio%'", [bandId]
+  );
+  if (rows[0].n >= MAX_TRACKS_PER_BAND) {
+    return `El grup ja té el màxim de ${MAX_TRACKS_PER_BAND} pistes d'àudio en total. Elimina'n algunes abans de continuar.`;
+  }
+  return null;
+}
 
 // Repertori i fitxers: el gestor del workspace o un membre del grup amb el
 // permís "Cançons" actiu (per defecte el tenen).
@@ -166,6 +190,8 @@ export async function importSongsAction(bandId: string, raw: string): Promise<{ 
 }
 
 // Pujada de fitxers (gravacions, documents, vídeos, memos de veu) via FormData.
+// El binari va a Vercel Blob, no a Postgres — així no consumeix la quota de
+// transferència de la base de dades.
 export async function uploadFileAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
   const bandId = String(formData.get("bandId") || "");
   const songId = String(formData.get("songId") || "") || null;
@@ -174,12 +200,18 @@ export async function uploadFileAction(formData: FormData): Promise<{ ok: boolea
   if (!bandId || !file) return { ok: false, error: "Falta el fitxer" };
   const { workspaceId, who } = await requireBandAccess(bandId);
   if (file.size > MAX_FILE_BYTES) return { ok: false, error: "Màxim 100 MB per fitxer" };
+  const mime = file.type || "application/octet-stream";
+  if (mime.startsWith("audio")) {
+    const limitError = await checkTrackLimits(bandId, songId);
+    if (limitError) return { ok: false, error: limitError };
+  }
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const blobUrl = await uploadFileBlob("files/" + id, buf, mime);
   await db().query(
-    `insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, instrument)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id, workspaceId, bandId, songId, file.name || "fitxer", file.type || "application/octet-stream", file.size, buf, who, instrument]
+    `insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, instrument, blob_url)
+     values ($1,$2,$3,$4,$5,$6,$7,null,$8,$9,$10)`,
+    [id, workspaceId, bandId, songId, file.name || "fitxer", mime, file.size, who, instrument, blobUrl]
   );
   revalidateSongs(bandId);
   return { ok: true };
@@ -187,6 +219,59 @@ export async function uploadFileAction(formData: FormData): Promise<{ ok: boolea
 
 export async function deleteFileAction(bandId: string, fileId: string) {
   await requireBandAccess(bandId);
+  const row = (await db().query("select blob_url from files where id=$1 and band_id=$2", [fileId, bandId])).rows[0];
   await db().query("delete from files where id=$1 and band_id=$2", [fileId, bandId]);
+  if (row?.blob_url) await deleteFileBlob(row.blob_url).catch(() => { /* orfe al blob, no bloquegem l'esborrat */ });
   revalidateSongs(bandId);
+}
+
+export type BandAudioUsage = {
+  totalTracks: number;
+  maxTracks: number;
+  maxPerSong: number;
+  songs: { songId: string; title: string; totalSize: number; tracks: { id: string; name: string; size: number }[] }[];
+};
+
+// Resum de totes les pistes d'àudio del grup, per al panell de "gestiona
+// l'espai" que apareix quan es toca algun dels límits.
+export async function getBandAudioUsageAction(bandId: string): Promise<BandAudioUsage> {
+  await requireBandAccess(bandId);
+  const { rows } = await db().query(
+    `select s.id as song_id, s.title, f.id as file_id, f.name, f.size
+     from files f join songs s on s.id = f.song_id
+     where f.band_id=$1 and f.mime like 'audio%'
+     order by lower(s.title), f.created_at`,
+    [bandId]
+  );
+  const bySong = new Map<string, BandAudioUsage["songs"][number]>();
+  let totalTracks = 0;
+  rows.forEach((r) => {
+    let entry = bySong.get(r.song_id);
+    if (!entry) { entry = { songId: r.song_id, title: r.title, totalSize: 0, tracks: [] }; bySong.set(r.song_id, entry); }
+    entry.tracks.push({ id: r.file_id, name: r.name, size: r.size });
+    entry.totalSize += r.size || 0;
+    totalTracks++;
+  });
+  return {
+    totalTracks,
+    maxTracks: MAX_TRACKS_PER_BAND,
+    maxPerSong: MAX_TRACKS_PER_SONG,
+    songs: Array.from(bySong.values()).sort((a, b) => b.tracks.length - a.tracks.length),
+  };
+}
+
+// Buida totes les pistes d'àudio d'una cançó d'un cop (però no les
+// partitures/documents que hi hagi).
+export async function deleteSongAudioTracksAction(bandId: string, songId: string): Promise<{ deleted: number }> {
+  await requireBandAccess(bandId);
+  const { rows } = await db().query(
+    "select id, blob_url from files where band_id=$1 and song_id=$2 and mime like 'audio%'", [bandId, songId]
+  );
+  if (rows.length === 0) return { deleted: 0 };
+  await db().query(
+    "delete from files where band_id=$1 and song_id=$2 and mime like 'audio%'", [bandId, songId]
+  );
+  await Promise.all(rows.map((r) => r.blob_url ? deleteFileBlob(r.blob_url).catch(() => {}) : Promise.resolve()));
+  revalidateSongs(bandId);
+  return { deleted: rows.length };
 }

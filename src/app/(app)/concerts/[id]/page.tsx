@@ -5,7 +5,7 @@ import { getLinkedMembers } from "@/lib/group-data";
 import { getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
-import { getChecklists } from "@/lib/checklists";
+import { getChecklists, ensureDefaultChecklist } from "@/lib/checklists";
 import { getTransactions } from "@/lib/finance";
 import { normalize } from "@/lib/text";
 import { daysBetween } from "@/lib/format";
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ConcertDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { workspaceId } = await requireManager();
+  const { workspaceId, name: managerName } = await requireManager();
   const [bands, concerts, invoices, companyInfo, clientDetails] = await Promise.all([
     getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getCompanyInfo(workspaceId), getClientDetails(workspaceId),
   ]);
@@ -25,7 +25,15 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
   if (!concert) notFound();
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
-  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists] = await Promise.all([
+  // Cada concert ha de tenir sempre la checklist de sèrie (enviar rider,
+  // rider aprovat?) — es crea aquí si encara no hi és, abans de llegir-la.
+  await ensureDefaultChecklist(workspaceId, id, managerName);
+  // Aquestes consultes són totes independents entre si (cap depèn del
+  // resultat de cap altra), així que van juntes en un sol Promise.all en
+  // comptes d'esperar-les una darrere l'altra — abans transactions i les
+  // fotos de perfil s'esperaven a part, afegint dues volteres més de
+  // llatència a cada càrrega de la pàgina.
+  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, transactions, photoRows] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     getShareLinks(workspaceId, id),
     getBackupRequests(workspaceId, { concertId: id }),
@@ -33,16 +41,17 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
     band ? getSetlists(band.id) : Promise.resolve([]),
     getRiderApprovals(workspaceId, id),
     getChecklists(workspaceId, id),
+    getTransactions(workspaceId),
+    (async () => {
+      // Fotos reals de perfil per a les llistes d'assistència i repartiment.
+      const { db } = await import("@/lib/db");
+      return (await db().query(
+        "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+        [workspaceId]
+      )).rows as { person_name: string; photo_file_id: string }[];
+    })(),
   ]);
-  const transactions = await getTransactions(workspaceId);
   const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
-
-  // Fotos reals de perfil per a les llistes d'assistència i repartiment.
-  const { db } = await import("@/lib/db");
-  const photoRows = (await db().query(
-    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-    [workspaceId]
-  )).rows;
   const photosByName: Record<string, string> = {};
   photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
 
@@ -100,10 +109,11 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       checklists={checklists}
       clashes={clashes}
       venueHistory={venueHistory}
-      concertExpenses={concertExpenses.reduce((s, t) => s + t.amount, 0)}
+      concertExpenses={concertExpenses}
       emailReady={emailConfigured()}
       photosByName={photosByName}
       today={today()}
+      managerName={managerName}
     />
   );
 }

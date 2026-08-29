@@ -1,10 +1,10 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails } from "@/lib/types";
-import { formatCurrency, formatDate, formatDateFull, capitalize, statusColors } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, WEEKDAY_SHORT, pad2, MONTH_FULL } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { rsCompletionPercent } from "@/lib/route-sheet";
 import { normalize } from "@/lib/text";
@@ -15,7 +15,7 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyAssumesExpensesAction, setAgencyPctAction, searchCitiesAction, searchVenuesAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import type { Checklist } from "@/lib/checklists";
@@ -24,7 +24,9 @@ import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
 import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction } from "@/app/(app)/concerts/share-actions";
 import { createAttendanceLinkAction } from "@/app/conf/actions";
-import { publishBackupRequestAction, setBackupRequestStatusAction } from "@/app/(app)/grup/actions";
+import { publishBackupRequestAction, setBackupRequestStatusAction, saveDefaultPayoutSplitAction } from "@/app/(app)/grup/actions";
+import type { Transaction } from "@/lib/finance";
+import { saveTransactionAction, deleteTransactionAction } from "@/app/(app)/estadistiques/finance-actions";
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
@@ -94,8 +96,64 @@ function rsMissingList(c: Concert): string[] {
   return missing;
 }
 
+const AGENCY_PAYOUT_NAME = "Agència";
+// Els imports del repartiment es mouen en cèntims per dins (nombres
+// enters), perquè un repartiment entre 3 persones (33,33 / 33,33 / 33,34)
+// no arrossegui errors d'arrodoniment de coma flotant — es converteixen a
+// € (amb 2 decimals) només en entrar/sortir.
+function round2(x: number): number {
+  return Math.round(x * 100) / 100;
+}
+function toCents(x: number): number {
+  return Math.round(x * 100);
+}
+// Repartiment predeterminat de fàbrica (quan no n'hi ha cap de desat ni de
+// personalitzat pel grup): l'agència s'emporta sempre un 20% fix i la resta
+// es reparteix a parts iguals entre tothom més.
+const AGENCY_DEFAULT_PCT = 20;
+// Gràfica circular única amb tot el repartiment (un sector per persona), en
+// comptes de la barra horitzontal d'abans o d'un anell per fila.
+function PayoutDonut({ segments }: { segments: { color: string; pct: number; label: string }[] }) {
+  const r = 40, c = 2 * Math.PI * r;
+  let offset = 0;
+  return (
+    <svg width="110" height="110" viewBox="0 0 100 100" style={{ flexShrink: 0 }}>
+      <circle cx="50" cy="50" r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth="16" />
+      {segments.map((s, i) => {
+        if (s.pct <= 0) return null;
+        const dash = (Math.min(100, s.pct) / 100) * c;
+        const seg = (
+          <circle
+            key={i} cx="50" cy="50" r={r} fill="none" stroke={s.color} strokeWidth="16"
+            strokeDasharray={`${dash} ${c - dash}`} strokeDashoffset={-offset}
+            transform="rotate(-90 50 50)"
+          >
+            <title>{s.label}: {Math.round(s.pct)}%</title>
+          </circle>
+        );
+        offset += dash;
+        return seg;
+      })}
+    </svg>
+  );
+}
+// "pool" és els diners de veres a repartir (el net); "agencyBasis" és sobre
+// què es calcula el tall de l'agència (el mateix net, o el brut si no
+// assumeix despeses) — quan difereixen, la resta absorbeix la diferència.
+function agencyDefaultSplit(otherNames: string[], pool: number, agencyBasis: number = pool): Record<string, number> {
+  const out: Record<string, number> = {};
+  const agencyCents = Math.round((AGENCY_DEFAULT_PCT / 100) * toCents(agencyBasis));
+  out[AGENCY_PAYOUT_NAME] = agencyCents / 100;
+  const restCents = toCents(pool) - agencyCents;
+  if (otherNames.length) {
+    const per = Math.floor(restCents / otherNames.length);
+    otherNames.forEach((n, i) => { out[n] = (per + (i === 0 ? restCents - per * otherNames.length : 0)) / 100; });
+  }
+  return out;
+}
+
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses, emailReady, photosByName = {}, today,
+  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
 }: {
   concert: Concert;
   band: Band | null;
@@ -112,16 +170,21 @@ export default function ConcertDetailView({
   checklists: Checklist[];
   clashes: string[];
   venueHistory: { date: string; amount: number; invoiceState: string | null; daysToPay: number | null }[];
-  concertExpenses: number;
+  concertExpenses: Transaction[];
   emailReady: boolean;
   photosByName?: Record<string, string>; // nom normalitzat → id de fitxer de foto
   today: string;
+  managerName: string;
 }) {
   const router = useRouter();
   const [cf, setCf] = useState({
     date: concert.date, time: concert.time, venue: concert.venue, city: concert.city,
     festaEntitat: concert.festaEntitat || "", amount: String(concert.amount), status: concert.status as string,
   });
+  // Calendari propi (mateix estil que el de crear concert) al costat del
+  // camp de data nadiu, com a manera alternativa de triar-la.
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const [pickerYM, setPickerYM] = useState((concert.date || today).slice(0, 7));
   const [attendance, setAttendance] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutes] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
   const [noSubstitute, setNoSubstitute] = useState<Record<string, boolean>>({ ...(concert.noSubstitute || {}) });
@@ -135,6 +198,7 @@ export default function ConcertDetailView({
   const [tab, setTab] = useState<"info" | "assistencia" | "ruta" | "facturacio">("info");
   const [generating, setGenerating] = useState(false);
   const saveTimer = useRef<number | null>(null);
+  const refreshTimer = useRef<number | null>(null);
 
   // ---- Compartir ----
   const [newLinkOpen, setNewLinkOpen] = useState(false);
@@ -147,9 +211,69 @@ export default function ConcertDetailView({
   const [copied, setCopied] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<Record<string, string>>({});
 
+  // ---- Despeses (es resten del caixet abans de repartir-lo) ----
+  const [expenseForm, setExpenseForm] = useState({ title: "", amount: "" });
+  const [expenseSaving, setExpenseSaving] = useState(false);
+  const totalExpenses = expenseList.reduce((s, t) => s + t.amount, 0);
+  async function addExpense() {
+    const amount = parseInt(expenseForm.amount, 10) || 0;
+    if (!amount || !expenseForm.title.trim()) return;
+    setExpenseSaving(true);
+    await saveTransactionAction({
+      id: null, kind: "despesa", category: expenseForm.title.trim(), amount, date: concert.date,
+      concertId: concert.id, member: "", fund: "", notes: "",
+    });
+    setExpenseForm({ title: "", amount: "" });
+    router.refresh();
+    setExpenseSaving(false);
+  }
+  async function removeExpense(id: string) {
+    await deleteTransactionAction(id);
+    router.refresh();
+  }
+
+  const [agencyAssumesExpenses, setAgencyAssumesExpenses] = useState(concert.agencyAssumesExpenses !== false);
+  // El % de l'agència es guarda fix (no derivat de l'import): si canvien
+  // les despeses o el caixet, només varia l'import en €, mai el %.
+  const [agencyPct, setAgencyPct] = useState(concert.agencyPct ?? AGENCY_DEFAULT_PCT);
+
   // ---- Pagaments ----
-  const [payouts, setPayouts] = useState<Record<string, number>>({ ...(concert.payouts || {}) });
+  // Si el concert encara no té cap repartiment desat, s'omple amb els
+  // percentatges predeterminats del grup (si n'hi ha) escalats al caixet
+  // NET d'aquest concert (menys les seves despeses); si el grup tampoc en
+  // té cap de personalitzat, es fa servir el predeterminat de fàbrica
+  // (agència 20%, la resta a parts iguals). Res d'això es desa fins que
+  // l'usuari toqui res.
+  const [payouts, setPayouts] = useState<Record<string, number>>(() => {
+    if (Object.keys(concert.payouts || {}).length) return { ...concert.payouts };
+    const net = Math.max(0, (concert.amount || 0) - expenseList.reduce((s, t) => s + t.amount, 0));
+    const split = band?.defaultPayoutSplit;
+    if (split && Object.keys(split).length) {
+      const out: Record<string, number> = {};
+      Object.entries(split).forEach(([n, pct]) => { out[n] = round2((pct / 100) * net); });
+      return out;
+    }
+    const initialAttending: string[] = [];
+    (band?.members || []).forEach((m) => {
+      if (concert.attendance?.[m.name] === "no") {
+        const sub = concert.substitutes?.[m.name];
+        if (sub) initialAttending.push(sub);
+      } else {
+        initialAttending.push(m.name);
+      }
+    });
+    const otherNames = [...initialAttending, ...(band?.crew || []).map((m) => m.name)];
+    const gross = concert.amount || 0;
+    return agencyDefaultSplit(otherNames, net, agencyAssumesExpenses ? net : gross);
+  });
   const [payoutsSaving, setPayoutsSaving] = useState(false);
+  const [savingDefaultSplit, setSavingDefaultSplit] = useState(false);
+  const [defaultSplitSaved, setDefaultSplitSaved] = useState(false);
+  // Qui ha editat el seu import/% a mà en aquesta sessió — els que encara no
+  // hi són es reparteixen automàticament el que queda entre ells (per parts
+  // iguals si encara no tenien res, o mantenint les proporcions que ja
+  // tenien entre ells si ja n'hi havia).
+  const [editedPayoutNames, setEditedPayoutNames] = useState<Set<string>>(new Set());
 
   // ---- Comparteix per confirmar (assistència) ----
   const [attToken, setAttToken] = useState(concert.attToken || "");
@@ -251,6 +375,7 @@ export default function ConcertDetailView({
   backupRequests.forEach((r) => { if (r.status === "oberta") requestByMember[r.memberName] = r; });
 
   const members = band?.members || [];
+  const crew = band?.crew || [];
   const backups = band?.backups || [];
 
   function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute) {
@@ -265,9 +390,14 @@ export default function ConcertDetailView({
         attendance: att, substitutes: subs, noSubstitute: noSubs,
         skipDefaults: true,
       });
-      router.refresh();
       setSaving(false);
     }, 500);
+    // El refresc de tota la pàgina (per si algun altre bloc en depèn) va a
+    // part i amb un debounce més llarg que el desat: mentre s'escriu seguit
+    // (per exemple l'import o el nom del lloc) no cal refer-la a cada pausa
+    // de mig segon, només un cop l'usuari ja s'ha aturat de veres.
+    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
+    refreshTimer.current = window.setTimeout(() => { router.refresh(); }, 2500);
   }
 
   function setField<K extends keyof typeof cf>(k: K, v: string) {
@@ -275,6 +405,69 @@ export default function ConcertDetailView({
     setCf(next);
     schedulePersist(next);
   }
+
+  // Triar un recinte (des d'Informació o des del Full de ruta — el mateix
+  // camp, en un sol canvi perquè no es trepitgin entre ells) actualitza
+  // sempre la població si el recinte en sap una.
+  function commitVenue(v: { name: string; city?: string }) {
+    const next = { ...cf, venue: v.name, ...(v.city ? { city: v.city } : {}) };
+    setCf(next);
+    schedulePersist(next);
+  }
+
+  // Graella del calendari propi (mateixa lògica que el de crear concert).
+  const dpY = parseInt(pickerYM.slice(0, 4), 10), dpMIdx = parseInt(pickerYM.slice(5, 7), 10) - 1;
+  const dpMonthLabel = capitalize(MONTH_FULL[dpMIdx]) + " " + dpY;
+  const dpBase = new Date(dpY, dpMIdx, 1);
+  const dpStartOffset = (dpBase.getDay() + 6) % 7;
+  const dpDaysInMonth = new Date(dpY, dpMIdx + 1, 0).getDate();
+  const dpCells: (number | null)[] = [];
+  for (let i = 0; i < dpStartOffset; i++) dpCells.push(null);
+  for (let d = 1; d <= dpDaysInMonth; d++) dpCells.push(d);
+  while (dpCells.length % 7 !== 0) dpCells.push(null);
+  function shiftPickerMonth(delta: number) {
+    const d = new Date(dpY, dpMIdx + delta, 1);
+    setPickerYM(d.getFullYear() + "-" + pad2(d.getMonth() + 1));
+  }
+
+  // Població i ubicació validades: només es pot desar una població/recinte
+  // real, triat de la llista que retorna la cerca — mai text lliure sense
+  // triar.
+  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
+  const [citySearch, setCitySearch] = useState("");
+  const [cityResults, setCityResults] = useState<{ description: string; placeId: string }[]>([]);
+  const [citySearching, setCitySearching] = useState(false);
+  const citySearchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current);
+    const q = citySearch.trim();
+    if (q.length < 2) { setCityResults([]); setCitySearching(false); return; }
+    setCitySearching(true);
+    citySearchTimer.current = window.setTimeout(async () => {
+      const results = await searchCitiesAction(q);
+      setCityResults(results);
+      setCitySearching(false);
+    }, 300);
+    return () => { if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current); };
+  }, [citySearch]);
+
+  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
+  const [venueSearch, setVenueSearch] = useState("");
+  const [venueResults, setVenueResults] = useState<{ description: string; name: string; city: string; placeId: string }[]>([]);
+  const [venueSearching, setVenueSearching] = useState(false);
+  const venueSearchTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current);
+    const q = venueSearch.trim();
+    if (q.length < 2) { setVenueResults([]); setVenueSearching(false); return; }
+    setVenueSearching(true);
+    venueSearchTimer.current = window.setTimeout(async () => {
+      const results = await searchVenuesAction(q);
+      setVenueResults(results);
+      setVenueSearching(false);
+    }, 300);
+    return () => { if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current); };
+  }, [venueSearch]);
 
   function setAttendanceFor(name: string, val: "yes" | "no" | null) {
     const att = { ...attendance };
@@ -308,14 +501,74 @@ export default function ConcertDetailView({
   }, [members, attendance, substitutes]);
 
   const amountNum = parseInt(cf.amount, 10) || 0;
-  const payoutTotal = Object.values(payouts).reduce((s, v) => s + (v || 0), 0);
+  // El que hi ha per repartir és el caixet menys les despeses del bolo —
+  // sempre net, mai brut... EXCEPTE la part de l'agència quan no assumeix
+  // les despeses (vegeu agencyBasis): aleshores cobra sobre el brut.
+  const netPayoutAmount = Math.max(0, amountNum - totalExpenses);
+  const agencyBasis = agencyAssumesExpenses ? netPayoutAmount : amountNum;
+  // L'import de l'agència sempre es deriva del seu % (fix) i la base
+  // vigent — mai a l'inrevés. Si canvien les despeses o el caixet, el %
+  // no es toca; només varia aquest import.
+  const agencyAmt = round2((agencyPct / 100) * agencyBasis);
+  async function setAgencyAssumesExpensesValue(value: boolean) {
+    setAgencyAssumesExpenses(value);
+    await setAgencyAssumesExpensesAction(concert.id, value);
+    router.refresh();
+  }
+  async function persistAgencyPct(pct: number) {
+    setAgencyPct(pct);
+    await setAgencyPctAction(concert.id, pct);
+    router.refresh();
+  }
+  // Manté payouts["Agència"] sincronitzat amb l'import derivat (per a les
+  // altres pantalles — artista, estadístiques — que llegeixen aquesta
+  // clau directament del repartiment desat).
+  useEffect(() => {
+    if (round2(payouts[AGENCY_PAYOUT_NAME] || 0) === agencyAmt) return;
+    const next = { ...payouts, [AGENCY_PAYOUT_NAME]: agencyAmt };
+    setPayouts(next);
+    persistPayouts(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [agencyAmt]);
+
+  // La comissió de l'agència sempre va a part, mai barrejada amb el
+  // repartiment de músics i crew: primer es treu el seu tall, i el que
+  // quedi (bandPool) és el 100% que es reparteixen entre ells — els seus %
+  // sempre sumen 100% entre ells mateixos, no es dilueixen amb el de
+  // l'agència.
+  const bandNames = [...attendingNames, ...crew.map((m) => m.name)];
+  const bandPool = Math.max(0, netPayoutAmount - agencyAmt);
+  const bandTotal = bandNames.reduce((s, n) => s + (payouts[n] || 0), 0);
+  // Instrument/càrrec de cadascú, al costat del nom (els substituts, que no
+  // són cap Person registrat del grup, senzillament no en mostren cap).
+  const payoutPersonByName: Record<string, { role: string; instruments?: string[] }> = {};
+  members.forEach((m) => { payoutPersonByName[m.name] = m; });
+  crew.forEach((m) => { payoutPersonByName[m.name] = m; });
+
+  // Editar l'import a mà de l'agència en realitat fixa un nou % (el que
+  // representi aquell import sobre la base vigent) — mai queda com un
+  // import solt independent del %.
+  function editAgencyAmount(value: number) {
+    value = Math.max(0, round2(value));
+    // Sense arrodonir el % a l'enter més proper: si no, per exemple 5€
+    // sobre un caixet de 1000€ (0,5%) es convertia en 0% o 1% (0€ o 10€) i
+    // no es podia escriure l'import de veres — el % es guarda amb tota la
+    // precisió que calgui perquè l'import reconstruït sigui exacte.
+    const pct = agencyBasis ? (value / agencyBasis) * 100 : agencyPct;
+    persistAgencyPct(pct);
+  }
+  function editAgencyPct(pct: number) {
+    persistAgencyPct(Math.max(0, pct));
+  }
 
   function equalSplit() {
-    if (!attendingNames.length || !amountNum) return;
-    const per = Math.floor(amountNum / attendingNames.length);
-    const next: Record<string, number> = {};
-    attendingNames.forEach((n, i) => { next[n] = per + (i === 0 ? amountNum - per * attendingNames.length : 0); });
+    if (!bandNames.length || !bandPool) return;
+    const totalCents = toCents(bandPool);
+    const per = Math.floor(totalCents / bandNames.length);
+    const next: Record<string, number> = { ...payouts };
+    bandNames.forEach((n, i) => { next[n] = (per + (i === 0 ? totalCents - per * bandNames.length : 0)) / 100; });
     setPayouts(next);
+    setEditedPayoutNames(new Set());
     persistPayouts(next);
   }
 
@@ -326,8 +579,92 @@ export default function ConcertDetailView({
     setPayoutsSaving(false);
   }
 
-  const payoutNames = Object.keys(payouts).length ? Object.keys(payouts) : attendingNames;
+  async function saveAsDefaultSplit() {
+    if (!band) return;
+    const split: Record<string, number> = {};
+    split[AGENCY_PAYOUT_NAME] = agencyPct;
+    bandNames.forEach((n) => { split[n] = bandPool ? Math.round(((payouts[n] || 0) / bandPool) * 100) : 0; });
+    setSavingDefaultSplit(true);
+    await saveDefaultPayoutSplitAction(band.id, split);
+    router.refresh();
+    setSavingDefaultSplit(false);
+    setDefaultSplitSaved(true);
+    window.setTimeout(() => setDefaultSplitSaved(false), 2500);
+  }
 
+  // Si canvia el que queda per repartir entre músics i crew (bandPool —
+  // perquè canvien les despeses, el caixet, o la pròpia comissió de
+  // l'agència), es reescala tot el seu repartiment ja fet
+  // proporcionalment, mantenint els % que hi havia entre ells — mai
+  // deixant els imports antics tal qual (que ja no sumarien el total
+  // correcte).
+  // Només es reescalen els que encara NO s'han editat a mà (la mateixa
+  // bossa que fa servir editPayout) — qui ja s'ha fixat un
+  // import o % es queda tal qual, encara que canviï el bandPool (despeses,
+  // caixet o comissió de l'agència).
+  const prevBandPoolRef = useRef(bandPool);
+  useEffect(() => {
+    const prevPool = prevBandPoolRef.current;
+    prevBandPoolRef.current = bandPool;
+    if (prevPool === bandPool || !bandNames.length) return;
+    const next = redistributeAmongFree(editedPayoutNames);
+    setPayouts(next);
+    persistPayouts(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bandPool]);
+
+  // Xarxa de seguretat: si per qualsevol motiu (imports fixats a mà que
+  // sumin més del compte, un bandPool que ha encongit per sota del que ja
+  // hi havia fixat...) el total repartit se surt del bandPool, es
+  // reescala TOT (fins i tot els imports fixats) proporcionalment perquè
+  // hi torni a cabre exactament — mantenint els % relatius de cadascú
+  // entre ells, mai deixant-ho "per sobre" del pressupost.
+  useEffect(() => {
+    if (!bandNames.length || bandTotal <= bandPool + 0.01 || bandTotal <= 0) return;
+    const scale = bandPool / bandTotal;
+    const next: Record<string, number> = { ...payouts };
+    bandNames.forEach((n) => { next[n] = round2((payouts[n] || 0) * scale); });
+    setPayouts(next);
+    persistPayouts(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bandTotal, bandPool]);
+
+  // En editar l'import (o el %, que passa per aquí igual un cop convertit a
+  // €) d'un músic o d'algú de la crew, la resta del bandPool es reparteix
+  // automàticament entre els que encara no s'han tocat en aquesta sessió:
+  // a parts iguals si encara no tenien res assignat, o mantenint les
+  // proporcions que ja tenien entre ells si ja n'hi havia (encara que el
+  // nou total se surti del bandPool — llavors la resta simplement es
+  // reparteix la part que quedi, amb el mateix criteri). Mai es deixa cap
+  // import en negatiu: com a molt, 0. Tot es mou en cèntims per no
+  // arrossegar errors d'arrodoniment. L'agència no hi entra mai — sempre
+  // va a part (editAgencyAmount / editAgencyPct).
+  function redistributeAmongFree(editedNames: Set<string>, overrides: Record<string, number> = {}): Record<string, number> {
+    const next: Record<string, number> = { ...payouts, ...overrides };
+    const free = bandNames.filter((n) => !editedNames.has(n));
+    const editedSumCents = bandNames.filter((n) => editedNames.has(n)).reduce((s, n) => s + toCents(next[n] || 0), 0);
+    const remainingCents = Math.max(0, toCents(bandPool) - editedSumCents);
+    if (free.length) {
+      const freeCurrentSumCents = free.reduce((s, n) => s + toCents(payouts[n] || 0), 0);
+      let assignedCents = 0;
+      free.forEach((n, i) => {
+        const isLast = i === free.length - 1;
+        const share = freeCurrentSumCents > 0 ? toCents(payouts[n] || 0) / freeCurrentSumCents : 1 / free.length;
+        const vCents = Math.max(0, isLast ? remainingCents - assignedCents : Math.round(share * remainingCents));
+        next[n] = vCents / 100;
+        assignedCents += vCents;
+      });
+    }
+    return next;
+  }
+  function editPayout(name: string, value: number) {
+    value = Math.max(0, round2(value));
+    const newEdited = new Set(editedPayoutNames);
+    newEdited.add(name);
+    const next = redistributeAmongFree(newEdited, { [name]: value });
+    setPayouts(next);
+    setEditedPayoutNames(newEdited);
+  }
   // ---- Facturació ----
   const [invEditOpen, setInvEditOpen] = useState(false);
   const [invEdit, setInvEdit] = useState({ base: "", iva: "21", irpf: "0", deposit: "0" });
@@ -434,7 +771,7 @@ export default function ConcertDetailView({
 
       {/* Subpestanyes */}
       <div className="stats-tabs cd-tabs">
-        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Assistència"], ["facturacio", "Facturació"]] as const).map(([k, label]) => (
+        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Assistència"], ["facturacio", "Despeses i facturació"]] as const).map(([k, label]) => (
           <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
@@ -444,25 +781,111 @@ export default function ConcertDetailView({
       <div className="panel cd-section" id="cd-info">
         <div className="panel-title cd-section-title">Informació</div>
         <div className="cd-info-grid">
-          <div className="cd-field">
+          <div className="cd-field" style={{ position: "relative" }}>
             <label className="form-label">Data</label>
-            <input type="date" className="field-input form-field" value={cf.date} onChange={(e) => setField("date", e.target.value)} />
+            <div style={{ position: "relative" }}>
+              <input type="date" className="field-input form-field cd-date-input" value={cf.date} onChange={(e) => setField("date", e.target.value)} />
+              <button
+                type="button" className="cd-date-icon-btn" title="Tria del calendari" aria-label="Tria del calendari"
+                onClick={() => { setPickerYM((cf.date || today).slice(0, 7)); setDatePickerOpen((v) => !v); }}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="5" width="18" height="16" rx="2"></rect>
+                  <line x1="3" y1="10" x2="21" y2="10"></line>
+                  <line x1="8" y1="3" x2="8" y2="7"></line>
+                  <line x1="16" y1="3" x2="16" y2="7"></line>
+                </svg>
+              </button>
+            </div>
+            {datePickerOpen && (
+              <>
+                <div className="year-picker-overlay" onClick={() => setDatePickerOpen(false)}></div>
+                <div className="year-dropdown cf-datepicker" onClick={(e) => e.stopPropagation()}>
+                  <div className="cf-dp-header">
+                    <button type="button" className="cal-nav-btn" onClick={() => shiftPickerMonth(-1)}>‹</button>
+                    <div className="cf-dp-month-label">{dpMonthLabel}</div>
+                    <button type="button" className="cal-nav-btn" onClick={() => shiftPickerMonth(1)}>›</button>
+                  </div>
+                  <div className="cf-dp-grid">
+                    {WEEKDAY_SHORT.map((w) => <div key={w} className="cf-dp-weekday">{w}</div>)}
+                  </div>
+                  <div className="cf-dp-grid">
+                    {dpCells.map((dd, i) => {
+                      if (!dd) return <button key={i} type="button" className="cf-dp-day empty" disabled></button>;
+                      const dateStr = dpY + "-" + pad2(dpMIdx + 1) + "-" + pad2(dd);
+                      const selected = cf.date === dateStr;
+                      const isToday = dateStr === today;
+                      return (
+                        <button key={i} type="button" className={"cf-dp-day" + (selected ? " selected" : "") + (isToday ? " today" : "")}
+                          onClick={() => { setField("date", dateStr); setDatePickerOpen(false); }}>{dd}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           <div className="cd-field">
             <label className="form-label">Hora</label>
             <input type="time" className="field-input form-field" value={cf.time} onChange={(e) => setField("time", e.target.value)} />
           </div>
           <div className="cd-field">
-            <label className="form-label">Població</label>
-            <input className="field-input form-field" value={cf.city} onChange={(e) => setField("city", e.target.value)} placeholder="On toqueu?" />
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Ubicació / sala</label>
-            <input className="field-input form-field" value={cf.venue} onChange={(e) => setField("venue", e.target.value)} placeholder="Recinte, plaça, sala…" />
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Festa / entitat</label>
+            <label className="form-label">Títol</label>
             <input className="field-input form-field" value={cf.festaEntitat} onChange={(e) => setField("festaEntitat", e.target.value)} placeholder="Festa major, ajuntament…" />
+          </div>
+          <div className="cd-field" style={{ position: "relative" }}>
+            <label className="form-label">Ubicació / sala</label>
+            <input
+              className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca un recinte…"
+              value={venueDropdownOpen ? venueSearch : cf.venue}
+              onFocus={() => { setVenueSearch(cf.venue); setVenueDropdownOpen(true); }}
+              onChange={(e) => setVenueSearch(e.target.value)}
+            />
+            {venueDropdownOpen && (
+              <>
+                <div className="year-picker-overlay" onClick={() => { if (!venueSearch.trim() && cf.venue) setField("venue", ""); setVenueDropdownOpen(false); }}></div>
+                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
+                  {venueSearch.trim().length < 2 ? (
+                    <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
+                  ) : venueSearching ? (
+                    <div className="cf-band-noresults">Cercant…</div>
+                  ) : venueResults.length ? [...venueResults].sort((a, b) => {
+                      // Si ja hi ha població triada, primer els recintes que hi són a dins.
+                      if (!cf.city.trim()) return 0;
+                      const aIn = a.city && normalize(cf.city).includes(normalize(a.city)) ? 0 : 1;
+                      const bIn = b.city && normalize(cf.city).includes(normalize(b.city)) ? 0 : 1;
+                      return aIn - bIn;
+                    }).map((v) => (
+                    <button key={v.placeId} type="button" className={"year-option" + (v.name === cf.venue ? " active" : "")}
+                      onClick={() => { commitVenue(v); setVenueDropdownOpen(false); }}>{v.description}</button>
+                  )) : <div className="cf-band-noresults">Cap recinte coincideix</div>}
+                </div>
+              </>
+            )}
+          </div>
+          <div className="cd-field" style={{ position: "relative" }}>
+            <label className="form-label">Població</label>
+            <input
+              className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca una població…"
+              value={cityDropdownOpen ? citySearch : cf.city}
+              onFocus={() => { setCitySearch(cf.city); setCityDropdownOpen(true); }}
+              onChange={(e) => setCitySearch(e.target.value)}
+            />
+            {cityDropdownOpen && (
+              <>
+                <div className="year-picker-overlay" onClick={() => { if (!citySearch.trim() && cf.city) setField("city", ""); setCityDropdownOpen(false); }}></div>
+                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
+                  {citySearch.trim().length < 2 ? (
+                    <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
+                  ) : citySearching ? (
+                    <div className="cf-band-noresults">Cercant…</div>
+                  ) : cityResults.length ? cityResults.map((c) => (
+                    <button key={c.placeId} type="button" className={"year-option" + (c.description === cf.city ? " active" : "")}
+                      onClick={() => { setField("city", c.description); setCityDropdownOpen(false); }}>{c.description}</button>
+                  )) : <div className="cf-band-noresults">Cap població coincideix</div>}
+                </div>
+              </>
+            )}
           </div>
           <div className="cd-field">
             <label className="form-label">Import (sense IVA)</label>
@@ -492,6 +915,7 @@ export default function ConcertDetailView({
         concertId={concert.id}
         checklists={checklists}
         memberNames={members.map((m) => m.name)}
+        managerName={managerName}
       />
       </>)}
 
@@ -582,6 +1006,53 @@ export default function ConcertDetailView({
           </div>
         )}
 
+        {/* Crew: mateix seguiment d'assistència que els músics, però sense
+            repartiment ni cerca de suplents entre backups (això és cosa dels
+            músics) — només si "no", un nom de substitut en text lliure. */}
+        {crew.length > 0 && (
+          <>
+            <div className="panel-header-row cd-section-title" style={{ marginTop: 24 }}>
+              <div className="panel-title" style={{ fontSize: 15 }}>Crew</div>
+              <div className="t-dim" style={{ fontSize: 12 }}>
+                {crew.filter((m) => attendance[m.name] === "yes").length}/{crew.length} confirmats
+              </div>
+            </div>
+            <div className="cd-attendance-list">
+              {crew.map((m) => {
+                const linked = linkedByName[m.name];
+                const att = attendance[m.name];
+                return (
+                  <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
+                    <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
+                    <div className="cd-att-main">
+                      <div className="member-name">
+                        {m.name}
+                        {linked && <span className="member-linked" title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`}><img src="/logo-mark.png" alt="Escenari" /></span>}
+                      </div>
+                      {m.role && <div className="member-instruments"><span className="member-instrument-chip">{m.role}</span></div>}
+                    </div>
+                    <div className="cd-att-controls">
+                      <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
+                      <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
+                    </div>
+                    {att === "no" && (
+                      <div className="cd-att-sub">
+                        <input
+                          className="field-input compact-field"
+                          type="text"
+                          placeholder="Nom del substitut"
+                          value={substitutes[m.name] || ""}
+                          onChange={(e) => setSubstituteFor(m.name, e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+
         {/* Comparteix per confirmar */}
         {members.length > 0 && (
           <div className="cfm-share-box">
@@ -613,7 +1084,7 @@ export default function ConcertDetailView({
           <div className="panel-title">Full de ruta</div>
           <button type="button" className="btn-outline" onClick={() => setRsPreviewOpen(true)}>Previsualitza</button>
         </div>
-        <RouteSheetEditor concert={concert} />
+        <RouteSheetEditor concert={concert} venue={cf.venue} city={cf.city} onVenueCityChange={commitVenue} vehicles={band?.vehicles || []} bandDefaultRouteSheet={band?.defaultRouteSheet || null} />
       </div>
       )}
 
@@ -910,12 +1381,12 @@ export default function ConcertDetailView({
               </div>
             )}
 
-            {concertExpenses > 0 && (
+            {totalExpenses > 0 && (
               <div className="cd-margin-row">
                 <span className="t-dim">Marge net del bolo</span>
                 <span>
-                  {formatCurrency(amountNum)} − {formatCurrency(concertExpenses)} despeses ={" "}
-                  <strong className={amountNum - concertExpenses >= 0 ? "fin-pos" : "fin-neg"}>{formatCurrency(amountNum - concertExpenses)}</strong>
+                  {formatCurrency(amountNum)} − {formatCurrency(totalExpenses)} despeses ={" "}
+                  <strong className={amountNum - totalExpenses >= 0 ? "fin-pos" : "fin-neg"}>{formatCurrency(amountNum - totalExpenses)}</strong>
                 </span>
               </div>
             )}
@@ -938,47 +1409,158 @@ export default function ConcertDetailView({
           </div>
         </div>
 
-        {/* Repartiment */}
+        {/* Despeses: es resten del caixet abans de calcular el repartiment */}
         <div className="cd-subtitle" style={{ marginTop: 22 }}>
-          Repartiment del caixet{payoutsSaving ? " · desant…" : ""}
-          <button type="button" className="link-btn" style={{ marginLeft: 10 }} onClick={equalSplit}>reparteix a parts iguals</button>
+          Despeses{expenseSaving ? " · desant…" : ""}
         </div>
-        {payoutNames.length === 0 ? (
+        {expenseList.length > 0 && (
+          <div className="cd-payout-list" style={{ marginBottom: 10 }}>
+            {expenseList.map((t) => (
+              <div key={t.id} className="cd-payout-row">
+                <span className="cd-payout-name">{t.category}{t.notes ? " — " + t.notes : ""}</span>
+                <span style={{ fontSize: 13 }}>{formatCurrency(t.amount)}</span>
+                <button type="button" className="row-delete-btn" title="Elimina la despesa" onClick={() => removeExpense(t.id)}>✕</button>
+              </div>
+            ))}
+            <div className="cd-payout-total">
+              <span>Total despeses</span>
+              <span>{formatCurrency(totalExpenses)}</span>
+            </div>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+          <input
+            type="text" className="field-input compact-field" style={{ width: 180 }}
+            placeholder="Benzina, dietes…"
+            value={expenseForm.title}
+            onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
+          />
+          <input
+            type="number" min={0} className="field-input compact-field cd-payout-input" style={{ width: 100 }}
+            placeholder="import €"
+            value={expenseForm.amount}
+            onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+          />
+          <button type="button" className="btn-outline" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>+ Afegeix despesa</button>
+        </div>
+
+        {/* Comissió de l'agència: sempre a part, mai barrejada amb el
+            repartiment de músics i crew. */}
+        <div className="cd-subtitle" style={{ marginTop: 22 }}>Comissió de l&apos;agència{payoutsSaving ? " · desant…" : ""}</div>
+        {totalExpenses > 0 && (
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, margin: "6px 0 10px" }}>
+            <input
+              type="checkbox" checked={agencyAssumesExpenses}
+              onChange={(e) => setAgencyAssumesExpensesValue(e.target.checked)}
+            />
+            L&apos;agència assumeix despeses?
+            <span className="t-dim">
+              {agencyAssumesExpenses
+                ? "— el seu % es calcula sobre el caixet net, com tothom"
+                : "— cobra el seu % sobre el caixet brut; les despeses les absorbeix la resta"}
+            </span>
+          </label>
+        )}
+        <div className="cd-payout-list" style={{ maxWidth: 400 }}>
+          <div className="cd-payout-row cd-payout-row-agency">
+            <span className="cd-payout-agency-icon" aria-hidden="true">🏢</span>
+            <span className="cd-payout-name">{AGENCY_PAYOUT_NAME}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <input
+                type="number" min={0} step={0.01} className="field-input compact-field cd-payout-input"
+                value={agencyAmt ?? ""}
+                placeholder="0"
+                onChange={(e) => editAgencyAmount(parseFloat(e.target.value) || 0)}
+              />
+              <span className="t-dim" style={{ fontSize: 12 }}>€</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, width: 56 }}>
+              <input
+                type="number" min={0} className="field-input compact-field cd-payout-pct-input"
+                style={{ width: 44, textAlign: "right", fontSize: 12 }}
+                value={agencyPct != null ? round2(agencyPct) : ""}
+                placeholder="0"
+                title={`Percentatge fix del caixet ${agencyAssumesExpenses ? "net" : "brut"} — no varia encara que canviïn les despeses o el caixet`}
+                onChange={(e) => editAgencyPct(parseInt(e.target.value, 10) || 0)}
+              />
+              <span className="t-dim" style={{ fontSize: 12 }}>%</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Repartiment entre músics i crew: el 100% és el que quedi un cop
+            tret el tall de l'agència. */}
+        <div className="cd-subtitle" style={{ marginTop: 22, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          <span>Repartiment entre músics i crew</span>
+          <button type="button" className="link-btn" onClick={equalSplit}>reparteix a parts iguals</button>
+          {band && (
+            <button type="button" className="link-btn" disabled={savingDefaultSplit} onClick={saveAsDefaultSplit}>
+              {defaultSplitSaved ? "Desat com a predeterminat ✓" : savingDefaultSplit ? "Desant…" : "Marca aquestes proporcions com a predeterminades"}
+            </button>
+          )}
+        </div>
+        {bandNames.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Sense participants: marca l&apos;assistència per repartir.</div>
         ) : (
           <>
-            <div className="cd-payout-bar">
-              {payoutNames.map((n, i) => {
-                const v = payouts[n] || 0;
-                const pct = payoutTotal ? (v / payoutTotal) * 100 : 0;
-                return pct > 0 ? <div key={n} className="cd-payout-seg" style={{ width: pct + "%", background: `oklch(0.68 0.16 ${(i * 47 + 250) % 360})` }} title={`${n}: ${formatCurrency(v)}`}></div> : null;
-              })}
-            </div>
-            <div className="cd-payout-list">
-              {payoutNames.map((n, i) => (
-                <div key={n} className="cd-payout-row">
-                  <span className="cd-payout-dot" style={{ background: `oklch(0.68 0.16 ${(i * 47 + 250) % 360})` }}></span>
-                  <img className="member-photo" style={{ width: 28, height: 28, borderRadius: 8 }} src={photosByName[normalize(n)] ? `/api/file/${photosByName[normalize(n)]}` : personPhotoDataUri(n)} alt="" />
-                  <span className="cd-payout-name">{n}</span>
-                  <input
-                    type="number" className="field-input compact-field cd-payout-input"
-                    value={payouts[n] ?? ""}
-                    placeholder="0"
-                    onChange={(e) => setPayouts((p) => ({ ...p, [n]: parseInt(e.target.value, 10) || 0 }))}
-                    onBlur={() => persistPayouts(payouts)}
-                  />
-                  <span className="t-dim" style={{ fontSize: 12, width: 40, textAlign: "right" }}>
-                    {payoutTotal ? Math.round(((payouts[n] || 0) / payoutTotal) * 100) + "%" : "—"}
-                  </span>
+            <div style={{ display: "flex", gap: 20, alignItems: "flex-start", flexWrap: "wrap" }}>
+              <PayoutDonut
+                segments={[
+                  { color: "rgba(255,255,255,0.14)", pct: amountNum ? (totalExpenses / amountNum) * 100 : 0, label: "Despeses" },
+                  { color: "rgba(255,255,255,0.32)", pct: amountNum ? (agencyAmt / amountNum) * 100 : 0, label: AGENCY_PAYOUT_NAME },
+                  ...bandNames.map((n, i) => ({
+                    color: `oklch(0.68 0.16 ${(i * 47 + 250) % 360})`,
+                    pct: amountNum ? ((payouts[n] || 0) / amountNum) * 100 : 0,
+                    label: n,
+                  })),
+                ]}
+              />
+              <div className="cd-payout-list" style={{ flex: 1, minWidth: 260 }}>
+                {bandNames.map((n, i) => {
+                  const person = payoutPersonByName[n];
+                  const roleLabel = person?.instruments?.length ? person.instruments.join(", ") : person?.role || "";
+                  const color = `oklch(0.68 0.16 ${(i * 47 + 250) % 360})`;
+                  return (
+                    <div key={n} className="cd-payout-row">
+                      <span className="cd-payout-dot" style={{ background: color }}></span>
+                      <img className="member-photo" style={{ width: 28, height: 28, borderRadius: 8 }} src={photosByName[normalize(n)] ? `/api/file/${photosByName[normalize(n)]}` : personPhotoDataUri(n)} alt="" />
+                      <span className="cd-payout-name">
+                        {n}
+                        {roleLabel && <span className="cd-payout-role t-dim"> · {roleLabel}</span>}
+                      </span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                        <input
+                          type="number" min={0} step={0.01} className="field-input compact-field cd-payout-input"
+                          value={payouts[n] ?? ""}
+                          placeholder="0"
+                          onChange={(e) => editPayout(n, parseFloat(e.target.value) || 0)}
+                          onBlur={() => persistPayouts(payouts)}
+                        />
+                        <span className="t-dim" style={{ fontSize: 12 }}>€</span>
+                      </div>
+                      <div style={{ display: "flex", alignItems: "center", gap: 5, width: 56 }}>
+                        <input
+                          type="number" min={0} className="field-input compact-field cd-payout-pct-input"
+                          style={{ width: 44, textAlign: "right", fontSize: 12 }}
+                          value={bandPool ? Math.round(((payouts[n] || 0) / bandPool) * 100) : ""}
+                          placeholder="0"
+                          title="Percentatge del repartiment entre músics i crew (un cop tret el tall de l'agència)"
+                          onChange={(e) => editPayout(n, ((parseInt(e.target.value, 10) || 0) / 100) * bandPool)}
+                          onBlur={() => persistPayouts(payouts)}
+                        />
+                        <span className="t-dim" style={{ fontSize: 12 }}>%</span>
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="cd-payout-total">
+                  <span>Total repartit</span>
+                  <span className={bandTotal > bandPool + 0.01 ? "cd-payout-over" : ""}>{formatCurrency(bandTotal)} / {formatCurrency(bandPool)}</span>
                 </div>
-              ))}
-              <div className="cd-payout-total">
-                <span>Total repartit</span>
-                <span className={payoutTotal > amountNum ? "cd-payout-over" : ""}>{formatCurrency(payoutTotal)} / {formatCurrency(amountNum)}</span>
               </div>
             </div>
             <div className="t-dim" style={{ fontSize: 12, marginTop: 8 }}>
-              Els pagaments dins de l&apos;app arribaran més endavant — de moment aquest repartiment és el full de càlcul de referència.
+              Els pagaments dins de l&apos;app arribaran més endavant — de moment aquest repartiment és el full de càlcul de referència. El 100% és el caixet net menys la comissió de l&apos;agència.
             </div>
           </>
         )}
