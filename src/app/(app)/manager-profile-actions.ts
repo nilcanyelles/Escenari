@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
 import { getOrCreatePersonProfile } from "@/lib/person-profile";
 import { normalize } from "@/lib/text";
+import { uploadFileBlob } from "@/lib/blob-storage";
 
 // Desa el perfil del gestor des del menú de compte: foto, WhatsApp, telèfon,
 // correu de contacte i rol. Sincronitza les entrades d'equip tècnic (crew)
@@ -30,9 +31,10 @@ export async function saveManagerProfileAction(formData: FormData): Promise<{ ok
     if (!file.type.startsWith("image/")) return { ok: false, error: "La foto ha de ser una imatge" };
     const buf = Buffer.from(await file.arrayBuffer());
     const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+    const blobUrl = await uploadFileBlob("files/" + id, buf, file.type);
     await pool.query(
-      "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by) values ($1,$2,null,null,$3,$4,$5,$6,$7)",
-      [id, profile.workspaceId, file.name || "foto", file.type, file.size, buf, name]
+      "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+      [id, profile.workspaceId, file.name || "foto", file.type, file.size, name, blobUrl]
     );
     await pool.query("update person_profiles set photo_file_id=$1 where id=$2", [id, token]);
   }

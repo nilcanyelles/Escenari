@@ -283,6 +283,33 @@ export async function savePayoutsAction(concertId: string, payouts: Record<strin
   revalidatePath(`/concerts/${concertId}`);
 }
 
+// Si l'agència assumeix les despeses del bolo (% sobre el net) o no (%
+// sobre el brut, i les despeses les absorbeix només la resta).
+export async function setAgencyAssumesExpensesAction(concertId: string, value: boolean) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update concerts set agency_assumes_expenses=$1 where id=$2 and workspace_id=$3", [value, concertId, workspaceId]);
+  revalidatePath(`/concerts/${concertId}`);
+}
+
+// Percentatge fix de la comissió de l'agència (es manté fix encara que
+// canviïn les despeses o el caixet).
+export async function setAgencyPctAction(concertId: string, pct: number) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query("update concerts set agency_pct=$1 where id=$2 and workspace_id=$3", [pct, concertId, workspaceId]);
+  revalidatePath(`/concerts/${concertId}`);
+}
+
+// Horaris del pòster del concert (l'oficial + els que s'hagin afegit per
+// altres actuacions el mateix dia), editables des del modal del pòster.
+export async function savePosterScheduleAction(concertId: string, items: { time: string; label: string; isOwn?: boolean }[]) {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update concerts set poster_schedule=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(items || []), concertId, workspaceId]
+  );
+  revalidatePath(`/concerts/${concertId}`);
+}
+
 export async function setInvoiceStateAction(invoiceId: string, state: "pagada" | "pendent" | "vençuda") {
   const { workspaceId } = await requireManagerAction();
   await db().query("update invoices set state=$1 where id=$2 and workspace_id=$3", [state, invoiceId, workspaceId]);
@@ -345,7 +372,7 @@ export async function searchCitiesAction(query: string): Promise<{ description: 
 // la mateixa API gratuïta que la de poblacions. Aquí no es filtra per
 // type="city" perquè un recinte és un punt d'interès concret, no una
 // població — es descarten només els resultats sense nom.
-export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; placeId: string }[]> {
+export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; city: string; placeId: string }[]> {
   await requireManagerAction();
   const q = (query || "").trim();
   if (!q || q.length < 2) return [];
@@ -359,7 +386,7 @@ export async function searchVenuesAction(query: string): Promise<{ description: 
     const data = await res.json();
     const features: { properties: Record<string, unknown> }[] = data.features || [];
     const seen = new Set<string>();
-    const out: { description: string; name: string; placeId: string }[] = [];
+    const out: { description: string; name: string; city: string; placeId: string }[] = [];
     for (const f of features) {
       const p = f.properties || {};
       const name = String(p.name || "").trim();
@@ -370,12 +397,70 @@ export async function searchVenuesAction(query: string): Promise<{ description: 
       const key = description.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
-      out.push({ description, name, placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}` });
+      out.push({ description, name, city, placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}` });
     }
     return out;
   } catch {
     return [];
   }
+}
+
+// Carrers reals al voltant d'un punt (per al mini-mapa del pòster del
+// concert), via Overpass (l'API de consultes d'OpenStreetMap): en comptes
+// de descarregar rajoles d'imatge ja renderitzades (que es bloquegen o
+// mostren una marca d'aigua si se'n demanen moltes sense compte/clau), aquí
+// es demana només la geometria real dels carrers i es dibuixa amb l'estil
+// propi de l'app — sense dependre de cap servei de rajoles ni patir el
+// mateix límit d'ús. Es crida des del servidor (i no directament des del
+// navegador) perquè Overpass no respon amb capçaleres CORS.
+export async function getStreetWaysAction(lat: number, lon: number, radiusM = 900): Promise<{
+  bbox: [number, number, number, number];
+  ways: { highway: string; pts: [number, number][] }[];
+}> {
+  await requireManagerAction();
+  const dLat = radiusM / 111320;
+  const dLon = dLat / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
+  const south = lat - dLat, north = lat + dLat, west = lon - dLon, east = lon + dLon;
+  const bbox: [number, number, number, number] = [south, west, north, east];
+  const query = `[out:json][timeout:15];way["highway"](${south},${west},${north},${east});out geom;`;
+  // Diversos punts d'accés públics d'Overpass, per si el principal està
+  // saturat o bloqueja temporalment per excés de peticions (com ha passat
+  // avui) — es proven en ordre i es queda amb el primer que respongui.
+  const endpoints = [
+    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+  ];
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json",
+          "User-Agent": "Escenari (escenari.app, contacte via l'app)",
+        },
+        body: "data=" + encodeURIComponent(query),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!res.ok) {
+        console.error("getStreetWaysAction: Overpass ha respost", url, res.status, await res.text().catch(() => ""));
+        continue;
+      }
+      const data = await res.json();
+      const elements: { type: string; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] }[] = data.elements || [];
+      const ways = elements
+        .filter((e) => e.type === "way" && e.geometry && e.geometry.length > 1)
+        .map((e) => ({
+          highway: e.tags?.highway || "",
+          pts: e.geometry!.map((g) => [g.lon, g.lat] as [number, number]),
+        }));
+      return { bbox, ways };
+    } catch (err) {
+      console.error("getStreetWaysAction: error cridant Overpass", url, err);
+    }
+  }
+  return { bbox, ways: [] };
 }
 
 // Geocodifica un grapat de poblacions (per posar-hi xinxetes en un mapa) amb

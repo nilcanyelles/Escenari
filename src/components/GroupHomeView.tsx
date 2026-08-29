@@ -10,10 +10,10 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColo
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { saveBandBackupsAction, saveBandVehiclesAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
 import { setMyAttendanceAction } from "@/app/(artist)/actions";
 import { memberPerms, PERM_LABELS } from "@/lib/perms";
-import type { MemberPerms } from "@/lib/types";
+import type { MemberPerms, Vehicle } from "@/lib/types";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
@@ -275,6 +275,18 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   );
   const [backupDraft, setBackupDraft] = useState<BackupPerson | null>(null);
   const [savingBackups, setSavingBackups] = useState(false);
+
+  const [vehicles, setVehicles] = useState<Vehicle[]>(() => (band.vehicles || []).map((v) => ({ type: v.type || "", brand: v.brand || "", color: v.color || "", owner: v.owner || "", plate: v.plate || "" })));
+  const [vehicleDraft, setVehicleDraft] = useState<Vehicle | null>(null);
+  const [editingVehicleIndex, setEditingVehicleIndex] = useState<number | null>(null);
+  const [savingVehicles, setSavingVehicles] = useState(false);
+  async function persistVehicles(next: Vehicle[]) {
+    setSavingVehicles(true);
+    setVehicles(next);
+    await saveBandVehiclesAction(band.id, next);
+    router.refresh();
+    setSavingVehicles(false);
+  }
 
   const total = concerts.filter((c) => c.status !== "cancel·lat").length;
   const upcoming = concerts.filter((c) => c.date >= today && c.status !== "cancel·lat");
@@ -559,6 +571,80 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {tab === "documents" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={can.riders} isManager={isMgr} />
+
+          {/* Vehicles del grup: es trien a "Matrícules autoritzades" del full
+              de ruta en comptes d'escriure-les a mà cada cop. */}
+          <div className="panel">
+            <div className="panel-header-row" style={{ marginBottom: 14 }}>
+              <div className="panel-title">Vehicles del grup{savingVehicles ? " · desant…" : ""}</div>
+              {can.members && !vehicleDraft && (
+                <button type="button" className="btn-outline" onClick={() => { setVehicleDraft({ type: "", brand: "", color: "", owner: "", plate: "" }); setEditingVehicleIndex(null); }}>+ Afegeix vehicle</button>
+              )}
+            </div>
+            {vehicles.length === 0 && !vehicleDraft ? (
+              <div className="t-dim" style={{ fontSize: 13 }}>
+                Sense vehicles registrats. Un cop n&apos;hi hagi, els podràs triar directament a &quot;Matrícules autoritzades&quot; del full de ruta de cada bolo.
+              </div>
+            ) : (
+              <div className="backup-list">
+                {vehicles.map((v, i) => (
+                  <div key={i} className="backup-row">
+                    <div className="backup-row-main">
+                      <div className="member-name">{[v.type, v.brand, v.color].filter(Boolean).join(" · ") || "—"}</div>
+                      <div className="t-dim" style={{ fontSize: 12 }}>{[v.owner, v.plate].filter(Boolean).join(" · ")}</div>
+                    </div>
+                    {can.members && <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        type="button" className="row-rs-btn" title="Edita el vehicle"
+                        onClick={() => { setVehicleDraft(v); setEditingVehicleIndex(i); }}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"></path>
+                        </svg>
+                      </button>
+                      <button
+                        type="button" className="row-delete-btn" title="Treu el vehicle"
+                        onClick={() => persistVehicles(vehicles.filter((_, j) => j !== i))}
+                      >
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                      </button>
+                    </div>}
+                  </div>
+                ))}
+              </div>
+            )}
+            {vehicleDraft && (
+              <div className="backup-add-form">
+                <input className="field-input form-field compact-field" placeholder="Tipus de vehicle (p.ex. Furgoneta)" value={vehicleDraft.type}
+                  onChange={(e) => setVehicleDraft({ ...vehicleDraft, type: e.target.value })} />
+                <input className="field-input form-field compact-field" placeholder="Marca/model" value={vehicleDraft.brand}
+                  onChange={(e) => setVehicleDraft({ ...vehicleDraft, brand: e.target.value })} />
+                <input className="field-input form-field compact-field" placeholder="Color" value={vehicleDraft.color}
+                  onChange={(e) => setVehicleDraft({ ...vehicleDraft, color: e.target.value })} />
+                <input className="field-input form-field compact-field" placeholder="De qui és" value={vehicleDraft.owner}
+                  onChange={(e) => setVehicleDraft({ ...vehicleDraft, owner: e.target.value })} />
+                <input className="field-input form-field compact-field" placeholder="Matrícula" value={vehicleDraft.plate}
+                  onChange={(e) => setVehicleDraft({ ...vehicleDraft, plate: e.target.value })} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button type="button" className="btn-outline" onClick={() => { setVehicleDraft(null); setEditingVehicleIndex(null); }}>Cancel·la</button>
+                  <button
+                    type="button" className="btn-save"
+                    disabled={!vehicleDraft.type.trim() && !vehicleDraft.brand.trim() && !vehicleDraft.color.trim() && !vehicleDraft.owner.trim() && !vehicleDraft.plate.trim()}
+                    onClick={async () => {
+                      const next = editingVehicleIndex !== null
+                        ? vehicles.map((v, j) => (j === editingVehicleIndex ? vehicleDraft : v))
+                        : vehicles.concat([vehicleDraft]);
+                      await persistVehicles(next);
+                      setVehicleDraft(null);
+                      setEditingVehicleIndex(null);
+                    }}
+                  >Desa</button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

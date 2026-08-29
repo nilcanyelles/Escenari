@@ -26,6 +26,9 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     backups: r.backups || [],
     showFees: !!r.show_fees,
     coverUrl: r.cover_url || "",
+    defaultPayoutSplit: r.default_payout_split || {},
+    vehicles: r.vehicles || [],
+    defaultRouteSheet: r.default_route_sheet || null,
   }));
 }
 
@@ -48,6 +51,9 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     noSubstitute: r.no_substitute,
     routeSheet: r.route_sheet,
     payouts: r.payouts || {},
+    agencyAssumesExpenses: r.agency_assumes_expenses !== false,
+    agencyPct: r.agency_pct ?? 20,
+    posterSchedule: r.poster_schedule || null,
     riderId: r.rider_id || null,
     setlistId: r.setlist_id || null,
     kind: r.kind || "bolo",

@@ -100,10 +100,12 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
   }
 
   // Arrenca (o reprèn) totes les pistes exactament al mateix instant, des
-  // del segon indicat.
+  // del segon indicat. Sempre síncrona: quan torna, playStartCtxTimeRef ja
+  // està assignat — si no ho fos, l'efecte que engega el rellotge visual
+  // (disparat pel setPlaying(true) que ve just després) podria arrencar
+  // abans i llegir un valor vell, fent creure que la cançó ja s'ha acabat.
   function playFrom(offsetSec: number) {
     const ac = ctx();
-    if (ac.state === "suspended") ac.resume();
     stopAllSources();
     const when = ac.currentTime + 0.08; // marge mínim perquè totes arrenquin juntes
     const anySolo = tracks.some((t) => trackMix[t.id]?.solo);
@@ -133,8 +135,11 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
 
   function togglePlay() {
     if (loadState !== "ready") return;
-    if (playing) { pausePlayback(); setPlaying(false); }
-    else { playFrom(playStartOffsetRef.current); setPlaying(true); }
+    if (playing) { pausePlayback(); setPlaying(false); return; }
+    const ac = ctx();
+    const start = () => { playFrom(playStartOffsetRef.current); setPlaying(true); };
+    if (ac.state === "suspended") ac.resume().then(start);
+    else start();
   }
 
   function seekAll(time: number) {

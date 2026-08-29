@@ -19,14 +19,14 @@ export default async function ConfirmPage({ params, searchParams }: {
 
   const concert = (await pool.query(
     `select c.id, c.date, c.time, c.city, c.venue, c.festa_entitat, c.kind, c.attendance, c.band_id, c.workspace_id,
-            b.name as band_name, b.logo, b.color1, b.color2, b.members
+            b.name as band_name, b.logo, b.color1, b.color2, b.members, b.crew
      from concerts c join bands b on b.id = c.band_id
      where c.att_token=$1 and c.status <> 'cancel·lat'`,
     [token]
   )).rows[0];
   if (!concert) notFound();
 
-  const members: Person[] = concert.members || [];
+  const members: Person[] = [...(concert.members || []), ...(concert.crew || [])];
   const links = (await pool.query(
     "select member_name, clerk_user_id from band_members where band_id=$1",
     [concert.band_id]

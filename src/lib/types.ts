@@ -4,6 +4,8 @@ export type Person = { name: string; role: string; phone?: string; whatsapp?: st
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
 
+export type Vehicle = { type: string; brand: string; color: string; owner: string; plate: string };
+
 export type Band = {
   id: string;
   name: string;
@@ -22,6 +24,14 @@ export type Band = {
   backups?: BackupPerson[];
   showFees?: boolean;
   coverUrl?: string;
+  // Percentatges de repartiment del caixet predeterminats (nom -> %),
+  // aplicats als concerts que encara no tinguin cap repartiment desat.
+  defaultPayoutSplit?: Record<string, number>;
+  vehicles?: Vehicle[];
+  // Plantilla d'"opcions" del full de ruta (etiquetes/fases/càrrecs i
+  // interruptors, mai detalls ni enllaços) que s'aplica als concerts nous
+  // d'aquest grup en comptes de la plantilla genèrica.
+  defaultRouteSheet?: import("./route-sheet").RouteSheetDefaults;
 };
 
 export type Concert = {
@@ -41,6 +51,17 @@ export type Concert = {
   noSubstitute: Record<string, boolean>;
   routeSheet: unknown;
   payouts?: Record<string, number>;
+  // Si l'agència assumeix les despeses del bolo (el seu % es calcula sobre
+  // el caixet net) o no (sobre el brut, i les despeses les absorbeix només
+  // la resta del repartiment). Per defecte true.
+  agencyAssumesExpenses?: boolean;
+  // Percentatge fix de la comissió de l'agència — es manté fix encara que
+  // canviïn les despeses o el caixet (només varia l'import en € derivat).
+  agencyPct?: number;
+  // Horaris que es mostren al pòster del concert (l'oficial + els que
+  // s'hagin afegit per altres actuacions el mateix dia), editables des del
+  // modal del pòster.
+  posterSchedule?: { time: string; label: string; isOwn?: boolean }[];
   riderId?: string | null;
   setlistId?: string | null;
   kind?: "bolo" | "assaig" | "reunio" | "altre";

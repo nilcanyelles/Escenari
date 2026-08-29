@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Song } from "@/lib/songs";
 import { hasChords } from "@/lib/songs";
+import { convertChordLyrics } from "@/lib/chords-detect";
 import { instrumentIconFor } from "@/lib/tags";
 import { INSTRUMENT_CATEGORIES } from "@/lib/instruments";
 import { InstrumentIcon } from "@/components/InstrumentPicker";
 import { normalize } from "@/lib/text";
 import { LyricsView } from "@/components/SongsPanel";
 import { saveSongAction, uploadFileAction, deleteFileAction, lookupSongAction } from "@/app/(app)/grup/songs-actions";
+import StorageManagerModal from "@/components/StorageManagerModal";
 import SpecularButton from "@/components/SpecularButton";
 
 function fmtSize(bytes: number): string {
@@ -81,6 +83,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
   const [customIns, setCustomIns] = useState("");
   const [insMenuOpen, setInsMenuOpen] = useState(false);
   const [audiosOpen, setAudiosOpen] = useState(false);
+  const [storageManagerOpen, setStorageManagerOpen] = useState(false);
   const [audioDurations, setAudioDurations] = useState<Record<string, string>>({});
   const [backingProgress, setBackingProgress] = useState<{ index: number; total: number; percent: number } | null>(null);
   const [semitones, setSemitones] = useState(0);
@@ -203,7 +206,10 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
       const res = await uploadWithProgress(list[i], instrument, (pct) => {
         setBackingProgress({ index: i + 1, total: list.length, percent: pct });
       });
-      if (!res.ok) alert(res.error || "Error pujant un fitxer");
+      if (!res.ok) {
+        if (res.error && res.error.includes("pistes d'àudio")) { setStorageManagerOpen(true); break; }
+        alert(res.error || "Error pujant un fitxer");
+      }
     }
     setBackingProgress(null);
     setUploading(null);
@@ -301,8 +307,21 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
                 placeholder={"Lletra amb acords entre claudàtors:\n[Am]Quan surt el [F]sol a la pla[C]ça…"}
                 value={form.lyrics}
                 onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
+                onPaste={(e) => {
+                  const pasted = e.clipboardData.getData("text");
+                  if (!pasted) return;
+                  const converted = convertChordLyrics(pasted);
+                  if (converted === pasted) return; // cap línia d'acords detectada: comportament normal
+                  e.preventDefault();
+                  const el = e.currentTarget;
+                  const start = el.selectionStart, end = el.selectionEnd;
+                  const newValue = form.lyrics.slice(0, start) + converted + form.lyrics.slice(end);
+                  setForm({ ...form, lyrics: newValue });
+                  const caret = start + converted.length;
+                  requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = caret; });
+                }}
               />
-              <div className="t-dim" style={{ fontSize: 11 }}>Format ChordPro: acords entre [claudàtors], surten damunt de la lletra.</div>
+              <div className="t-dim" style={{ fontSize: 11 }}>Format ChordPro: acords entre [claudàtors], surten damunt de la lletra. Si enganxes lletra amb els acords en una línia a part, es detecten i s&apos;ajunten soles.</div>
             </>
           ) : (
             <div className="ss-lyrics-view">
@@ -477,7 +496,14 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
               {/* Sondes silencioses només per llegir la durada de cada pista. */}
               {backingFiles.map((f) => (
                 <audio key={f.id} hidden preload="metadata" src={`/api/file/${f.id}`}
-                  onLoadedMetadata={(e) => setAudioDurations((prev) => ({ ...prev, [f.id]: fmtAudioDuration(e.currentTarget.duration) }))} />
+                  onLoadedMetadata={(e) => {
+                    // Es llegeix e.currentTarget de seguida: si es referís dins
+                    // de la funció d'actualització de l'estat, quan React
+                    // l'executés ja podria ser null (l'esdeveniment ja hauria
+                    // acabat, o la pista podria haver-se desmuntat).
+                    const dur = fmtAudioDuration(e.currentTarget.duration);
+                    setAudioDurations((prev) => ({ ...prev, [f.id]: dur }));
+                  }} />
               ))}
 
               {audiosOpen && (
@@ -505,6 +531,10 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
         onChange={(e) => { const f = e.target.files?.[0]; if (f) doUpload(f, uploadForRef.current); e.target.value = ""; }} />
       <input ref={backingFileInput} type="file" hidden multiple accept={AUDIO_ACCEPT}
         onChange={(e) => { const files = e.target.files; if (files && files.length) doUploadMany(files, BACKING_TRACK_INS); e.target.value = ""; }} />
+
+      {storageManagerOpen && (
+        <StorageManagerModal bandId={bandId} onClose={() => setStorageManagerOpen(false)} onChanged={() => router.refresh()} />
+      )}
     </div>
   );
 }

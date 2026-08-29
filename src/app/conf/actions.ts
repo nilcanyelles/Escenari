@@ -48,9 +48,9 @@ export async function respondConfAction(
   )).rows[0];
   if (!concert) return { ok: false, error: "Aquest enllaç ja no és vàlid" };
 
-  const band = (await pool.query("select id, members from bands where id=$1", [concert.band_id])).rows[0];
+  const band = (await pool.query("select id, members, crew from bands where id=$1", [concert.band_id])).rows[0];
   if (!band) return { ok: false, error: "El grup ja no existeix" };
-  const member = (band.members || []).find((m: Person) => normalize(m.name) === normalize(memberName));
+  const member = [...(band.members || []), ...(band.crew || [])].find((m: Person) => normalize(m.name) === normalize(memberName));
   if (!member) return { ok: false, error: "Aquesta persona no és membre del grup" };
 
   // Qui pot respondre per aquest membre: el compte ja vinculat, o qualsevol

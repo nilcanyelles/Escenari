@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
+import { getFileBlob } from "@/lib/blob-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   // MB) — abans es feia amb un "select *" i una petició no autoritzada
   // igualment baixava el blob sencer de la base de dades.
   const meta = (await db().query(
-    "select workspace_id, band_id, name, mime, size from files where id=$1", [id]
+    "select workspace_id, band_id, name, mime, size, blob_url from files where id=$1", [id]
   )).rows[0];
   if (!meta) return new NextResponse("No trobat", { status: 404 });
 
@@ -42,19 +43,35 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     if (!allowed) return new NextResponse("No autoritzat", { status: 403 });
   }
 
-  // Suport a "Range" (bytes=…): imprescindible per a àudio/vídeo. En lloc
-  // de baixar el fitxer sencer de Postgres i retallar-lo a Node, es demana
-  // directament el tros necessari amb substring() — estalvia arrossegar
-  // desenes de MB per llegir només la capçalera d'un àudio, per exemple.
-  const total: number = meta.size;
   const baseHeaders: Record<string, string> = {
     "Content-Type": meta.mime || "application/octet-stream",
     "Content-Disposition": `inline; filename="${encodeURIComponent(meta.name)}"`,
     "Cache-Control": "private, max-age=3600",
     "Accept-Ranges": "bytes",
   };
-
   const range = req.headers.get("range");
+
+  // Fitxers nous: viuen a Vercel Blob (privat), no a Postgres — es
+  // proxegen des d'aquí (el client mai veu la URL del blob directament),
+  // reenviant el "Range" si n'hi ha perquè el navegador pugui llegir només
+  // un tros (durada d'un àudio, seeking...) sense baixar-ho tot.
+  if (meta.blob_url) {
+    const res = await getFileBlob(meta.blob_url, range);
+    if (!res || !res.stream) return new NextResponse("No trobat", { status: 404 });
+    const status = res.headers.get("content-range") ? 206 : 200;
+    return new NextResponse(res.stream, {
+      status,
+      headers: {
+        ...baseHeaders,
+        ...(res.headers.get("content-range") ? { "Content-Range": res.headers.get("content-range")! } : {}),
+        "Content-Length": res.headers.get("content-length") || String(meta.size),
+      },
+    });
+  }
+
+  // Fitxers antics, encara no migrats: bytea a Postgres (via substring()
+  // per als "Range" per no arrossegar-ho tot a Node cada cop).
+  const total: number = meta.size;
   const m = range && /bytes=(\d*)-(\d*)/.exec(range);
   if (m) {
     let start = m[1] ? parseInt(m[1], 10) : 0;

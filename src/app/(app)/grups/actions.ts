@@ -137,31 +137,37 @@ export async function revokeJoinCodeAction(bandId: string) {
   revalidatePath("/grups");
 }
 
-// Autocompletat de ciutat real via l'API de Google Places (Autocomplete),
-// restringit a localitats ("(cities)") de tot el món. Requereix
-// GOOGLE_MAPS_API_KEY a .env.local — sense la clau, torna una llista buida
-// (la UI ho tracta com "cap resultat", no com un error).
+// Autocompletat de ciutat real via Photon (photon.komoot.io), la mateixa
+// API gratuïta i sense clau que ja fa servir la resta de l'app (concerts,
+// full de ruta...) — abans feia servir Google Places, que necessitava
+// GOOGLE_MAPS_API_KEY i sense la clau no tornava mai cap resultat.
 export async function searchCitiesAction(query: string): Promise<{ description: string; placeId: string }[]> {
   await requireManagerAction();
   const q = (query || "").trim();
-  const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-  if (!q || q.length < 2 || !apiKey) return [];
-
-  const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
-  url.searchParams.set("input", q);
-  url.searchParams.set("types", "(cities)");
-  url.searchParams.set("language", "ca");
-  url.searchParams.set("key", apiKey);
-
+  if (!q || q.length < 2) return [];
+  const url = new URL("https://photon.komoot.io/api/");
+  url.searchParams.set("q", q);
+  url.searchParams.set("limit", "8");
+  url.searchParams.set("lang", "en");
   try {
     const res = await fetch(url.toString());
     if (!res.ok) return [];
     const data = await res.json();
-    if (data.status !== "OK") return [];
-    return (data.predictions || []).map((p: { description: string; place_id: string }) => ({
-      description: p.description,
-      placeId: p.place_id,
-    }));
+    const features: { properties: Record<string, unknown> }[] = data.features || [];
+    const seen = new Set<string>();
+    const out: { description: string; placeId: string }[] = [];
+    for (const f of features) {
+      const p = f.properties || {};
+      if (p.type !== "city") continue;
+      const name = String(p.name || "").trim();
+      if (!name) continue;
+      const description = [name, p.state, p.country].filter(Boolean).join(", ");
+      const key = description.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ description, placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}` });
+    }
+    return out;
   } catch {
     return [];
   }

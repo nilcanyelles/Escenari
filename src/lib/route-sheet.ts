@@ -14,7 +14,7 @@ export const RS_LLOC_ICONS: Record<string, string> = {
   "parking": '<circle cx="12" cy="12" r="9.5"></circle><text x="12" y="16.3" text-anchor="middle" font-size="12.5" font-weight="700" font-family="Inter,sans-serif" stroke="none" fill="currentColor">P</text>',
 };
 
-export type LlocItem = { label: string; value: string; plates?: string };
+export type LlocItem = { label: string; value: string; plates?: string; vehicleCount?: string };
 export type ContactItem = { role: string; name: string; phone: string; company: string };
 export type ScheduleItem = { phase: string; start: string; end: string };
 export type HospitalitatItem = {
@@ -32,10 +32,19 @@ export type RouteSheet = {
   tecnic: TecnicItem[];
 };
 
-export function defaultRouteSheet(c: { venue?: string; time?: string }): RouteSheet {
-  return {
+// Plantilla de "només opcions" que un grup pot desar per secció (etiquetes,
+// fases, càrrecs i interruptors — mai valors, telèfons, enllaços o dates,
+// que són propis de cada concert). Es fa servir per inicialitzar el full de
+// ruta de concerts nous d'aquell grup en comptes de la plantilla genèrica.
+export type RouteSheetDefaults = Partial<RouteSheet>;
+
+export function defaultRouteSheet(c: { venue?: string; time?: string }, bandDefault?: RouteSheetDefaults | null): RouteSheet {
+  const base: RouteSheet = {
+    // El recinte i la població ja es mostren sempre a dalt de tot, en
+    // directe des de la pestanya Informació (mai com a camp lliure que es
+    // pugui desincronitzar) — aquí només queden els detalls que sí que són
+    // propis del full de ruta.
     lloc: [
-      { label: "Recinte", value: c.venue || "" },
       { label: "Adreça", value: "" },
       { label: "Descàrrega", value: "" },
       { label: "Parking", value: "", plates: "" },
@@ -60,6 +69,41 @@ export function defaultRouteSheet(c: { venue?: string; time?: string }): RouteSh
       { label: "Pantalla LED", value: "", included: true },
     ],
   };
+  if (bandDefault) {
+    if (bandDefault.lloc && bandDefault.lloc.length) base.lloc = JSON.parse(JSON.stringify(bandDefault.lloc));
+    if (bandDefault.contacts && bandDefault.contacts.length) base.contacts = JSON.parse(JSON.stringify(bandDefault.contacts));
+    if (bandDefault.schedule && bandDefault.schedule.length) {
+      base.schedule = (JSON.parse(JSON.stringify(bandDefault.schedule)) as ScheduleItem[]).map((ph) =>
+        ph.phase && ph.phase.trim().toLowerCase() === "concert" ? { ...ph, start: c.time || ph.start } : ph
+      );
+    }
+    if (bandDefault.hospitalitat && bandDefault.hospitalitat.length) base.hospitalitat = JSON.parse(JSON.stringify(bandDefault.hospitalitat));
+    if (bandDefault.tecnic && bandDefault.tecnic.length) base.tecnic = JSON.parse(JSON.stringify(bandDefault.tecnic));
+  }
+  return base;
+}
+
+// Retalla una secció a només les "opcions" que en defineixen l'estructura
+// (etiqueta/fase/càrrec i interruptors sí/no), descartant qualsevol detall o
+// enllaç propi d'aquell concert en concret (valors, telèfons, adreces,
+// matrícules, hores, noms de contacte...).
+export function stripSectionForDefault<K extends keyof RouteSheet>(section: K, items: RouteSheet[K]): RouteSheet[K] {
+  if (section === "lloc") {
+    return (items as LlocItem[]).map((it) => ({ label: it.label, value: "" })) as RouteSheet[K];
+  }
+  if (section === "contacts") {
+    return (items as ContactItem[]).map((it) => ({ role: it.role, name: "", phone: "", company: "" })) as RouteSheet[K];
+  }
+  if (section === "schedule") {
+    return (items as ScheduleItem[]).map((it) => ({ phase: it.phase, start: "", end: "" })) as RouteSheet[K];
+  }
+  if (section === "hospitalitat") {
+    return (items as HospitalitatItem[]).map((it) => ({
+      label: it.label, value: "", included: it.included,
+      parkingAvailable: it.parkingAvailable, breakfastAvailable: it.breakfastAvailable,
+    })) as RouteSheet[K];
+  }
+  return (items as TecnicItem[]).map((it) => ({ label: it.label, value: "", included: it.included })) as RouteSheet[K];
 }
 
 export function rsBlankItem(section: keyof RouteSheet) {
@@ -69,9 +113,9 @@ export function rsBlankItem(section: keyof RouteSheet) {
   return { label: "", value: "" };
 }
 
-export function normalizeRouteSheet(rs: RouteSheet | null | undefined, c: { venue?: string; time?: string }): RouteSheet {
-  if (!rs) return defaultRouteSheet(c);
-  const def = defaultRouteSheet(c);
+export function normalizeRouteSheet(rs: RouteSheet | null | undefined, c: { venue?: string; time?: string }, bandDefault?: RouteSheetDefaults | null): RouteSheet {
+  if (!rs) return defaultRouteSheet(c, bandDefault);
+  const def = defaultRouteSheet(c, bandDefault);
   const out: RouteSheet = JSON.parse(JSON.stringify(rs));
   out.lloc = out.lloc && out.lloc.length ? out.lloc : def.lloc;
   out.contacts = out.contacts && out.contacts.length ? out.contacts : def.contacts;

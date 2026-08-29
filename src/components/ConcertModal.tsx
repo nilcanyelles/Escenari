@@ -562,7 +562,12 @@ export default function ConcertModal({
           )}
 
           {activeTab === "routesheet" && mode === "edit" && concert && (
-            <RouteSheetEditor concert={concert} onCompleteChange={setRouteSheetComplete} onPercentChange={setRouteSheetPercent} onSaved={() => { everSavedRef.current = true; }} />
+            <RouteSheetEditor
+              concert={concert} venue={cf.venue} city={cf.city}
+              onVenueCityChange={(v) => setCf((prev) => ({ ...prev, venue: v.name, ...(v.city ? { city: v.city } : {}) }))}
+              vehicles={currentBand?.vehicles || []} bandDefaultRouteSheet={currentBand?.defaultRouteSheet || null}
+              onCompleteChange={setRouteSheetComplete} onPercentChange={setRouteSheetPercent} onSaved={() => { everSavedRef.current = true; }}
+            />
           )}
 
           {activeTab === "attendance" && (

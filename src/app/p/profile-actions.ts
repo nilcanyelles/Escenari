@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { getProfile } from "@/lib/current-user";
 import { getOrCreatePersonProfile } from "@/lib/person-profile";
 import { normalize } from "@/lib/text";
+import { uploadFileBlob } from "@/lib/blob-storage";
 
 // Qui pot editar un perfil: el músic vinculat (tot el seu) o el gestor del
 // workspace (nom, instruments i foto quan el músic no té compte).
@@ -70,9 +71,10 @@ export async function uploadProfilePhotoAction(formData: FormData): Promise<{ ok
   if (!file.type.startsWith("image/")) return { ok: false, error: "Ha de ser una imatge" };
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const blobUrl = await uploadFileBlob("files/" + id, buf, file.type);
   await db().query(
-    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by) values ($1,$2,null,null,$3,$4,$5,$6,$7)",
-    [id, row.workspace_id, file.name || "foto", file.type, file.size, buf, String(row.person_name)]
+    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+    [id, row.workspace_id, file.name || "foto", file.type, file.size, String(row.person_name), blobUrl]
   );
   await db().query("update person_profiles set photo_file_id=$1 where id=$2", [id, token]);
   revalidatePath(`/p/${token}`);

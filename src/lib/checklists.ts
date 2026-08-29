@@ -54,3 +54,31 @@ export async function getChecklists(workspaceId: string, concertId?: string): Pr
     })) as ChecklistItem[],
   }));
 }
+
+const DEFAULT_CHECKLIST_NAME = "Rider";
+const DEFAULT_CHECKLIST_ITEMS = ["Enviar rider", "Rider aprovat?"];
+
+// Cada concert ha de tenir sempre la checklist de sèrie del rider — si
+// encara no en té cap (concert nou, o un de vell que encara no la tenia),
+// es crea aquí mateix en carregar la pàgina, amb els seus dos ítems fixos,
+// assignats per defecte al gestor.
+export async function ensureDefaultChecklist(workspaceId: string, concertId: string, managerName: string): Promise<void> {
+  const pool = db();
+  const existing = (await pool.query(
+    "select 1 from checklists where workspace_id=$1 and concert_id=$2 and name=$3",
+    [workspaceId, concertId, DEFAULT_CHECKLIST_NAME]
+  )).rows[0];
+  if (existing) return;
+  const id = "cl" + Date.now();
+  await pool.query(
+    "insert into checklists (id, workspace_id, concert_id, name) values ($1,$2,$3,$4)",
+    [id, workspaceId, concertId, DEFAULT_CHECKLIST_NAME]
+  );
+  for (let i = 0; i < DEFAULT_CHECKLIST_ITEMS.length; i++) {
+    const itemId = "ci" + Date.now() + i;
+    await pool.query(
+      "insert into checklist_items (id, checklist_id, parent_id, text, assignee, position) values ($1,$2,null,$3,$4,$5)",
+      [itemId, id, DEFAULT_CHECKLIST_ITEMS[i], managerName, i]
+    );
+  }
+}
