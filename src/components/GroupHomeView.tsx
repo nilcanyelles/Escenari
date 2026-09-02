@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -10,14 +10,16 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColo
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, saveBandVehiclesAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { saveBandBackupsAction, saveBandVehiclesAction, saveBandSocialStatsAction, refreshSocialStatsAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { generateJoinCodeAction, revokeJoinCodeAction } from "@/app/(app)/grups/actions";
 import { setMyAttendanceAction } from "@/app/(artist)/actions";
 import { memberPerms, PERM_LABELS } from "@/lib/perms";
-import type { MemberPerms, Vehicle } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialStats } from "@/lib/types";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
 import InstrumentPicker from "@/components/InstrumentPicker";
+import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
 
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
@@ -47,6 +49,40 @@ const ICON_CHECK = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
 );
 
+// Targeta d'una xifra de xarxes socials (Inici): amb el color/gradient de
+// marca de cada plataforma a la insígnia de la icona, perquè es distingeixin
+// d'un cop d'ull. "auto" marca les que es poden refrescar soles.
+function SocialStatBox({ icon, gradient, label, value, auto, onChange }: {
+  icon: React.ReactNode;
+  gradient: string;
+  label: string;
+  value: number | undefined;
+  auto?: boolean;
+  onChange: (v: number | undefined) => void;
+}) {
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
+      borderRadius: 12, background: "var(--bg-card-2)", border: "1px solid var(--border-soft)",
+    }}>
+      <span style={{
+        display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
+        width: 30, height: 30, borderRadius: 999, background: gradient, color: "#fff",
+      }}>{icon}</span>
+      <div style={{ display: "flex", flexDirection: "column", gap: 1, flex: 1, minWidth: 0 }}>
+        <span style={{ fontSize: 10, color: "var(--text-fainter)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          {label}{auto ? " · auto" : ""}
+        </span>
+        <input
+          className="field-input compact-field" style={{ padding: "2px 6px", fontWeight: 700, fontSize: 15 }}
+          type="number" min={0} placeholder="—" value={value ?? ""}
+          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
+        />
+      </div>
+    </div>
+  );
+}
+
 // Fila de músics o de crew a la pestanya Equip: sempre en una sola línia
 // (mai es trenca en diverses files) — si n'hi ha més dels que hi caben,
 // unes fletxes hi passen d'un en un, amb la mateixa animació de
@@ -75,7 +111,7 @@ function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4 }: {
         >‹</button>
       )}
       <div className={"bento-chroma bento-chroma-slide-" + dir} key={s}>
-        <ChromaGrid items={pageItems.map(renderItem)} columns={visibleCount} cardWidth={cardWidth} radius={radius} />
+        <ChromaGrid className="chroma-compact" items={pageItems.map(renderItem)} columns={visibleCount} cardWidth={cardWidth} radius={radius} />
       </div>
       {canNav && (
         <button
@@ -253,16 +289,68 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   function cancelHoverOpen() {
     if (hoverOpenTimer.current) { window.clearTimeout(hoverOpenTimer.current); hoverOpenTimer.current = null; }
   }
-  // Previsualització de l'equip a la pestanya Inici: només s'hi veuen 4
-  // persones de cop, però amb fletxes es pot passar a la resta sense
-  // haver de canviar de pestanya.
-  const [teamPreviewPage, setTeamPreviewPage] = useState(0);
-  const [teamPreviewDir, setTeamPreviewDir] = useState<"next" | "prev">("next");
+  // Nombre de concerts d'una persona per a la targeta grossa (flyout) —
+  // tant músics com equip tècnic hi surten.
+  function countFor(p: Person): number | null {
+    const inBand = band.members.some((x) => x.name === p.name) || band.crew.some((x) => x.name === p.name);
+    return inBand ? concertCountByPerson[p.name] || 0 : null;
+  }
+  // Anàlisi de xarxes socials (Inici): xifres introduïdes a mà, es desen
+  // soles amb un petit marge després de l'últim canvi.
+  const [socialStats, setSocialStats] = useState<SocialStats>(band.socialStats || {});
+  const socialStatsFirstRender = useRef(true);
+  const socialStatsSaveTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (socialStatsFirstRender.current) { socialStatsFirstRender.current = false; return; }
+    if (socialStatsSaveTimer.current) window.clearTimeout(socialStatsSaveTimer.current);
+    socialStatsSaveTimer.current = window.setTimeout(() => { saveBandSocialStatsAction(band.id, socialStats); }, 700);
+    return () => { if (socialStatsSaveTimer.current) window.clearTimeout(socialStatsSaveTimer.current); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socialStats]);
+  function updateSocialStat(key: keyof SocialStats, value: number | undefined) {
+    setSocialStats((prev) => ({ ...prev, [key]: value }));
+  }
+  // Actualització automàtica de YouTube/Spotify a partir dels enllaços
+  // desats — Instagram, TikTok i els oients mensuals de Spotify no tenen
+  // cap via pública i sempre seran manuals.
+  const [refreshingStats, setRefreshingStats] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  async function refreshStats(silent = false) {
+    setRefreshingStats(true);
+    if (!silent) setRefreshError(null);
+    const res = await refreshSocialStatsAction(band.id, band.socialLinks || {}, socialStats);
+    if (res.ok) setSocialStats(res.stats);
+    else if (!silent) setRefreshError(res.error || "No s'ha pogut actualitzar");
+    setRefreshingStats(false);
+  }
+  // Es refresca sola en obrir la pàgina del grup (una vegada, en silenci —
+  // si encara no hi ha claus d'API configurades o enllaços desats, no cal
+  // amoïnar ningú amb un error).
+  const socialStatsAutoRefreshed = useRef<string | null>(null);
+  useEffect(() => {
+    if (socialStatsAutoRefreshed.current === band.id) return;
+    socialStatsAutoRefreshed.current = band.id;
+    refreshStats(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [band.id]);
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
   const [addForm, setAddForm] = useState<{ name: string; instruments: string[]; role: string; phone: string; email: string }>({ name: "", instruments: [], role: "", phone: "", email: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [joinCopied, setJoinCopied] = useState(false);
+  const [codeBusy, setCodeBusy] = useState(false);
+  async function handleGenerateCode() {
+    setCodeBusy(true);
+    await generateJoinCodeAction(band.id);
+    router.refresh();
+    setCodeBusy(false);
+  }
+  async function handleRevokeCode() {
+    setCodeBusy(true);
+    await revokeJoinCodeAction(band.id);
+    router.refresh();
+    setCodeBusy(false);
+  }
   const [copiedEmailKey, setCopiedEmailKey] = useState<string | null>(null);
   function copyEmail(key: string, email: string) {
     navigator.clipboard.writeText(email).then(() => {
@@ -390,105 +478,70 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
       </div>
 
+      {/* Targeta grossa flotant en passar el ratolí per una targeta petita
+          de l'equip (a Inici o a Equip): sempre muntada, a través d'un
+          portal a <body>, perquè cap altre element de la pàgina la pugui
+          tapar mai, sigui quina sigui la pestanya activa. */}
+      {hoveredTeam && typeof document !== "undefined" && createPortal(
+        <div
+          className="bento-chroma-flyout"
+          style={{
+            top: hoveredTeam.rect.top + hoveredTeam.rect.height / 2,
+            left: hoveredTeam.rect.left + hoveredTeam.rect.width / 2,
+          }}
+          onMouseEnter={cancelHoverClose}
+          onMouseLeave={() => setHoveredTeam(null)}
+        >
+          <ChromaGrid
+            items={[personChromaItem(
+              hoveredTeam.person, countFor(hoveredTeam.person), band, openProfile, photosByName, igByName,
+              !!linkedByName[hoveredTeam.person.name], undefined, undefined, copiedEmailKey, copyEmail,
+            )]}
+            columns={1}
+            cardWidth={190}
+            radius={240}
+          />
+        </div>,
+        document.body
+      )}
+
       {tab === "inici" && (
         <BentoGrid
           cards={([
             {
-              key: "membres",
-              className: "bento-card-team",
-              label: "Equip",
-              title: `${band.members.length + band.crew.length} integrants`,
-              description: `${band.members.length} músics${band.crew.length ? `, ${band.crew.length} crew` : ""}`,
+              key: "xarxes",
+              label: "Xarxes socials",
+              title: "Anàlisi de xarxes",
+              description: "YouTube i Spotify (seguidors) es poden actualitzar soles",
               colSpan: 2,
               rowSpan: 2,
-              onClick: () => setTab("equip"),
-              content: (() => {
-                const allTeam = [...band.members, ...band.crew];
-                const isMusician = (p: Person) => band.members.some((x) => x.name === p.name);
-                const countFor = (p: Person) => (isMusician(p) ? concertCountByPerson[p.name] || 0 : null);
-                const visibleCount = 4;
-                const maxStart = Math.max(0, allTeam.length - visibleCount);
-                const start = Math.min(teamPreviewPage, maxStart);
-                const pageTeam = allTeam.slice(start, start + visibleCount);
-                const canNav = allTeam.length > visibleCount;
-                const peekCard = (p: Person, side: "prev" | "next") => (
-                  <div className={"bento-chroma-peek-card bento-chroma-peek-" + side} aria-hidden="true">
-                    <ChromaGrid
-                      className="chroma-compact"
-                      items={[personChromaItem(p, null, band, openProfile, photosByName, igByName, false)]}
-                      columns={1}
-                      cardWidth={104}
-                      radius={150}
-                    />
+              content: (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <span className="t-dim" style={{ fontSize: 10 }}>
+                      {refreshingStats ? "Actualitzant…" : "YouTube i Spotify (seguidors) es refresquen soles"}
+                    </span>
+                    {refreshError && <span style={{ fontSize: 11, color: "oklch(0.68 0.18 25)" }}>{refreshError}</span>}
                   </div>
-                );
-                const prevPeek = start > 0 ? allTeam[start - 1] : null;
-                const nextPeek = start + visibleCount < allTeam.length ? allTeam[start + visibleCount] : null;
-                return (
-                  <div className="bento-chroma-row">
-                    {canNav && (
-                      <div className="bento-chroma-nav-wrap">
-                        <button
-                          type="button"
-                          className="bento-chroma-nav-btn"
-                          disabled={start === 0}
-                          onClick={(e) => { e.stopPropagation(); setTeamPreviewDir("prev"); setTeamPreviewPage((p) => Math.max(0, p - 1)); }}
-                        >‹</button>
-                        {prevPeek && peekCard(prevPeek, "prev")}
-                      </div>
-                    )}
-                    <div className={"bento-chroma bento-chroma-slide-" + teamPreviewDir} key={start}>
-                      <ChromaGrid
-                        className="chroma-compact"
-                        items={pageTeam.map((m) => {
-                          const item = personChromaItem(m, null, band, openProfile, photosByName, igByName, !!linkedByName[m.name], undefined, undefined, copiedEmailKey, copyEmail);
-                          return {
-                            ...item,
-                            onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
-                            onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
-                          };
-                        })}
-                        columns={4}
-                        cardWidth={104}
-                        radius={150}
-                      />
-                    </div>
-                    {canNav && (
-                      <div className="bento-chroma-nav-wrap">
-                        <button
-                          type="button"
-                          className="bento-chroma-nav-btn"
-                          disabled={start >= maxStart}
-                          onClick={(e) => { e.stopPropagation(); setTeamPreviewDir("next"); setTeamPreviewPage((p) => Math.min(maxStart, p + 1)); }}
-                        >›</button>
-                        {nextPeek && peekCard(nextPeek, "next")}
-                      </div>
-                    )}
-                    {hoveredTeam && typeof document !== "undefined" && createPortal(
-                      <div
-                        className="bento-chroma-flyout"
-                        style={{
-                          top: hoveredTeam.rect.top + hoveredTeam.rect.height / 2,
-                          left: hoveredTeam.rect.left + hoveredTeam.rect.width / 2,
-                        }}
-                        onMouseEnter={cancelHoverClose}
-                        onMouseLeave={() => setHoveredTeam(null)}
-                      >
-                        <ChromaGrid
-                          items={[personChromaItem(
-                            hoveredTeam.person, countFor(hoveredTeam.person), band, openProfile, photosByName, igByName,
-                            !!linkedByName[hoveredTeam.person.name], undefined, undefined, copiedEmailKey, copyEmail,
-                          )]}
-                          columns={1}
-                          cardWidth={190}
-                          radius={240}
-                        />
-                      </div>,
-                      document.body
-                    )}
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
+                    <SocialStatBox icon={<InstagramIcon />} gradient="linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)"
+                      label="Seguidors Instagram" value={socialStats.instagramFollowers}
+                      onChange={(v) => updateSocialStat("instagramFollowers", v)} />
+                    <SocialStatBox icon={<TiktokIcon />} gradient="linear-gradient(135deg,#25F4EE,#00111a 55%,#FE2C55)"
+                      label="Seguidors TikTok" value={socialStats.tiktokFollowers}
+                      onChange={(v) => updateSocialStat("tiktokFollowers", v)} />
+                    <SocialStatBox icon={<SpotifyIcon />} gradient="#1DB954"
+                      label="Seguidors Spotify" auto value={socialStats.spotifyFollowers}
+                      onChange={(v) => updateSocialStat("spotifyFollowers", v)} />
+                    <SocialStatBox icon={<SpotifyIcon />} gradient="#1DB954"
+                      label="Oients mensuals Spotify" value={socialStats.spotifyMonthlyListeners}
+                      onChange={(v) => updateSocialStat("spotifyMonthlyListeners", v)} />
+                    <SocialStatBox icon={<YoutubeIcon />} gradient="#FF0000"
+                      label="Visites YouTube" auto value={socialStats.youtubeViews}
+                      onChange={(v) => updateSocialStat("youtubeViews", v)} />
                   </div>
-                );
-              })(),
+                </div>
+              ),
             },
             {
               key: "bolos",
@@ -564,7 +617,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {tab === "cancons" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <SongsPanel band={band} songs={songs} canEdit={can.songs} />
-          <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isMgr} songs={songs} />
+          <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isMgr} songs={songs} concerts={concerts} />
         </div>
       )}
 
@@ -677,15 +730,22 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           band.members.length > 0 && (
             <TeamRow
               people={band.members}
-              cardWidth={190}
-              radius={240}
-              visibleCount={5}
-              renderItem={(m) => personChromaItem(
-                m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
-                !!linkedByName[m.name], isMgr ? handleInvite : undefined,
-                undefined,
-                copiedEmailKey, copyEmail,
-              )}
+              cardWidth={76}
+              radius={12}
+              visibleCount={8}
+              renderItem={(m) => {
+                const item = personChromaItem(
+                  m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
+                  !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                  undefined,
+                  copiedEmailKey, copyEmail,
+                );
+                return {
+                  ...item,
+                  onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
+                  onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
+                };
+              }}
             />
           )
         )}
@@ -722,15 +782,22 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           band.crew.length > 0 && (
             <TeamRow
               people={band.crew}
-              cardWidth={190}
-              radius={240}
-              visibleCount={5}
-              renderItem={(m) => personChromaItem(
-                m, null, band, openProfile, photosByName, igByName,
-                !!linkedByName[m.name], isMgr ? handleInvite : undefined,
-                undefined,
-                copiedEmailKey, copyEmail,
-              )}
+              cardWidth={76}
+              radius={12}
+              visibleCount={8}
+              renderItem={(m) => {
+                const item = personChromaItem(
+                  m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
+                  !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                  undefined,
+                  copiedEmailKey, copyEmail,
+                );
+                return {
+                  ...item,
+                  onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
+                  onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
+                };
+              }}
             />
           )
         )}
@@ -759,17 +826,28 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           vinculat a aquest grup, com a músic o com a tècnic de so segons el que triï en unir-s&apos;hi.
           Si la persona ja existeix aquí creada a mà, usa el botó 🔗 de la seva targeta per convidar-la a reclamar el perfil.
         </div>
-        <div className="join-box">
-          <span className="join-code">{band.joinCode || "—"}</span>
-          <button type="button" className="btn-outline"
-            onClick={async () => {
-              await navigator.clipboard.writeText(joinMsg("membre"));
-              setJoinCopied(true);
-              window.setTimeout(() => setJoinCopied(false), 1600);
-            }}>{joinCopied ? "Copiat ✓" : "Copia el missatge"}</button>
-          <button type="button" className="btn-outline cd-wa-btn"
-            onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
-        </div>
+        {band.joinCodeActive && band.joinCode ? (
+          <>
+            <div className="join-box">
+              <span className="join-code">{band.joinCode}</span>
+              <button type="button" className="btn-outline"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(joinMsg("membre"));
+                  setJoinCopied(true);
+                  window.setTimeout(() => setJoinCopied(false), 1600);
+                }}>{joinCopied ? "Copiat ✓" : "Copia el missatge"}</button>
+              <button type="button" className="btn-outline cd-wa-btn"
+                onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
+            </div>
+            <button type="button" className="btn-danger-outline" style={{ marginTop: 10 }} disabled={codeBusy} onClick={handleRevokeCode}>
+              {codeBusy ? "Bloquejant…" : "Bloqueja el codi"}
+            </button>
+          </>
+        ) : (
+          <button type="button" className="btn-primary" disabled={codeBusy} onClick={handleGenerateCode}>
+            {codeBusy ? "Generant…" : "Genera codi"}
+          </button>
+        )}
       </div>
       )}
 

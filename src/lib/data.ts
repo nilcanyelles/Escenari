@@ -29,6 +29,8 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     defaultPayoutSplit: r.default_payout_split || {},
     vehicles: r.vehicles || [],
     defaultRouteSheet: r.default_route_sheet || null,
+    socialLinks: r.social_links || {},
+    socialStats: r.social_stats || {},
   }));
 }
 

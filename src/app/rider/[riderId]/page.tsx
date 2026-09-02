@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
 import { normalizeRiderContent } from "@/lib/material-types";
+import { getBands } from "@/lib/data";
 import RiderStudio from "@/components/RiderStudio";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,9 @@ export default async function RiderStudioPage({ params }: { params: Promise<{ ri
   }
   if (!allowed) notFound();
 
+  const bands = await getBands(row.band_ws);
+  const band = bands.find((b) => b.id === row.band_id);
+
   return (
     <RiderStudio
       bandId={row.band_id}
@@ -43,6 +47,8 @@ export default async function RiderStudioPage({ params }: { params: Promise<{ ri
       mode="edit"
       backHref={backHref}
       publicToken={row.public_token}
+      bandMembers={band?.members || []}
+      bandCrew={band?.crew || []}
     />
   );
 }

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { normalize } from "@/lib/text";
-import type { MemberPerms, Vehicle } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialLinks, SocialStats } from "@/lib/types";
 import { uploadFileBlob } from "@/lib/blob-storage";
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
@@ -59,13 +59,54 @@ export async function uploadBandImageAction(formData: FormData): Promise<{ ok: b
   return { ok: true, url };
 }
 
-export async function saveBandAppearanceAction(bandId: string, input: { color1: string; color2: string; tags: string[] }) {
+export async function saveBandAppearanceAction(bandId: string, input: { name: string; color1: string; color2: string; tags: string[]; socialLinks?: SocialLinks }) {
+  const { workspaceId } = await requireManagerAction();
+  const name = (input.name || "").trim();
+  await db().query(
+    "update bands set name=coalesce(nullif($1,''), name), color1=$2, color2=$3, tags=$4, social_links=$5 where id=$6 and workspace_id=$7",
+    [name, input.color1 || "", input.color2 || "", JSON.stringify(input.tags || []), JSON.stringify(input.socialLinks || {}), bandId, workspaceId]
+  );
+  if (name) await db().query("update concerts set band_name=$1 where band_id=$2 and workspace_id=$3", [name, bandId, workspaceId]);
+  revalidatePath("/grup");
+  revalidatePath("/concerts");
+}
+
+// Anàlisi de xarxes socials del grup (seguidors Instagram, oients mensuals
+// Spotify, seguidors TikTok, visites totals YouTube) — es desa a mà, sense
+// connectar cap API externa.
+export async function saveBandSocialStatsAction(bandId: string, stats: SocialStats) {
   const { workspaceId } = await requireManagerAction();
   await db().query(
-    "update bands set color1=$1, color2=$2, tags=$3 where id=$4 and workspace_id=$5",
-    [input.color1 || "", input.color2 || "", JSON.stringify(input.tags || []), bandId, workspaceId]
+    "update bands set social_stats=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(stats || {}), bandId, workspaceId]
   );
   revalidatePath("/grup");
+}
+
+// Refresca automàticament les xifres que sí que es poden llegir d'una API
+// pública (visites de YouTube, seguidors de Spotify) a partir dels enllaços
+// desats — Instagram, TikTok i els oients mensuals de Spotify no tenen cap
+// via pública i es queden com estaven (manuals).
+export async function refreshSocialStatsAction(bandId: string, socialLinks: SocialLinks, current: SocialStats): Promise<{ ok: boolean; stats: SocialStats; error?: string }> {
+  const { workspaceId } = await requireManagerAction();
+  const { fetchYoutubeViews, fetchSpotifyFollowers, youtubeConfigured, spotifyConfigured } = await import("@/lib/social-stats");
+  if (!youtubeConfigured() && !spotifyConfigured()) {
+    return { ok: false, stats: current, error: "Cal configurar YOUTUBE_API_KEY i/o SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET a .env.local" };
+  }
+  const next: SocialStats = { ...current };
+  let gotAny = false;
+  if (socialLinks.youtube && youtubeConfigured()) {
+    const views = await fetchYoutubeViews(socialLinks.youtube);
+    if (views != null) { next.youtubeViews = views; gotAny = true; }
+  }
+  if (socialLinks.spotify && spotifyConfigured()) {
+    const followers = await fetchSpotifyFollowers(socialLinks.spotify);
+    if (followers != null) { next.spotifyFollowers = followers; gotAny = true; }
+  }
+  if (!gotAny) return { ok: false, stats: current, error: "No s'ha pogut llegir cap xifra (comprova els enllaços o les claus d'API)" };
+  await db().query("update bands set social_stats=$1 where id=$2 and workspace_id=$3", [JSON.stringify(next), bandId, workspaceId]);
+  revalidatePath("/grup");
+  return { ok: true, stats: next };
 }
 
 // ---------- Alta de membres i tècnics des de la pàgina del grup ----------
