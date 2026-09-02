@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
+import { activeLinksForConcert } from "@/lib/billing";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { formatDateLong, capitalize } from "@/lib/format";
 
@@ -29,6 +30,9 @@ export async function createShareLinkAction(input: CreateShareLinkInput): Promis
   const { workspaceId } = await requireManagerAction();
   const owns = await db().query("select 1 from concerts where id=$1 and workspace_id=$2", [input.concertId, workspaceId]);
   if (!owns.rows.length) throw new Error("Concert no trobat");
+  // Límit d'enllaços actius per grup del pla gratuït.
+  const cap = await activeLinksForConcert(workspaceId, input.concertId);
+  if (cap.reached) throw new Error(`Has arribat al límit de ${cap.cap} enllaços actius del pla gratuït`);
   const id = newToken();
   const days = Math.min(Math.max(input.days || 14, 1), 90);
   await db().query(

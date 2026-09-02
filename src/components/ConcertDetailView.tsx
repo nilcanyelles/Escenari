@@ -30,6 +30,8 @@ import { saveTransactionAction, deleteTransactionAction } from "@/app/(app)/esta
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import FoldPanel from "@/components/FoldPanel";
 import ContractPanel from "@/components/ContractPanel";
+import PlanLock from "@/components/PlanLock";
+import type { BillingInfo } from "@/lib/plans";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
 import ConcertPosterModal from "@/components/ConcertPosterModal";
@@ -156,6 +158,7 @@ function agencyDefaultSplit(otherNames: string[], pool: number, agencyBasis: num
 
 export default function ConcertDetailView({
   concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
+  billing, activeLinks, canUpgrade = true,
 }: {
   concert: Concert;
   band: Band | null;
@@ -177,6 +180,10 @@ export default function ConcertDetailView({
   photosByName?: Record<string, string>; // nom normalitzat → id de fitxer de foto
   today: string;
   managerName: string;
+  // Pla del workspace: què està bloquejat (contractes, factures, enllaços).
+  billing: BillingInfo;
+  activeLinks: { count: number; cap: number | null; reached: boolean };
+  canUpgrade?: boolean;
 }) {
   const router = useRouter();
   const [cf, setCf] = useState({
@@ -1371,7 +1378,9 @@ export default function ConcertDetailView({
                   {companyInfo.irpfRate > 0 && <div><span className="t-dim">Retenció IRPF {companyInfo.irpfRate}%</span><span className="fin-neg">−{formatCurrency(Math.round((amountNum * companyInfo.irpfRate) / 100))}</span></div>}
                   <div className="t-strong"><span>Total factura</span><span>{formatCurrency(computeInvoiceTotals(amountNum, companyInfo.ivaRate, companyInfo.irpfRate).total)}</span></div>
                 </div>
-                {cf.status === "confirmat" ? (
+                {!billing.caps.invoices ? (
+                  <PlanLock billing={billing} feature="invoices" canUpgrade={canUpgrade} title="Factures amb numeració, IVA i recordatoris" description="Genera la factura d'aquest bolo amb un clic i porta el balanç al dia amb el pla Grup." />
+                ) : cf.status === "confirmat" ? (
                   <button type="button" className="btn-save" disabled={generating} onClick={handleGenerateInvoice}>
                     {generating ? "Generant…" : "Genera la factura automàtica"}
                   </button>
@@ -1572,16 +1581,22 @@ export default function ConcertDetailView({
         </FoldPanel>
 
         {/* Contracte d'actuació: amb les dades del concert, per enviar al client */}
-        <FoldPanel title="Contracte" summary={concert.contract ? (concert.contractToken ? "Generat · amb enllaç" : "Redactat") : "Sense generar"} defaultOpen={false}>
-          <ContractPanel concert={liveConcert} companyInfo={companyInfo} client={{ name: clientKey, nom: clientForm.nom, cif: clientForm.cif, address: clientForm.address }} emailReady={emailReady} />
+        <FoldPanel title="Contracte" summary={!billing.caps.contracts ? "Pla Grup" : concert.contract ? (concert.contractToken ? "Generat · amb enllaç" : "Redactat") : "Sense generar"} defaultOpen={false}>
+          {billing.caps.contracts ? (
+            <ContractPanel concert={liveConcert} companyInfo={companyInfo} client={{ name: clientKey, nom: clientForm.nom, cif: clientForm.cif, address: clientForm.address }} emailReady={emailReady} />
+          ) : (
+            <PlanLock billing={billing} feature="contracts" canUpgrade={canUpgrade} title="Contracte d'actuació amb les dades del bolo" description="Clàusules ja redactades, PDF i enllaç per enviar al client. Inclòs al pla Grup." />
+          )}
         </FoldPanel>
       </div>
       )}
 
       {/* Comparteix: a Informació i també al final del Full de ruta */}
       {(tab === "info" || tab === "ruta") && (
-      <FoldPanel id="cd-comparteix" title="Comparteix — formularis per omplir dades" summary={shareLinks.length ? `${shareLinks.length} ${shareLinks.length === 1 ? "enllaç" : "enllaços"}` : "Cap enllaç"} defaultOpen={shareLinks.length > 0 || newLinkOpen}
-        action={!newLinkOpen && <button type="button" className="glow-cta" onClick={() => setNewLinkOpen(true)}>+ Nou enllaç</button>}>
+      <FoldPanel id="cd-comparteix" title="Comparteix — formularis per omplir dades" summary={shareLinks.length ? `${shareLinks.length} ${shareLinks.length === 1 ? "enllaç" : "enllaços"}${activeLinks.cap != null ? ` · ${activeLinks.count}/${activeLinks.cap} actius al pla gratuït` : ""}` : "Cap enllaç"} defaultOpen={shareLinks.length > 0 || newLinkOpen}
+        action={!newLinkOpen && (activeLinks.reached
+          ? <PlanLock billing={billing} required="grup" compact canUpgrade={canUpgrade} title={`Has arribat als ${activeLinks.cap} enllaços actius del pla gratuït`} />
+          : <button type="button" className="glow-cta" onClick={() => setNewLinkOpen(true)}>+ Nou enllaç</button>)}>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
           Genera un enllaç caducable perquè l&apos;ajuntament, el promotor o la sala omplin la informació que falta.
           El formulari es pot editar mentre l&apos;enllaç sigui vàlid, encara que ja s&apos;hagi enviat.

@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireFeature, groupCap } from "@/lib/billing";
 import { createAgencyInvitations, type AgencyInviteInput } from "@/lib/agency";
 import { createBandWithPeople, type CreateGroupInput, type CreateGroupResult } from "@/lib/group-create";
 import { syncBandPeopleToContacts } from "@/app/(app)/contactes/actions";
@@ -25,6 +26,7 @@ function revalidateAll() {
 
 export async function inviteAgencyMembersAction(list: AgencyInviteInput[]): Promise<{ id: string; name: string; email: string; url: string }[]> {
   const p = await requireOwner();
+  await requireFeature(p.workspaceId, "agency");
   const out = await createAgencyInvitations(p.workspaceId, p.name, list);
   revalidatePath("/configuracio");
   return out;
@@ -95,6 +97,8 @@ export type { CreateGroupPerson, CreateGroupInput, CreateGroupResult } from "@/l
 export async function createGroupAction(input: CreateGroupInput, self?: { instruments: string[] } | null): Promise<CreateGroupResult> {
   const p = await requireManagerAction();
   if (!p.canCreateGroups) throw new Error("No tens permís per crear grups");
+  const cap = await groupCap(p.workspaceId);
+  if (cap.reached) throw new Error(`El teu pla permet ${cap.cap} ${cap.cap === 1 ? "grup" : "grups"}. Passa a un pla d'Agència per crear-ne més.`);
   const res = await createBandWithPeople({
     workspaceId: p.workspaceId,
     creatorName: p.name,

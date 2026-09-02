@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { today, addDays, formatDate, formatCurrency } from "@/lib/format";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireFeature } from "@/lib/billing";
 import { syncClientToContacts } from "@/app/(app)/contactes/actions";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
@@ -24,6 +25,7 @@ function invoiceHash(fields: { workspaceId: string; id: string; issueDate: strin
 
 export async function generateInvoiceAction(concertId: string) {
   const { workspaceId } = await requireManagerAction();
+  await requireFeature(workspaceId, "invoices");
   const pool = db();
   const client = await pool.connect();
   try {

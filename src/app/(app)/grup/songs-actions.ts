@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireBandAccess as requirePerm } from "@/lib/band-access";
 import { getProfile } from "@/lib/current-user";
+import { tracksPerSongCap } from "@/lib/billing";
 import { uploadFileBlob, deleteFileBlob } from "@/lib/blob-storage";
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per fitxer (backing tracks en WAV poden pesar bastant)
@@ -15,11 +16,16 @@ const MAX_TRACKS_PER_BAND = 150;
 // de nova. Retorna un missatge d'error si s'ha arribat al límit.
 export async function checkTrackLimits(bandId: string | null, songId: string | null): Promise<string | null> {
   if (songId) {
-    const { rows } = await db().query(
-      "select count(*)::int as n from files where song_id=$1 and mime like 'audio%'", [songId]
-    );
-    if (rows[0].n >= MAX_TRACKS_PER_SONG) {
-      return `Aquesta cançó ja té el màxim de ${MAX_TRACKS_PER_SONG} pistes d'àudio. Elimina'n alguna abans d'afegir-ne una de nova.`;
+    const [{ rows }, owner] = await Promise.all([
+      db().query("select count(*)::int as n from files where song_id=$1 and mime like 'audio%'", [songId]),
+      bandId ? Promise.resolve(null) : db().query("select owner_clerk_user_id from songs where id=$1", [songId]).then((r) => r.rows[0]?.owner_clerk_user_id || null),
+    ]);
+    // El màxim per cançó depèn del pla (2 al gratuït, 10 als de pagament).
+    const perSong = Math.min(MAX_TRACKS_PER_SONG, await tracksPerSongCap(bandId, owner));
+    if (rows[0].n >= perSong) {
+      return perSong < MAX_TRACKS_PER_SONG
+        ? `El pla gratuït permet ${perSong} pistes d'àudio per cançó. Passa al pla Grup per pujar-ne fins a ${MAX_TRACKS_PER_SONG}.`
+        : `Aquesta cançó ja té el màxim de ${MAX_TRACKS_PER_SONG} pistes d'àudio. Elimina'n alguna abans d'afegir-ne una de nova.`;
     }
   }
   if (!bandId) return null; // les cançons pròpies només tenen el límit per cançó

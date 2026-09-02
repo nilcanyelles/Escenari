@@ -101,7 +101,11 @@ export async function completeAgencyOnboardingAction(data: AgencyOnboardingInput
       : !legacyTaken;
     if (!joinsLegacy) {
       wsId = "ws" + Date.now();
-      await client.query("insert into workspaces (id, name, logo) values ($1, $2, $3)", [wsId, agencyName, agencyLogo]);
+      // 14 dies de prova amb tot inclòs, sense targeta.
+      await client.query(
+        "insert into workspaces (id, name, logo, trial_ends_at) values ($1, $2, $3, now() + interval '14 days')",
+        [wsId, agencyName, agencyLogo]
+      );
       await client.query("insert into company_info (workspace_id) values ($1)", [wsId]);
     } else {
       // El workspace compartit només agafa el nom/logo si encara té els de

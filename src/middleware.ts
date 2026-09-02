@@ -5,7 +5,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // iCal/públics i el cron van per token propi.
 const isPublic = createRouteMatcher([
   "/", "/sign-in(.*)", "/sign-up(.*)", "/f/(.*)", "/m/(.*)", "/a/(.*)", "/p/(.*)", "/g/(.*)", "/j/(.*)", "/i/(.*)", "/ct/(.*)", "/conf/(.*)",
-  "/api/ics/(.*)", "/api/public-events/(.*)", "/api/cron/(.*)", "/api/file/(.*)", "/api/rider-pdf/(.*)",
+  "/api/ics/(.*)", "/api/public-events/(.*)", "/api/cron/(.*)", "/api/file/(.*)", "/api/rider-pdf/(.*)", "/api/stripe/(.*)",
 ]);
 
 export default clerkMiddleware(async (auth, request) => {

@@ -12,14 +12,16 @@ import { daysBetween } from "@/lib/format";
 import { emailConfigured } from "@/lib/email";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
+import { getWorkspaceBilling, activeLinksForConcert } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
 export default async function ConcertDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { workspaceId, name: managerName } = await requireManager();
-  const [bands, concerts, invoices, companyInfo, clientDetails] = await Promise.all([
+  const { workspaceId, name: managerName, agencyOwner } = await requireManager();
+  const [bands, concerts, invoices, companyInfo, clientDetails, billing, links] = await Promise.all([
     getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getCompanyInfo(workspaceId), getClientDetails(workspaceId),
+    getWorkspaceBilling(workspaceId), activeLinksForConcert(workspaceId, id),
   ]);
   const concert = concerts.find((c) => c.id === id);
   if (!concert) notFound();
@@ -114,6 +116,9 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       photosByName={photosByName}
       today={today()}
       managerName={managerName}
+      billing={billing}
+      activeLinks={links}
+      canUpgrade={agencyOwner}
     />
   );
 }

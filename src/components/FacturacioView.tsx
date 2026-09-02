@@ -6,8 +6,11 @@ import type { Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatCurrency, formatDate, statusColors } from "@/lib/format";
 import { generateInvoiceAction, saveCompanyInfoAction } from "@/app/(app)/facturacio/actions";
 import InvoicePreview from "@/components/InvoicePreview";
+import PlanLock from "@/components/PlanLock";
+import type { BillingInfo } from "@/lib/plans";
 
-export default function FacturacioView({ concerts, invoices, companyInfo }: { concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo }) {
+export default function FacturacioView({ concerts, invoices, companyInfo, billing, canUpgrade = true }: { concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; billing?: BillingInfo; canUpgrade?: boolean }) {
+  const invoicesLocked = !!billing && !billing.caps.invoices;
   const router = useRouter();
   const [stateFilter, setStateFilter] = useState("tots");
   const [company, setCompany] = useState(companyInfo);
@@ -92,8 +95,13 @@ export default function FacturacioView({ concerts, invoices, companyInfo }: { co
           <option value="vençuda">Vençuda</option>
         </select>
         <div className="spacer"></div>
-        <button className="glow-cta" onClick={() => setGenModalOpen(true)}>+ Generar factura</button>
+        {invoicesLocked && billing
+          ? <PlanLock billing={billing} feature="invoices" compact canUpgrade={canUpgrade} title="Factures amb numeració, IVA i recordatoris de cobrament" />
+          : <button className="glow-cta" onClick={() => setGenModalOpen(true)}>+ Generar factura</button>}
       </div>
+      {invoicesLocked && billing && (
+        <PlanLock billing={billing} feature="invoices" canUpgrade={canUpgrade} title="Factures amb numeració, IVA i recordatoris de cobrament" description="Genera la factura de cada bolo confirmat amb un clic, amb sèrie i hash encadenat, i envia recordatoris de pagament. Inclòs al pla Grup." />
+      )}
 
       {list.length ? (
         <div className="table-wrap scrollx">
