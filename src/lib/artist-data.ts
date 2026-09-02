@@ -133,6 +133,11 @@ export async function getArtistBandsFull(clerkUserId: string): Promise<import(".
     backups: r.backups || [],
     showFees: !!r.show_fees,
     coverUrl: r.cover_url || "",
+    socialLinks: r.social_links || {},
+    socialStats: r.social_stats || {},
+    socialTracking: r.social_tracking || {},
+    publicToken: r.public_token || "",
+    bio: r.bio || "",
   }));
 }
 

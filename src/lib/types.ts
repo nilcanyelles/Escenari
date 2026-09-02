@@ -8,15 +8,23 @@ export type Vehicle = { type: string; brand: string; color: string; owner: strin
 
 export type SocialLinks = { instagram?: string; youtube?: string; tiktok?: string; spotify?: string };
 
+export type SocialPlatform = "instagram" | "tiktok" | "spotify" | "youtube";
+
+// De quines xarxes es fa seguiment (surten a Inici, a la pàgina pública i
+// als gràfics d'evolució). Sense valor explícit: les que tinguin enllaç.
+export type SocialTracking = Partial<Record<SocialPlatform, boolean>>;
+
 export type SocialStats = {
+  // Instagram i TikTok: amb el compte connectat (OAuth), o a mà.
   instagramFollowers?: number;
-  // Seguidors de Spotify: es pot llegir automàticament de l'API pública.
-  spotifyFollowers?: number;
-  // Oients mensuals: només ho veu el mateix grup a Spotify for Artists —
-  // l'API pública no ho dona a ningú, sempre és manual.
-  spotifyMonthlyListeners?: number;
   tiktokFollowers?: number;
-  // Visites totals del canal de YouTube: es pot llegir automàticament.
+  // Seguidors de Spotify: es llegeixen de l'API pública (credencials d'app).
+  spotifyFollowers?: number;
+  // Oients mensuals: cap API els dona; es llegeixen de la pàgina pública de
+  // l'artista (millor esforç) o s'escriuen a mà.
+  spotifyMonthlyListeners?: number;
+  // Subscriptors i visites totals del canal de YouTube: API pública amb clau.
+  youtubeSubscribers?: number;
   youtubeViews?: number;
 };
 
@@ -48,6 +56,11 @@ export type Band = {
   defaultRouteSheet?: import("./route-sheet").RouteSheetDefaults;
   socialLinks?: SocialLinks;
   socialStats?: SocialStats;
+  socialTracking?: SocialTracking;
+  // Pàgina pública del grup (/g/token): enllaç compartible i text de
+  // presentació que s'hi mostra.
+  publicToken?: string;
+  bio?: string;
 };
 
 export type Concert = {

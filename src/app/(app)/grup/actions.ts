@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { normalize } from "@/lib/text";
-import type { MemberPerms, Vehicle, SocialLinks, SocialStats } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialLinks } from "@/lib/types";
 import { uploadFileBlob } from "@/lib/blob-storage";
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
@@ -71,43 +71,8 @@ export async function saveBandAppearanceAction(bandId: string, input: { name: st
   revalidatePath("/concerts");
 }
 
-// Anàlisi de xarxes socials del grup (seguidors Instagram, oients mensuals
-// Spotify, seguidors TikTok, visites totals YouTube) — es desa a mà, sense
-// connectar cap API externa.
-export async function saveBandSocialStatsAction(bandId: string, stats: SocialStats) {
-  const { workspaceId } = await requireManagerAction();
-  await db().query(
-    "update bands set social_stats=$1 where id=$2 and workspace_id=$3",
-    [JSON.stringify(stats || {}), bandId, workspaceId]
-  );
-  revalidatePath("/grup");
-}
-
-// Refresca automàticament les xifres que sí que es poden llegir d'una API
-// pública (visites de YouTube, seguidors de Spotify) a partir dels enllaços
-// desats — Instagram, TikTok i els oients mensuals de Spotify no tenen cap
-// via pública i es queden com estaven (manuals).
-export async function refreshSocialStatsAction(bandId: string, socialLinks: SocialLinks, current: SocialStats): Promise<{ ok: boolean; stats: SocialStats; error?: string }> {
-  const { workspaceId } = await requireManagerAction();
-  const { fetchYoutubeViews, fetchSpotifyFollowers, youtubeConfigured, spotifyConfigured } = await import("@/lib/social-stats");
-  if (!youtubeConfigured() && !spotifyConfigured()) {
-    return { ok: false, stats: current, error: "Cal configurar YOUTUBE_API_KEY i/o SPOTIFY_CLIENT_ID/SPOTIFY_CLIENT_SECRET a .env.local" };
-  }
-  const next: SocialStats = { ...current };
-  let gotAny = false;
-  if (socialLinks.youtube && youtubeConfigured()) {
-    const views = await fetchYoutubeViews(socialLinks.youtube);
-    if (views != null) { next.youtubeViews = views; gotAny = true; }
-  }
-  if (socialLinks.spotify && spotifyConfigured()) {
-    const followers = await fetchSpotifyFollowers(socialLinks.spotify);
-    if (followers != null) { next.spotifyFollowers = followers; gotAny = true; }
-  }
-  if (!gotAny) return { ok: false, stats: current, error: "No s'ha pogut llegir cap xifra (comprova els enllaços o les claus d'API)" };
-  await db().query("update bands set social_stats=$1 where id=$2 and workspace_id=$3", [JSON.stringify(next), bandId, workspaceId]);
-  revalidatePath("/grup");
-  return { ok: true, stats: next };
-}
+// Les xifres i connexions de xarxes socials viuen a social-actions.ts (pàgina
+// de xarxes del grup).
 
 // ---------- Alta de membres i tècnics des de la pàgina del grup ----------
 
@@ -253,17 +218,49 @@ export async function setBackupRequestStatusAction(id: string, status: "oberta" 
   revalidatePath("/suplencies");
 }
 
+// Acceptar una candidatura: el músic passa a la llista de suplents de
+// confiança del grup (per poder-lo triar a qualsevol bolo) i queda com a
+// substitut del membre que faltava en aquell concert.
 export async function respondBackupApplicationAction(requestId: string, clerkUserId: string, status: "acceptada" | "rebutjada") {
   const { workspaceId } = await requireManagerAction();
-  const owns = await db().query("select 1 from backup_requests where id=$1 and workspace_id=$2", [requestId, workspaceId]);
-  if (!owns.rows.length) throw new Error("Cerca no trobada");
-  await db().query(
+  const pool = db();
+  const req = (await pool.query(
+    "select band_id, concert_id, member_name from backup_requests where id=$1 and workspace_id=$2",
+    [requestId, workspaceId]
+  )).rows[0];
+  if (!req) throw new Error("Cerca no trobada");
+  await pool.query(
     "update backup_applications set status=$1 where request_id=$2 and clerk_user_id=$3",
     [status, requestId, clerkUserId]
   );
   if (status === "acceptada") {
-    await db().query("update backup_requests set status='coberta' where id=$1", [requestId]);
+    const prof = (await pool.query(
+      `select p.name, p.email, p.instruments,
+              (select pp.phone from person_profiles pp where pp.clerk_user_id = p.clerk_user_id and pp.phone <> '' limit 1) as phone
+       from profiles p where p.clerk_user_id=$1`,
+      [clerkUserId]
+    )).rows[0];
+    if (prof?.name) {
+      const band = (await pool.query("select backups from bands where id=$1 and workspace_id=$2", [req.band_id, workspaceId])).rows[0];
+      const backups: { name: string; instruments: string[]; phone: string; email: string }[] = band?.backups || [];
+      if (band && !backups.some((b) => normalize(b.name) === normalize(prof.name))) {
+        backups.push({ name: prof.name, instruments: prof.instruments || [], phone: prof.phone || "", email: prof.email || "" });
+        await pool.query("update bands set backups=$1 where id=$2", [JSON.stringify(backups), req.band_id]);
+      }
+      if (req.member_name) {
+        await pool.query(
+          `update concerts set
+             substitutes = coalesce(substitutes, '{}'::jsonb) || jsonb_build_object($1::text, $2::text),
+             no_substitute = coalesce(no_substitute, '{}'::jsonb) - $1::text
+           where id=$3 and workspace_id=$4`,
+          [req.member_name, prof.name, req.concert_id, workspaceId]
+        );
+      }
+    }
+    await pool.query("update backup_requests set status='coberta' where id=$1", [requestId]);
   }
   revalidatePath("/grup");
   revalidatePath("/suplencies");
+  revalidatePath("/concerts");
+  revalidatePath(`/concerts/${req.concert_id}`);
 }

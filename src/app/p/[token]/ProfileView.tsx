@@ -118,6 +118,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
     phone: data.phone,
     email: data.email,
     hidden: new Set(data.hiddenBands),
+    hiddenSongs: new Set(data.hiddenSongs),
   });
   const [saving, setSaving] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
@@ -138,6 +139,9 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
   const photoUrl = localPhoto || (data.photoFileId ? `/api/file/${data.photoFileId}?v=${data.photoFileId}` : personPhotoDataUri(data.name));
   const upcoming = data.concerts.filter((c) => c.date >= today);
   const signedIn = isOwner || isManager;
+  // Al perfil només surten les cançons que el músic no ha amagat.
+  const visibleSongs = data.songs.filter((s) => !s.hidden);
+  const canEditInfo = isOwner || (isManager && !data.clerkUserId);
 
   // Grups del perfil: si és músic i crew del mateix grup alhora, una sola
   // entrada amb els dos rols junts, no dues de separades.
@@ -170,6 +174,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
         bio: form.bio,
         igHandle: form.igHandle,
         hiddenBands: Array.from(form.hidden),
+        hiddenSongs: Array.from(form.hiddenSongs),
       });
     }
     setEditOpen(false);
@@ -309,13 +314,39 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
             <AttendanceCalendar concerts={data.concerts} today={today} />
           </div>
 
+          {/* Permisos per grup: només el gestor els veu (i els canvia). */}
+          {isManager && data.bandPerms.length > 0 && (
+            <div className="pv-panel">
+              <div className="pv-panel-title">
+                Permisos de {data.name}
+                <span className="t-dim" style={{ fontSize: 12, fontWeight: 400, marginLeft: 10 }}>Què pot fer a cada grup — només ho veus tu</span>
+              </div>
+              <div className="pv-perm-list">
+                {data.bandPerms.map((b) => (
+                  <div key={b.bandId} className="pv-perm-band" style={{ ["--pv-accent" as string]: b.color1 || "#8b7bff" }}>
+                    <img src={b.logo || bandPhotoDataUri({ id: b.bandId, name: b.bandName })} alt="" />
+                    <div style={{ minWidth: 0 }}>
+                      <div className="pv-band-name">{b.bandName}</div>
+                      {b.roleText && <div className="pv-band-role">{b.roleText}</div>}
+                    </div>
+                    <BandPermsRow bandId={b.bandId} memberName={data.name} initial={b.perms} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="pv-panel">
             <div className="pv-panel-title">
               Cançons que toca
-              <span className="t-dim" style={{ fontSize: 12, fontWeight: 400, marginLeft: 10 }}>{data.songs.length} temes</span>
+              <span className="t-dim" style={{ fontSize: 12, fontWeight: 400, marginLeft: 10 }}>
+                {visibleSongs.length} temes{canEditInfo && data.songs.length > visibleSongs.length ? ` · ${data.songs.length - visibleSongs.length} amagats (només ho veus tu)` : ""}
+              </span>
             </div>
-            {data.songs.length === 0 ? (
-              <div className="t-dim" style={{ fontSize: 13 }}>Els seus grups encara no tenen repertori penjat.</div>
+            {visibleSongs.length === 0 ? (
+              <div className="t-dim" style={{ fontSize: 13 }}>
+                {data.songs.length === 0 ? "Els seus grups encara no tenen repertori penjat." : "No hi ha cap cançó visible al perfil — tria-les des d'“Edita el perfil”."}
+              </div>
             ) : (
               <div className="sp-list">
                 <div className="sp-row sp-head">
@@ -325,7 +356,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                   <span className="sp-band-col">Grup</span>
                   <span className="sp-dur">⏱</span>
                 </div>
-                {data.songs.map((s, i) => (
+                {visibleSongs.map((s, i) => (
                   <div key={s.id} className={"sp-row" + (playing === s.id ? " playing" : "")}>
                     <span className="sp-idx">
                       {signedIn && s.audioFileId ? (
@@ -404,6 +435,34 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                       })}
                     </div>
                   </div>
+                  {data.songs.length > 0 && (
+                    <div>
+                      <label className="form-label" style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        Cançons visibles al perfil públic
+                        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+                          <button type="button" className="link-btn" onClick={() => setForm({ ...form, hiddenSongs: new Set() })}>Totes</button>
+                          <button type="button" className="link-btn" onClick={() => setForm({ ...form, hiddenSongs: new Set(data.songs.map((s) => s.id)) })}>Cap</button>
+                        </span>
+                      </label>
+                      <div className="pv-songvis">
+                        {data.songs.map((s) => {
+                          const visible = !form.hiddenSongs.has(s.id);
+                          return (
+                            <button key={s.id} type="button" className={"pv-songvis-row" + (visible ? " on" : "")}
+                              onClick={() => {
+                                const next = new Set(form.hiddenSongs);
+                                if (visible) next.add(s.id); else next.delete(s.id);
+                                setForm({ ...form, hiddenSongs: next });
+                              }}>
+                              <span style={{ width: 14, flex: "none" }}>{visible ? "✓" : ""}</span>
+                              <span className="t">{s.title}</span>
+                              <span className="b">{s.bandName}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
               <div className="modal-actions">

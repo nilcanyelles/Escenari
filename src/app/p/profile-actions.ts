@@ -44,19 +44,21 @@ export async function openMyProfileAction(): Promise<{ token: string | null }> {
   return { token };
 }
 
-// Bio, IG i visibilitat de grups: només el músic vinculat (o el gestor si no
-// hi ha músic vinculat).
-export async function updateProfileInfoAction(token: string, patch: { bio?: string; igHandle?: string; hiddenBands?: string[] }) {
+// Bio, IG i visibilitat de grups i cançons: només el músic vinculat (o el
+// gestor si no hi ha músic vinculat).
+export async function updateProfileInfoAction(token: string, patch: { bio?: string; igHandle?: string; hiddenBands?: string[]; hiddenSongs?: string[] }) {
   const { row, isOwner, isManager } = await accessFor(token);
   if (!isOwner && !(isManager && !row.clerk_user_id)) throw new Error("Només el músic pot editar això");
   await db().query(
     `update person_profiles set
        bio = coalesce($1, bio),
        ig_handle = coalesce($2, ig_handle),
-       hidden_bands = coalesce($3, hidden_bands)
-     where id=$4`,
+       hidden_bands = coalesce($3, hidden_bands),
+       hidden_songs = coalesce($4, hidden_songs)
+     where id=$5`,
     [patch.bio ?? null, patch.igHandle?.replace(/^@/, "") ?? null,
-      patch.hiddenBands ? JSON.stringify(patch.hiddenBands) : null, token]
+      patch.hiddenBands ? JSON.stringify(patch.hiddenBands) : null,
+      patch.hiddenSongs ? JSON.stringify(patch.hiddenSongs) : null, token]
   );
   revalidatePath(`/p/${token}`);
 }

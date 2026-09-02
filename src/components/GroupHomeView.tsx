@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -10,11 +10,15 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColo
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, saveBandVehiclesAction, saveBandSocialStatsAction, refreshSocialStatsAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
-import { generateJoinCodeAction, revokeJoinCodeAction } from "@/app/(app)/grups/actions";
+import { saveBandBackupsAction, saveBandVehiclesAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { openBandPublicPageAction } from "@/app/g/actions";
+import { generateJoinCodeAction } from "@/app/(app)/grups/actions";
 import { setMyAttendanceAction } from "@/app/(artist)/actions";
 import { memberPerms, PERM_LABELS } from "@/lib/perms";
-import type { MemberPerms, Vehicle, SocialStats } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialStats, SocialPlatform } from "@/lib/types";
+import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, isTracked, formatNumber } from "@/lib/social-history";
+import { normalizeRouteSheet, formatPhoneDisplay, rsFormatDuration, type RouteSheet } from "@/lib/route-sheet";
+import RouteSheetPreview from "@/components/RouteSheetPreview";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SongsPanel from "@/components/SongsPanel";
@@ -49,35 +53,104 @@ const ICON_CHECK = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
 );
 
+const SOCIAL_ICONS: Record<SocialPlatform, React.ReactNode> = {
+  instagram: <InstagramIcon />, tiktok: <TiktokIcon />, spotify: <SpotifyIcon />, youtube: <YoutubeIcon />,
+};
+
 // Targeta d'una xifra de xarxes socials (Inici): amb el color/gradient de
-// marca de cada plataforma a la insígnia de la icona, perquè es distingeixin
-// d'un cop d'ull. "auto" marca les que es poden refrescar soles.
-function SocialStatBox({ icon, gradient, label, value, auto, onChange }: {
-  icon: React.ReactNode;
-  gradient: string;
+// marca de cada plataforma a la insígnia de la icona, la xifra actual i la
+// diferència respecte al mes passat. Només lectura — es connecta i s'edita
+// tot des de la pàgina de xarxes del grup.
+function SocialStatBox({ platform, label, value, prev }: {
+  platform: SocialPlatform;
   label: string;
   value: number | undefined;
-  auto?: boolean;
-  onChange: (v: number | undefined) => void;
+  prev: number | undefined;
 }) {
+  const d = value != null && prev != null ? value - prev : null;
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 10, padding: "8px 10px",
-      borderRadius: 12, background: "var(--bg-card-2)", border: "1px solid var(--border-soft)",
-    }}>
-      <span style={{
-        display: "flex", alignItems: "center", justifyContent: "center", flex: "none",
-        width: 30, height: 30, borderRadius: 999, background: gradient, color: "#fff",
-      }}>{icon}</span>
+    <div className="bento-social-box">
+      <span className="bento-social-icon" style={{ background: PLATFORM_META[platform].gradient }}>{SOCIAL_ICONS[platform]}</span>
       <div style={{ display: "flex", flexDirection: "column", gap: 1, flex: 1, minWidth: 0 }}>
-        <span style={{ fontSize: 10, color: "var(--text-fainter)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-          {label}{auto ? " · auto" : ""}
-        </span>
-        <input
-          className="field-input compact-field" style={{ padding: "2px 6px", fontWeight: 700, fontSize: 15 }}
-          type="number" min={0} placeholder="—" value={value ?? ""}
-          onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))}
-        />
+        <span className="bento-social-l">{label}</span>
+        <span className="bento-social-n">{value != null ? formatNumber(value) : "—"}</span>
+        {d != null && d !== 0 && (
+          <span className={"sx-delta " + (d > 0 ? "up" : "down")} style={{ fontSize: 10.5 }}>
+            {d > 0 ? "+" : "−"}{formatNumber(Math.abs(d))} aquest mes
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Bolo d'avui a Inici: el que diu el full de ruta (horaris, contactes, lloc
+// i hospitalitat), amb accés directe al concert, al mapa i al document.
+function TodayGig({ c, base, isMgr, onRouteSheet }: { c: Concert; base: string; isMgr: boolean; onRouteSheet: () => void }) {
+  const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
+  const address = rs.lloc.find((l) => l.label.trim().toLowerCase() === "adreça")?.value || "";
+  const parking = rs.lloc.find((l) => l.label.trim().toLowerCase() === "parking");
+  const mapsQuery = encodeURIComponent([c.venue, address, c.city].filter(Boolean).join(", "));
+  const phases = rs.schedule.filter((p) => p.phase && (p.start || p.end));
+  const contacts = rs.contacts.filter((ct) => (ct.name || "").trim() || (ct.phone || "").trim());
+  const hosp = rs.hospitalitat.filter((h) => h.included !== false && (h.value || "").trim());
+  const placeLines = [
+    address ? { label: "Adreça", value: address } : null,
+    parking && (parking.value || parking.plates) ? { label: "Parking", value: [parking.value, parking.plates].filter(Boolean).join(" · ") } : null,
+    ...hosp.map((h) => ({ label: h.label, value: h.value })),
+  ].filter((x): x is { label: string; value: string } => !!x);
+  return (
+    <div className="bento-today-gig" onClick={(e) => e.stopPropagation()}>
+      <div className="bento-today-head">
+        <div>
+          <div className="bento-today-place">{c.venue || "Lloc per determinar"}{c.city ? ` · ${c.city.split(",")[0]}` : ""}</div>
+          <div className="t-dim" style={{ fontSize: 12.5, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <span>{c.time ? `Concert a les ${c.time}h` : "Hora per confirmar"}{c.festaEntitat ? ` · ${c.festaEntitat}` : ""}</span>
+            <span className="badge">{c.status}</span>
+          </div>
+        </div>
+        <div className="bento-today-actions">
+          <a className="btn-outline" href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`} target="_blank" rel="noreferrer">Mapa</a>
+          <button type="button" className="btn-outline" onClick={onRouteSheet}>Full de ruta</button>
+          {isMgr && <Link className="btn-outline" href={`/concerts/${c.id}/dia`}>Dia de bolo</Link>}
+          <Link className="btn-save" href={`${base}/concerts/${c.id}`}>Obre el concert</Link>
+        </div>
+      </div>
+      <div className="bento-today-cols">
+        <div className="bento-today-col">
+          <div className="dia-card-title">Horaris</div>
+          {phases.length === 0 ? (
+            <span className="t-dim" style={{ fontSize: 12.5 }}>Sense horaris al full de ruta{c.time ? ` — concert a les ${c.time}h` : ""}.</span>
+          ) : phases.map((p, i) => (
+            <div key={i} className="dia-sched-row">
+              <span className="dia-sched-time">{p.start || "—"}{p.end ? `–${p.end}` : ""}</span>
+              <span>{p.phase}</span>
+              <span className="t-dim" style={{ marginLeft: "auto", fontSize: 11 }}>{rsFormatDuration(p.start, p.end)}</span>
+            </div>
+          ))}
+        </div>
+        <div className="bento-today-col">
+          <div className="dia-card-title">Contactes</div>
+          {contacts.length === 0 ? (
+            <span className="t-dim" style={{ fontSize: 12.5 }}>Cap contacte al full de ruta.</span>
+          ) : contacts.map((ct, i) => (
+            <div key={i} className="bento-today-contact">
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontWeight: 600 }}>{ct.name || ct.role || "Contacte"}</div>
+                <div className="t-dim" style={{ fontSize: 11.5 }}>{[ct.name ? ct.role : "", ct.company].filter(Boolean).join(" · ")}</div>
+              </div>
+              {ct.phone && <a className="bento-today-call" href={`tel:${ct.phone.replace(/\s/g, "")}`}>{ICON_PHONE}{formatPhoneDisplay(ct.phone)}</a>}
+            </div>
+          ))}
+        </div>
+        <div className="bento-today-col">
+          <div className="dia-card-title">Lloc i hospitalitat</div>
+          {placeLines.length === 0 ? (
+            <span className="t-dim" style={{ fontSize: 12.5 }}>Res al full de ruta encara.</span>
+          ) : placeLines.map((l, i) => (
+            <div key={i} className="bento-today-line"><b>{l.label}</b><span>{l.value}</span></div>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -149,11 +222,11 @@ function PermsRow({ bandId, member }: { bandId: string; member: Person }) {
   );
 }
 
-// Targetes "chroma" per a l'equip: colors del grup, nom, instrument i @ estil
-// Instagram; el clic obre la pàgina de perfil del músic.
+// Targetes "chroma" per a l'equip: colors del grup, nom, instrument (o
+// càrrec, si és de l'equip tècnic) i @ estil Instagram; el clic obre la
+// pàgina de perfil del músic.
 function personChromaItem(
   p: Person,
-  concertCount: number | null,
   band: Band,
   onOpen: (name: string) => void,
   photosByName: Record<string, string>,
@@ -202,7 +275,6 @@ function personChromaItem(
     subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
     subtitleIcon: inss.length ? instrumentIconFor(inss[0]) : null,
     handle,
-    location: concertCount !== null ? `${concertCount} concerts` : undefined,
     borderColor: c1,
     gradient: `linear-gradient(150deg, ${c1}, ${c2})`,
     onClick: () => onOpen(p.name),
@@ -228,7 +300,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", today }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -245,6 +317,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   viewer?: "manager" | "artist";
   caps?: MemberPerms;
   myName?: string;
+  // Xifres de xarxes del mes passat (per als "+123 aquest mes" d'Inici).
+  socialPrev?: Partial<SocialStats>;
   today: string;
 }) {
   const router = useRouter();
@@ -289,65 +363,32 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   function cancelHoverOpen() {
     if (hoverOpenTimer.current) { window.clearTimeout(hoverOpenTimer.current); hoverOpenTimer.current = null; }
   }
-  // Nombre de concerts d'una persona per a la targeta grossa (flyout) —
-  // tant músics com equip tècnic hi surten.
-  function countFor(p: Person): number | null {
-    const inBand = band.members.some((x) => x.name === p.name) || band.crew.some((x) => x.name === p.name);
-    return inBand ? concertCountByPerson[p.name] || 0 : null;
+  // Xarxes socials (Inici): només lectura — es connecten i s'editen des de
+  // la pàgina de xarxes del grup (/grup/xarxes), i el cron diari les manté
+  // al dia.
+  const socialStats: SocialStats = band.socialStats || {};
+  const trackedPlatforms = SOCIAL_PLATFORMS.filter((p) => isTracked(p, band.socialTracking, band.socialLinks));
+  const totalFollowers = trackedPlatforms.reduce((sum, p) => sum + (socialStats[FOLLOWERS_KEY[p]] || 0), 0);
+  // Bolos d'avui: la targeta gran d'Inici amb el full de ruta.
+  const todayGigs = concerts.filter((c) => c.date === today && c.status !== "cancel·lat" && (c.kind || "bolo") === "bolo");
+  const [rsPreview, setRsPreview] = useState<Concert | null>(null);
+  // Pàgina pública del grup (es crea l'enllaç el primer cop que s'obre).
+  const [shareBusy, setShareBusy] = useState(false);
+  async function sharePublicPage() {
+    setShareBusy(true);
+    const { token } = await openBandPublicPageAction(band.id);
+    router.push(`/g/${token}`);
   }
-  // Anàlisi de xarxes socials (Inici): xifres introduïdes a mà, es desen
-  // soles amb un petit marge després de l'últim canvi.
-  const [socialStats, setSocialStats] = useState<SocialStats>(band.socialStats || {});
-  const socialStatsFirstRender = useRef(true);
-  const socialStatsSaveTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (socialStatsFirstRender.current) { socialStatsFirstRender.current = false; return; }
-    if (socialStatsSaveTimer.current) window.clearTimeout(socialStatsSaveTimer.current);
-    socialStatsSaveTimer.current = window.setTimeout(() => { saveBandSocialStatsAction(band.id, socialStats); }, 700);
-    return () => { if (socialStatsSaveTimer.current) window.clearTimeout(socialStatsSaveTimer.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socialStats]);
-  function updateSocialStat(key: keyof SocialStats, value: number | undefined) {
-    setSocialStats((prev) => ({ ...prev, [key]: value }));
-  }
-  // Actualització automàtica de YouTube/Spotify a partir dels enllaços
-  // desats — Instagram, TikTok i els oients mensuals de Spotify no tenen
-  // cap via pública i sempre seran manuals.
-  const [refreshingStats, setRefreshingStats] = useState(false);
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  async function refreshStats(silent = false) {
-    setRefreshingStats(true);
-    if (!silent) setRefreshError(null);
-    const res = await refreshSocialStatsAction(band.id, band.socialLinks || {}, socialStats);
-    if (res.ok) setSocialStats(res.stats);
-    else if (!silent) setRefreshError(res.error || "No s'ha pogut actualitzar");
-    setRefreshingStats(false);
-  }
-  // Es refresca sola en obrir la pàgina del grup (una vegada, en silenci —
-  // si encara no hi ha claus d'API configurades o enllaços desats, no cal
-  // amoïnar ningú amb un error).
-  const socialStatsAutoRefreshed = useRef<string | null>(null);
-  useEffect(() => {
-    if (socialStatsAutoRefreshed.current === band.id) return;
-    socialStatsAutoRefreshed.current = band.id;
-    refreshStats(true);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [band.id]);
   const [editOpen, setEditOpen] = useState(false);
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
   const [addForm, setAddForm] = useState<{ name: string; instruments: string[]; role: string; phone: string; email: string }>({ name: "", instruments: [], role: "", phone: "", email: "" });
   const [addSaving, setAddSaving] = useState(false);
   const [joinCopied, setJoinCopied] = useState(false);
   const [codeBusy, setCodeBusy] = useState(false);
+  // Genera el codi d'unió (i el regenera: el codi anterior deixa de valer).
   async function handleGenerateCode() {
     setCodeBusy(true);
     await generateJoinCodeAction(band.id);
-    router.refresh();
-    setCodeBusy(false);
-  }
-  async function handleRevokeCode() {
-    setCodeBusy(true);
-    await revokeJoinCodeAction(band.id);
     router.refresh();
     setCodeBusy(false);
   }
@@ -463,7 +504,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               })}
             </div>
           </div>
-          <div className="group-hero-actions">
+          <div className="group-hero-actions" style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button type="button" className="btn-outline" disabled={shareBusy} onClick={sharePublicPage} title="Pàgina pública del grup, per compartir amb qui vulguis">
+              {shareBusy ? "Obrint…" : "Comparteix"}
+            </button>
             {isMgr && <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>}
           </div>
         </div>
@@ -494,7 +538,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         >
           <ChromaGrid
             items={[personChromaItem(
-              hoveredTeam.person, countFor(hoveredTeam.person), band, openProfile, photosByName, igByName,
+              hoveredTeam.person, band, openProfile, photosByName, igByName,
               !!linkedByName[hoveredTeam.person.name], undefined, undefined, copiedEmailKey, copyEmail,
             )]}
             columns={1}
@@ -508,38 +552,42 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {tab === "inici" && (
         <BentoGrid
           cards={([
+            // Si avui hi ha bolo, la primera targeta (d'amplada completa) és
+            // el seu full de ruta, a mà.
+            ...(todayGigs.length ? [{
+              key: "avui",
+              label: "Avui",
+              title: todayGigs.length === 1
+                ? `Avui toqueu a ${todayGigs[0].venue || todayGigs[0].city || "un bolo"}`
+                : `Avui teniu ${todayGigs.length} bolos`,
+              description: "Tot el que diu el full de ruta, a mà",
+              colSpan: 4,
+              className: "bento-today",
+              content: (
+                <div className="bento-today-body">
+                  {todayGigs.map((c) => (
+                    <TodayGig key={c.id} c={c} base={base} isMgr={isMgr} onRouteSheet={() => setRsPreview(c)} />
+                  ))}
+                </div>
+              ),
+            }] : []),
             {
               key: "xarxes",
               label: "Xarxes socials",
-              title: "Anàlisi de xarxes",
-              description: "YouTube i Spotify (seguidors) es poden actualitzar soles",
+              title: trackedPlatforms.length && totalFollowers ? `${formatNumber(totalFollowers)} seguidors` : "Xarxes socials",
+              description: isMgr ? "Connecta les xarxes i mira'n l'evolució mes a mes" : "Seguidors i oients del grup",
               colSpan: 2,
               rowSpan: 2,
+              onClick: isMgr ? () => router.push("/grup/xarxes") : undefined,
               content: (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <span className="t-dim" style={{ fontSize: 10 }}>
-                      {refreshingStats ? "Actualitzant…" : "YouTube i Spotify (seguidors) es refresquen soles"}
+                <div className="bento-social">
+                  {trackedPlatforms.length === 0 ? (
+                    <span className="t-dim" style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
+                      {isMgr ? "Encara no hi ha cap xarxa connectada — toca aquí per afegir-les." : "El grup encara no té cap xarxa connectada."}
                     </span>
-                    {refreshError && <span style={{ fontSize: 11, color: "oklch(0.68 0.18 25)" }}>{refreshError}</span>}
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, width: "100%" }}>
-                    <SocialStatBox icon={<InstagramIcon />} gradient="linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)"
-                      label="Seguidors Instagram" value={socialStats.instagramFollowers}
-                      onChange={(v) => updateSocialStat("instagramFollowers", v)} />
-                    <SocialStatBox icon={<TiktokIcon />} gradient="linear-gradient(135deg,#25F4EE,#00111a 55%,#FE2C55)"
-                      label="Seguidors TikTok" value={socialStats.tiktokFollowers}
-                      onChange={(v) => updateSocialStat("tiktokFollowers", v)} />
-                    <SocialStatBox icon={<SpotifyIcon />} gradient="#1DB954"
-                      label="Seguidors Spotify" auto value={socialStats.spotifyFollowers}
-                      onChange={(v) => updateSocialStat("spotifyFollowers", v)} />
-                    <SocialStatBox icon={<SpotifyIcon />} gradient="#1DB954"
-                      label="Oients mensuals Spotify" value={socialStats.spotifyMonthlyListeners}
-                      onChange={(v) => updateSocialStat("spotifyMonthlyListeners", v)} />
-                    <SocialStatBox icon={<YoutubeIcon />} gradient="#FF0000"
-                      label="Visites YouTube" auto value={socialStats.youtubeViews}
-                      onChange={(v) => updateSocialStat("youtubeViews", v)} />
-                  </div>
+                  ) : trackedPlatforms.flatMap((p) => PLATFORM_META[p].metrics.map((m) => (
+                    <SocialStatBox key={m.key} platform={p} label={`${m.label} ${PLATFORM_META[p].label}`} value={socialStats[m.key]} prev={socialPrev[m.key]} />
+                  )))}
                 </div>
               ),
             },
@@ -735,7 +783,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               visibleCount={8}
               renderItem={(m) => {
                 const item = personChromaItem(
-                  m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
+                  m, band, openProfile, photosByName, igByName,
                   !!linkedByName[m.name], isMgr ? handleInvite : undefined,
                   undefined,
                   copiedEmailKey, copyEmail,
@@ -787,7 +835,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               visibleCount={8}
               renderItem={(m) => {
                 const item = personChromaItem(
-                  m, concertCountByPerson[m.name] || 0, band, openProfile, photosByName, igByName,
+                  m, band, openProfile, photosByName, igByName,
                   !!linkedByName[m.name], isMgr ? handleInvite : undefined,
                   undefined,
                   copiedEmailKey, copyEmail,
@@ -838,10 +886,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 }}>{joinCopied ? "Copiat ✓" : "Copia el missatge"}</button>
               <button type="button" className="btn-outline cd-wa-btn"
                 onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
+              <button type="button" className="btn-outline" disabled={codeBusy} onClick={handleGenerateCode} title="El codi d'ara deixarà de funcionar">
+                {codeBusy ? "Generant…" : "Genera un codi nou"}
+              </button>
             </div>
-            <button type="button" className="btn-danger-outline" style={{ marginTop: 10 }} disabled={codeBusy} onClick={handleRevokeCode}>
-              {codeBusy ? "Bloquejant…" : "Bloqueja el codi"}
-            </button>
           </>
         ) : (
           <button type="button" className="btn-primary" disabled={codeBusy} onClick={handleGenerateCode}>
@@ -961,6 +1009,15 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
       {editOpen && (
         <GroupAppearanceModal key={band.id} band={band} onClose={() => setEditOpen(false)} />
+      )}
+
+      {/* Full de ruta del bolo d'avui, tal com s'imprimeix */}
+      {rsPreview && (
+        <RouteSheetPreview
+          concert={rsPreview}
+          onClose={() => setRsPreview(null)}
+          onEdit={() => router.push(`${base}/concerts/${rsPreview.id}`)}
+        />
       )}
     </div>
   );
