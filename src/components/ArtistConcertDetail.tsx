@@ -2,7 +2,10 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
+import type { Setlist } from "@/lib/material-types";
+import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
 import { formatCurrency, formatDateFull, capitalize, formatDate, statusColors } from "@/lib/format";
 import { personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { normalize } from "@/lib/text";
@@ -16,17 +19,22 @@ const KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", re
 // Fitxa del concert per al músic: mateixa portada de pòster que el gestor,
 // però tot de només lectura — informació, full de ruta (amb PDF), assistència
 // i, de facturació, només el seu caixet.
-export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, photosByName = {}, today }: {
+export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, photosByName = {}, setlists = [], canSetlists = false, today }: {
   concert: Concert;
   band: Band | null;
   myName: string;
   myAmount: number | null; // null = el grup no mostra caixets
   showFees: boolean;
   photosByName?: Record<string, string>;
+  setlists?: Setlist[];
+  canSetlists?: boolean; // amb el permís "Setlists" pot triar-la des d'aquí
   today: string;
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<"info" | "ruta" | "assistencia" | "caixet">("info");
   const [rsOpen, setRsOpen] = useState(false);
+  const [setlistId, setSetlistId] = useState<string>(concert.setlistId || "");
+  const selectedSetlist = setlists.find((s) => s.id === setlistId) || null;
   const accent = band?.color1 || "#8b7bff";
   const sc = statusColors(concert.status);
   const members = band?.members || [];
@@ -91,6 +99,39 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Setlist de l'esdeveniment: es veu sempre; es tria des d'aquí amb el
+          permís "Setlists" (o des de la setlist mateixa, al grup). */}
+      {tab === "info" && (
+        <div className="panel cd-section">
+          <div className="panel-title cd-section-title">Setlist</div>
+          {canSetlists && (
+            <select
+              className="field-input compact-field" style={{ maxWidth: 360 }}
+              value={setlistId}
+              onChange={async (e) => {
+                const v = e.target.value;
+                setSetlistId(v);
+                await setConcertMaterialAction(concert.id, "setlist", v || null);
+                router.refresh();
+              }}
+            >
+              <option value="">— Cap setlist assignada —</option>
+              {setlists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          )}
+          {selectedSetlist ? (
+            <div className="cd-material-actions" style={{ marginTop: canSetlists ? 10 : 0, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <span className="t-strong" style={{ fontSize: 13.5 }}>{selectedSetlist.name}</span>
+              <span className="t-dim" style={{ fontSize: 12 }}>{selectedSetlist.songs.filter((x) => x.title.trim()).length} cançons</span>
+              <button type="button" className="btn-outline stage-mode-btn" onClick={() => router.push(`/escenari-mode/${selectedSetlist.id}`)}>▶ Escenari</button>
+              <button type="button" className="btn-outline" onClick={() => window.open(`/m/${selectedSetlist.publicToken}`, "_blank")}>Obre / PDF</button>
+            </div>
+          ) : (
+            !canSetlists && <div className="t-dim" style={{ fontSize: 13 }}>Cap setlist assignada a aquest esdeveniment.</div>
+          )}
         </div>
       )}
 

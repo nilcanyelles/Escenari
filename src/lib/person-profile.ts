@@ -84,6 +84,10 @@ export type PersonProfileData = {
   songs: ProfileSong[];        // totes les dels grups visibles (amb "hidden")
   totalConcerts: number;
   since: string | null;
+  // Disponibilitat per a suplències: dies marcats pel músic i dies ocupats
+  // per bolos (dia -> motiu; la pàgina el buida per a qui no l'ha de veure).
+  availability: Record<string, boolean>;
+  busyDays: Record<string, string>;
 };
 
 function toDateStr(d: Date | string): string {
@@ -275,6 +279,22 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
   }
 
   const past = concerts.filter((c) => c.answer === "yes");
+
+  // Disponibilitat (només si té compte) i dies ocupats per bolos.
+  const availability: Record<string, boolean> = {};
+  if (row.clerk_user_id) {
+    const aRows = (await pool.query(
+      "select to_char(day, 'YYYY-MM-DD') as day, available from subs_availability where clerk_user_id=$1",
+      [row.clerk_user_id]
+    )).rows;
+    aRows.forEach((a) => { availability[a.day] = !!a.available; });
+  }
+  const busyDays: Record<string, string> = {};
+  concerts.forEach((c) => {
+    if (c.answer === "no" || c.status === "cancel·lat") return;
+    if (!busyDays[c.date]) busyDays[c.date] = `${c.bandName} · ${c.city || c.venue || "bolo"}`;
+  });
+
   return {
     token: row.id,
     workspaceId: row.workspace_id,
@@ -296,5 +316,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     songs,
     totalConcerts: past.length,
     since: concerts.length ? concerts[0].date.slice(0, 4) : null,
+    availability,
+    busyDays,
   };
 }

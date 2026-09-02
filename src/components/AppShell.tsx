@@ -29,6 +29,7 @@ function setBandCookie(id: string) {
 }
 
 export type RailLink = { href: string; label: string; emoji: string };
+export type ShellAgency = { name: string; logo: string };
 
 export default function AppShell({
   todayLabel,
@@ -37,6 +38,8 @@ export default function AppShell({
   bands,
   selectedBandId,
   railLinks,
+  subLinks,
+  agency,
   routeBase = "",
   homeHref = "/resum",
   children,
@@ -47,6 +50,8 @@ export default function AppShell({
   bands?: ShellBand[];
   selectedBandId?: string;
   railLinks?: RailLink[];   // enllaços fixos a dalt de la barra (Perfil, Suplències…)
+  subLinks?: RailLink[];    // enllaços just a sota de "tots els grups" (Suplències del gestor)
+  agency?: ShellAgency | null; // gestor: l'agència surt on abans hi havia "Tots els grups"
   routeBase?: string;       // "" per al gestor, "/artista" per als músics
   homeHref?: string;
   children: React.ReactNode;
@@ -135,20 +140,34 @@ export default function AppShell({
           <div className="band-rail-sep"></div>
         </>
       )}
-      <div className="band-rail-title">Els teus grups</div>
+      <div className="band-rail-title">{agency?.name ? "Agència" : "Els teus grups"}</div>
+      {/* Gestor: l'agència (nom i logotip) és qui té tots els grups a dins;
+          clicar-la és veure'ls tots. Músic: "Tots els grups". */}
       <button
         type="button"
         className={"band-rail-item band-rail-all" + (activeBand === "" ? " active" : "")}
         onClick={() => selectBand("")}
+        title={agency?.name ? `${agency.name} — tots els grups` : "Tots els grups"}
       >
-        <span className="band-rail-avatar band-rail-avatar-all">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
-            <rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
-          </svg>
-        </span>
-        <span className="band-rail-name">Tots els grups</span>
+        {agency?.logo ? (
+          <img className="band-rail-avatar band-rail-agency-logo" src={agency.logo} alt="" />
+        ) : (
+          <span className="band-rail-avatar band-rail-avatar-all">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect>
+            </svg>
+          </span>
+        )}
+        <span className="band-rail-name">{agency?.name || "Tots els grups"}</span>
       </button>
+      {(subLinks || []).map((l) => (
+        <Link key={l.href} href={l.href}
+          className={"band-rail-item band-rail-link" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
+          <span className="band-rail-avatar band-rail-avatar-all">{l.emoji}</span>
+          <span className="band-rail-name">{l.label}</span>
+        </Link>
+      ))}
       <div className="band-rail-sep"></div>
       <div className="band-rail-list">
         {(bands || []).map((b) => <BandRailItem key={b.id} b={b} />)}
@@ -163,7 +182,14 @@ export default function AppShell({
           {l.emoji} {l.label}
         </Link>
       ))}
-      <button type="button" className={"band-chip" + (activeBand === "" ? " active" : "")} onClick={() => selectBand("")}>Tots</button>
+      <button type="button" className={"band-chip" + (activeBand === "" ? " active" : "")} onClick={() => selectBand("")}>
+        {agency?.logo && <img src={agency.logo} alt="" />}{agency?.name || "Tots"}
+      </button>
+      {(subLinks || []).map((l) => (
+        <Link key={l.href} href={l.href} className={"band-chip" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
+          {l.emoji} {l.label}
+        </Link>
+      ))}
       {(bands || []).map((b) => (
         <button
           key={b.id}
@@ -282,6 +308,7 @@ export default function AppShell({
             photoUrl: user.photoUrl || "", phone: user.phone || "",
             whatsapp: user.whatsapp || "", email: user.email || "",
           }}
+          agency={agency || null}
           onClose={() => setProfileEditOpen(false)}
         />
       )}

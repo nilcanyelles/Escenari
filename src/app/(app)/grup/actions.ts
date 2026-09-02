@@ -20,6 +20,24 @@ export async function saveBandBackupsAction(bandId: string, backups: BackupPerso
   revalidatePath("/grup");
 }
 
+// Afegeix una persona (de la borsa de suplències) als suplents de confiança
+// d'un grup, si no hi és ja.
+export async function addTrustedBackupAction(bandId: string, person: BackupPerson): Promise<{ ok: boolean }> {
+  const { workspaceId } = await requireManagerAction();
+  const band = (await db().query("select backups from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  if (!band) throw new Error("Grup no trobat");
+  const backups: BackupPerson[] = band.backups || [];
+  const name = (person.name || "").trim();
+  if (!name) return { ok: false };
+  if (!backups.some((b) => normalize(b.name) === normalize(name))) {
+    backups.push({ name, instruments: person.instruments || [], phone: person.phone || "", email: person.email || "" });
+    await db().query("update bands set backups=$1 where id=$2", [JSON.stringify(backups), bandId]);
+  }
+  revalidatePath("/grup");
+  revalidatePath("/suplents");
+  return { ok: true };
+}
+
 // Desa la llista de vehicles del grup (tipus, color, propietari, matrícula) — es fan servir per
 // triar-los ràpid a "Matrícules autoritzades" del full de ruta.
 export async function saveBandVehiclesAction(bandId: string, vehicles: Vehicle[]) {

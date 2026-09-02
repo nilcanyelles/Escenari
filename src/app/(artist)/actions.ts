@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
-import { requireArtistAction, type Profile } from "@/lib/current-user";
+import { requireArtistAction, getProfile, type Profile } from "@/lib/current-user";
 import type { Person } from "@/lib/types";
 
 function revalidateArtist() {
@@ -217,4 +217,24 @@ export async function setSubsAvailabilityAction(input: { open?: boolean; visible
     [input.open ?? null, input.visible ?? null, profile.clerkUserId]
   );
   revalidatePath("/suplencies");
+}
+
+// Un dia del calendari de disponibilitat: disponible (true), no disponible
+// (false) o sense marcar (null). Qualsevol compte pot marcar el seu.
+export async function setDayAvailabilityAction(day: string, available: boolean | null) {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) throw new Error("Data no vàlida");
+  if (available === null) {
+    await db().query("delete from subs_availability where clerk_user_id=$1 and day=$2", [profile.clerkUserId, day]);
+  } else {
+    await db().query(
+      `insert into subs_availability (clerk_user_id, day, available) values ($1,$2,$3)
+       on conflict (clerk_user_id, day) do update set available=excluded.available`,
+      [profile.clerkUserId, day, available]
+    );
+  }
+  revalidatePath("/suplencies");
+  revalidatePath("/suplents");
+  revalidatePath("/artista/perfil");
 }

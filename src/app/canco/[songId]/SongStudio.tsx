@@ -223,7 +223,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
         setBackingProgress({ index: i + 1, total: list.length, percent: pct });
       });
       if (!res.ok) {
-        if (res.error && res.error.includes("pistes d'àudio")) { setStorageManagerOpen(true); break; }
+        if (bandId && res.error && res.error.includes("pistes d'àudio")) { setStorageManagerOpen(true); break; }
         alert(res.error || "Error pujant un fitxer");
       }
     }
@@ -545,7 +545,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
       <input ref={backingFileInput} type="file" hidden multiple accept={AUDIO_ACCEPT}
         onChange={(e) => { const files = e.target.files; if (files && files.length) doUploadMany(files, BACKING_TRACK_INS); e.target.value = ""; }} />
 
-      {storageManagerOpen && (
+      {storageManagerOpen && bandId && (
         <StorageManagerModal bandId={bandId} onClose={() => setStorageManagerOpen(false)} onChanged={() => router.refresh()} />
       )}
     </div>

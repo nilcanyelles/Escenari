@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -283,6 +283,92 @@ function personChromaItem(
   };
 }
 
+// Pestanya Permisos (gestor): taula amb tothom del grup a les files i cada
+// permís de l'app a les columnes — cada casella és un interruptor que dona
+// o treu aquell permís a l'instant.
+function PermsMatrix({ band, photosByName }: { band: Band; photosByName: Record<string, string> }) {
+  const router = useRouter();
+  const people = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { p: Person; kind: "member" | "crew" }[] = [];
+    band.members.forEach((p) => { const k = normalize(p.name); if (!seen.has(k)) { seen.add(k); out.push({ p, kind: "member" }); } });
+    band.crew.forEach((p) => { const k = normalize(p.name); if (!seen.has(k)) { seen.add(k); out.push({ p, kind: "crew" }); } });
+    return out;
+  }, [band]);
+  const [perms, setPerms] = useState<Record<string, MemberPerms>>(() => Object.fromEntries(people.map(({ p }) => [p.name, memberPerms(p)])));
+  const [busy, setBusy] = useState<string | null>(null);
+  const c1 = band.color1 || bandColor(band.id).color;
+  const c2 = band.color2 || bandColor(band.id + "x").color;
+
+  async function toggle(name: string, key: keyof MemberPerms) {
+    const v = !perms[name]?.[key];
+    setPerms((prev) => ({ ...prev, [name]: { ...(prev[name] || memberPerms(null)), [key]: v } }));
+    setBusy(name + key);
+    await setMemberPermAction(band.id, name, key, v);
+    setBusy(null);
+    router.refresh();
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-title" style={{ marginBottom: 4 }}>Permisos</div>
+      <div className="t-dim" style={{ fontSize: 12.5, marginBottom: 14 }}>
+        Què pot fer cada persona del grup dins l&apos;app. Toca un interruptor per donar o treure el permís — s&apos;aplica a l&apos;instant.
+      </div>
+      {people.length === 0 ? (
+        <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té ningú a l&apos;equip.</div>
+      ) : (
+        <div className="perm-table-wrap">
+          <table className="perm-table">
+            <thead>
+              <tr>
+                <th>Persona</th>
+                {PERM_LABELS.map((l) => <th key={l.key}>{l.label}</th>)}
+              </tr>
+            </thead>
+            <tbody>
+              {people.map(({ p, kind }) => {
+                const photoId = photosByName[normalize(p.name)];
+                const sub = kind === "member" ? (instrumentsFor(p).join(", ") || "Músic") : (p.role || "Crew");
+                return (
+                  <tr key={p.name}>
+                    <td>
+                      <div className="perm-person">
+                        <img src={photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(p.name, c1, c2)} alt="" />
+                        <div style={{ minWidth: 0 }}>
+                          <div className="member-name">{p.name}</div>
+                          <div className="t-dim" style={{ fontSize: 11 }}>{sub}</div>
+                        </div>
+                      </div>
+                    </td>
+                    {PERM_LABELS.map((l) => {
+                      const on = !!perms[p.name]?.[l.key];
+                      return (
+                        <td key={l.key}>
+                          <button
+                            type="button" role="switch" aria-checked={on}
+                            className={"perm-switch" + (on ? " on" : "")}
+                            disabled={busy === p.name + l.key}
+                            title={`${l.label}: ${on ? "sí (toca per treure)" : "no (toca per donar)"}`}
+                            onClick={() => toggle(p.name, l.key)}
+                          >
+                            <span className="perm-switch-knob"></span>
+                            <span className="perm-switch-text">{on ? "Sí" : "No"}</span>
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function InstrumentChips({ items }: { items: string[] }) {
   return (
     <div className="member-instruments">
@@ -331,8 +417,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // La pestanya inicial es pot indicar per URL (p. ex. ?tab=cancons), com
   // quan es torna de l'editor d'una cançó cap a l'apartat de cançons del grup.
   const initialTabParam = searchParams.get("tab");
-  const initialTab = initialTabParam === "equip" || initialTabParam === "cancons" || initialTabParam === "documents" ? initialTabParam : "inici";
-  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "documents">(initialTab);
+  const initialTab = initialTabParam === "equip" || initialTabParam === "cancons" || initialTabParam === "documents" || initialTabParam === "permisos" ? initialTabParam : "inici";
+  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "documents" | "permisos">(initialTab);
   // En passar el ratolí per una targeta petita de la previsualització, es
   // mostra literalment la targeta grossa (la mateixa que a la pestanya
   // Equip) flotant per sobre — a través d'un portal a <body>, perquè cap
@@ -519,7 +605,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <button className={"stats-tab" + (tab === "equip" ? " active" : "")} onClick={() => setTab("equip")}>Equip</button>
         <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
         <button className={"stats-tab" + (tab === "documents" ? " active" : "")} onClick={() => setTab("documents")}>Documents</button>
-
+        {isMgr && <button className={"stats-tab" + (tab === "permisos" ? " active" : "")} onClick={() => setTab("permisos")}>Permisos</button>}
       </div>
 
       {/* Targeta grossa flotant en passar el ratolí per una targeta petita
@@ -748,6 +834,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           </div>
         </div>
       )}
+
+      {tab === "permisos" && isMgr && <PermsMatrix band={band} photosByName={photosByName} />}
 
       {tab === "equip" && (<>
       {/* KPIs */}

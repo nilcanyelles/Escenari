@@ -98,17 +98,24 @@ export async function deleteSetlistAction(bandId: string, setlistId: string) {
   revalidateMaterial(bandId);
 }
 
-// ---------- Assignació a concerts (només gestor) ----------
+// ---------- Assignació a esdeveniments ----------
+// Qualsevol esdeveniment (bolo, assaig, reunió…) pot portar un rider i una
+// setlist; ho pot fer el gestor o un membre amb permís sobre aquell material
+// — des de la fitxa de l'esdeveniment o des de la setlist mateixa.
 
 export async function setConcertMaterialAction(concertId: string, field: "rider" | "setlist", materialId: string | null) {
-  const profile = await getProfile();
-  if (!profile || profile.role !== "manager" || !profile.workspaceId) throw new Error("Sessió de gestor no vàlida");
+  const concert = (await db().query("select band_id from concerts where id=$1", [concertId])).rows[0];
+  if (!concert) throw new Error("Esdeveniment no trobat");
+  const { workspaceId } = await requireMaterialAccess(concert.band_id, field === "rider" ? "riders" : "setlists");
   const col = field === "rider" ? "rider_id" : "setlist_id";
   await db().query(
     `update concerts set ${col}=$1 where id=$2 and workspace_id=$3`,
-    [materialId || null, concertId, profile.workspaceId]
+    [materialId || null, concertId, workspaceId]
   );
   revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/artista/concerts/${concertId}`);
+  revalidatePath("/grup");
+  revalidatePath("/artista/grup");
 }
 
 // ---------- Aprovació de riders per concert (només gestor) ----------
