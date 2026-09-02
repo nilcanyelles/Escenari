@@ -11,6 +11,7 @@ import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 import { ensureManagerCrew } from "@/lib/person-profile";
+import { getSocialPrevMonth } from "@/lib/social-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,7 @@ export default async function GrupPage() {
   if (!bandId) redirect("/agenda");
 
   const band = bands.find((b) => b.id === bandId)!;
-  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files] = await Promise.all([
+  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev] = await Promise.all([
     getLinkedMembers(bandId),
     getBackupRequests(workspaceId, { bandId }),
     getRiders(bandId),
@@ -47,6 +48,8 @@ export default async function GrupPage() {
     getBandEditors(bandId),
     getSongs(bandId),
     getBandFiles(bandId),
+    // Xifres de xarxes del mes passat, per als "+123" de la targeta d'Inici.
+    getSocialPrevMonth(bandId, today()),
   ]);
 
   // Fotos de perfil i Instagram reals (perquè les targetes de l'equip els usin).
@@ -77,6 +80,7 @@ export default async function GrupPage() {
         files={files}
         photosByName={photosByName}
         igByName={igByName}
+        socialPrev={socialPrev}
         today={today()}
       />
     </Suspense>

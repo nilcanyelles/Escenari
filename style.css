@@ -5524,3 +5524,172 @@ button { font-family: inherit; }
 .avail-main { display: flex; flex-direction: column; gap: 2px; }
 .avail-label { font-weight: 700; font-size: 14px; }
 .avail-desc { font-size: 12px; color: var(--text-faint); line-height: 1.4; }
+
+/* ============ Xarxes socials del grup (/grup/xarxes) ============ */
+.sx { display: flex; flex-direction: column; gap: 20px; }
+.sx-top { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.sx-top .spacer { flex: 1; }
+.sx-title { font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; margin: 0; }
+.sx-notice { border-radius: var(--radius-sm); padding: 10px 14px; font-size: 13px; border: 1px solid; display: flex; flex-direction: column; gap: 4px; }
+.sx-notice.ok { background: oklch(0.72 0.15 155 / 0.12); border-color: oklch(0.72 0.15 155 / 0.4); color: oklch(0.8 0.14 155); }
+.sx-notice.err { background: oklch(0.68 0.18 25 / 0.12); border-color: oklch(0.68 0.18 25 / 0.4); color: oklch(0.78 0.16 25); }
+.sx-platforms { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 860px) { .sx-platforms { grid-template-columns: 1fr; } }
+.sx-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: opacity 0.15s;
+}
+.sx-card.off { opacity: 0.6; }
+.sx-card-head { display: flex; align-items: center; gap: 12px; }
+.sx-badge { width: 38px; height: 38px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; color: #fff; flex: none; }
+.sx-name { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 700; }
+.sx-track {
+  margin-left: auto;
+  border: 1px solid var(--border-input);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px; font-weight: 600;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sx-track.on { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
+.sx-status { font-size: 12.5px; line-height: 1.45; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sx-status.ok { color: oklch(0.78 0.14 155); }
+.sx-status.warn { color: var(--amber); }
+.sx-status.dim { color: var(--text-faint); }
+.sx-status .link-btn { font-size: 12px; text-decoration: underline; }
+.sx-connect { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; padding: 9px 14px; }
+.sx-metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+.sx-metric { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 5px; }
+.sx-metric-l { font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-ghost); font-weight: 700; display: flex; gap: 6px; align-items: center; }
+.sx-auto { font-size: 9px; letter-spacing: 0.06em; background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-text); border-radius: 999px; padding: 2px 7px; }
+.sx-metric input { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 20px; padding: 2px 6px; }
+.sx-delta { font-size: 11.5px; color: var(--text-faint); }
+.sx-delta.up { color: oklch(0.78 0.14 155); }
+.sx-delta.down { color: oklch(0.76 0.16 25); }
+.sx-charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 14px; }
+.sx-chart { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px 16px; display: flex; flex-direction: column; gap: 8px; }
+.sx-chart-head { display: flex; align-items: center; gap: 10px; }
+.sx-chart-title { font-size: 12.5px; font-weight: 600; color: var(--text-dim); display: flex; align-items: center; gap: 8px; }
+.sx-chart-n { margin-left: auto; font-family: "Space Grotesk", sans-serif; font-size: 18px; font-weight: 700; }
+.sx-chart-svg { width: 100%; height: auto; display: block; color: var(--text-muted); }
+.sx-chart-empty { font-size: 12px; color: var(--text-faint); line-height: 1.45; padding: 8px 0; }
+.sx-dot { width: 10px; height: 10px; border-radius: 999px; display: inline-block; flex: none; }
+
+/* Targeta de xarxes a Inici (només lectura: es toca per anar a la pàgina) */
+.bento-social { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; width: 100%; }
+.bento-social-box { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: var(--bg-card-2); border: 1px solid var(--border-soft); min-width: 0; }
+.bento-social-icon { display: inline-flex; align-items: center; justify-content: center; flex: none; width: 30px; height: 30px; border-radius: 999px; color: #fff; }
+.bento-social-l { font-size: 10px; color: var(--text-fainter); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bento-social-n { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 16px; line-height: 1.1; }
+
+/* Targeta "Avui toqueu" a Inici: el full de ruta del bolo d'avui */
+.bento-today { border-color: oklch(0.68 0.19 290 / 0.5); background: linear-gradient(135deg, oklch(0.68 0.19 290 / 0.14), var(--bg-card) 60%); }
+.bento-today-body { display: flex; flex-direction: column; gap: 14px; width: 100%; }
+.bento-today-gig { display: flex; flex-direction: column; gap: 12px; cursor: default; }
+.bento-today-gig + .bento-today-gig { border-top: 1px solid var(--border-soft); padding-top: 14px; }
+.bento-today-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.bento-today-place { font-family: "Space Grotesk", sans-serif; font-size: 18px; font-weight: 700; }
+.bento-today-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.bento-today-actions .btn-outline, .bento-today-actions .btn-save { padding: 8px 12px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; }
+.bento-today-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 860px) { .bento-today-cols { grid-template-columns: 1fr; } }
+.bento-today-col { background: oklch(1 0 0 / 0.04); border-radius: 12px; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; min-width: 0; }
+.bento-today-col .dia-sched-row { font-size: 13px; }
+.bento-today-col .dia-sched-time { min-width: 84px; }
+.bento-today-contact { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.bento-today-call { display: inline-flex; align-items: center; gap: 5px; background: oklch(0.72 0.15 155 / 0.14); color: oklch(0.78 0.15 155); border-radius: 999px; padding: 4px 10px; text-decoration: none; font-weight: 600; font-size: 12px; white-space: nowrap; }
+.bento-today-line { display: flex; gap: 6px; }
+.bento-today-line b { color: var(--text-dim); font-weight: 600; flex: none; }
+.bento-today-line span { color: var(--text-muted); overflow-wrap: anywhere; }
+
+/* ============ Pàgina pública del grup (/g/token) ============ */
+.gp-logo { width: 100%; aspect-ratio: 1 / 1; object-fit: cover; border-radius: 20px; display: block; background: var(--bg-card-2); }
+.gp-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+.gp-socials { display: flex; gap: 8px; flex-wrap: wrap; }
+.gp-social { width: 36px; height: 36px; border-radius: 12px; display: inline-flex; align-items: center; justify-content: center; color: #fff; text-decoration: none; }
+.gp-bio { margin: 0; color: var(--text-dim); font-size: 14.5px; line-height: 1.6; white-space: pre-wrap; }
+.gp-bio.empty { color: var(--text-faint); font-style: italic; }
+.gp-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
+.gp-panel-head .pv-panel-title { margin-bottom: 0; }
+.gp-members { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
+.gp-member { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; background: oklch(1 0 0 / 0.04); border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px 10px; }
+.gp-member-photo { width: 84px; height: 84px; border-radius: 999px; object-fit: cover; border: 3px solid var(--gp-accent, var(--accent)); }
+.gp-member-name { font-size: 13.5px; font-weight: 600; }
+.gp-member-ins { font-size: 11.5px; color: var(--text-faint); display: flex; gap: 6px; align-items: center; justify-content: center; flex-wrap: wrap; }
+.gp-member-ins span { display: inline-flex; align-items: center; gap: 3px; }
+.gp-member-ins img { width: 14px; height: 14px; object-fit: contain; }
+.gp-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.gp-stat { background: oklch(1 0 0 / 0.04); border: 1px solid var(--border-soft); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 4px; }
+.gp-stat-n { font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+.gp-stat-l { font-size: 11px; color: var(--text-faint); }
+
+/* ============ Targetes d'equip: text sempre llegible ============ */
+/* El nom i l'instrument/càrrec van sobre un panell fosc translúcid (amb
+   ombra al text), de manera que es llegeixen igual amb colors de grup
+   clars o amb fotos de fons blanc. */
+.chroma-info {
+  margin: 0 12px 12px;
+  padding: 8px 10px 9px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.38);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+.chroma-info .role { color: rgba(255, 255, 255, 0.85); }
+/* Targeta petita (pestanya Equip): a sota del nom hi va l'instrument (o
+   el càrrec, si és de l'equip tècnic), no el nombre de concerts. */
+.chroma-compact .chroma-info {
+  margin: 0;
+  padding: 0.3rem 0.4rem 0.3rem;
+  border-radius: 0 0 12px 12px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.6) 60%, rgba(0, 0, 0, 0) 100%);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+.chroma-compact .chroma-info .role {
+  display: block;
+  font-size: 8px;
+  line-height: 1.2;
+  color: rgba(255, 255, 255, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chroma-compact .chroma-info .location { display: none; }
+
+/* Codi d'unió: codi, copiar, WhatsApp i "genera un codi nou", tot en una
+   sola fila (només es trenca en pantalles estretes). */
+.join-box { flex-wrap: nowrap; }
+@media (max-width: 720px) { .join-box { flex-wrap: wrap; } }
+
+/* ============ Perfil de músic: permisos (gestor) i cançons visibles ============ */
+.pv-perm-list { display: flex; flex-direction: column; gap: 10px; }
+.pv-perm-band {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  background: oklch(1 0 0 / 0.04);
+  border-left: 3px solid var(--pv-accent, var(--accent));
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.pv-perm-band img { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; flex: none; }
+.pv-perm-band .perm-row { margin-left: auto; }
+.pv-songvis { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow: auto; margin-top: 6px; padding-right: 4px; }
+.pv-songvis-row {
+  display: flex; align-items: center; gap: 8px;
+  text-align: left; font-family: inherit; font-size: 12.5px;
+  background: transparent; border: 1px solid var(--border-soft); border-radius: 8px;
+  padding: 6px 10px; color: var(--text-muted); cursor: pointer;
+}
+.pv-songvis-row.on { color: var(--text); border-color: oklch(0.72 0.15 155 / 0.5); background: oklch(0.72 0.15 155 / 0.08); }
+.pv-songvis-row .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pv-songvis-row .b { font-size: 11px; color: var(--text-faint); white-space: nowrap; }

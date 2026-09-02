@@ -49,6 +49,18 @@ export type ProfileSong = {
   bandLogo: string;
   coverUrl: string;
   audioFileId: string | null;
+  // Amagada del perfil públic pel músic (l'editor la segueix llistant).
+  hidden: boolean;
+};
+
+// Permisos de la persona a cada grup on és (músic o crew), per al gestor.
+export type ProfileBandPerms = {
+  bandId: string;
+  bandName: string;
+  logo: string;
+  color1: string;
+  roleText: string;
+  perms: Partial<import("./types").MemberPerms>;
 };
 
 export type PersonProfileData = {
@@ -62,12 +74,14 @@ export type PersonProfileData = {
   phone: string;
   email: string;
   hiddenBands: string[];
+  hiddenSongs: string[];
   bands: ProfileBand[];        // només les visibles
   crewRoles: ProfileCrewRole[]; // càrrecs a l'equip tècnic (només els visibles)
   allBandIds: { id: string; name: string }[]; // totes (per a l'editor de visibilitat)
+  bandPerms: ProfileBandPerms[]; // tots els grups (per al gestor)
   instruments: string[];
   concerts: ProfileConcert[];  // dels grups visibles
-  songs: ProfileSong[];
+  songs: ProfileSong[];        // totes les dels grups visibles (amb "hidden")
   totalConcerts: number;
   since: string | null;
 };
@@ -152,6 +166,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
 
   const nameKey = normalize(row.person_name);
   const hiddenBands: string[] = row.hidden_bands || [];
+  const hiddenSongs: string[] = row.hidden_songs || [];
 
   // Una persona pot ser músic, de l'equip tècnic, o totes dues coses (a
   // vegades en grups diferents) — es busca a totes dues llistes per separat.
@@ -164,6 +179,21 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
   );
   const allBandsInvolved = Array.from(new Map([...memberBands, ...crewBands].map((b) => [b.id, b])).values());
   const allBandIds = allBandsInvolved.map((b) => ({ id: b.id, name: b.name }));
+  // Permisos a tots els grups (també els amagats del perfil públic): el
+  // gestor els edita des d'aquí mateix.
+  const bandPerms: ProfileBandPerms[] = allBandsInvolved.map((b) => {
+    const asMember = (b.members || []).find((m: { name: string }) => normalize(m.name) === nameKey);
+    const asCrew = (b.crew || []).find((m: { name: string }) => normalize(m.name) === nameKey);
+    const me = asMember || asCrew;
+    const parts = [
+      asMember ? (asMember.instruments?.length ? asMember.instruments.join(", ") : asMember.role) : "",
+      asCrew ? (asCrew.role || "Crew") : "",
+    ].filter(Boolean);
+    return {
+      bandId: b.id, bandName: b.name, logo: b.logo || "", color1: b.color1 || "",
+      roleText: parts.join(" · "), perms: me?.perms || {},
+    };
+  });
   const visible = memberBands.filter((b) => !hiddenBands.includes(b.id));
   const crewVisible = crewBands.filter((b) => !hiddenBands.includes(b.id));
 
@@ -239,6 +269,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
         bandLogo: band?.logo || "",
         coverUrl: s.cover_url || "",
         audioFileId: s.audio_id || null,
+        hidden: hiddenSongs.includes(s.id),
       };
     });
   }
@@ -255,9 +286,11 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     phone,
     email,
     hiddenBands,
+    hiddenSongs,
     bands,
     crewRoles,
     allBandIds,
+    bandPerms,
     instruments,
     concerts,
     songs,

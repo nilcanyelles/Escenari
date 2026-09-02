@@ -11,6 +11,7 @@ import { memberPerms } from "@/lib/perms";
 import { normalize } from "@/lib/text";
 import { today } from "@/lib/format";
 import { db } from "@/lib/db";
+import { getSocialPrevMonth } from "@/lib/social-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -44,7 +45,7 @@ export default async function ArtistGrupPage() {
     });
   });
 
-  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files] = await Promise.all([
+  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev] = await Promise.all([
     getLinkedMembers(bandId),
     getBackupRequests(workspaceId, { bandId }),
     getRiders(bandId),
@@ -52,6 +53,7 @@ export default async function ArtistGrupPage() {
     getBandEditors(bandId),
     getSongs(bandId),
     getBandFiles(bandId),
+    getSocialPrevMonth(bandId, today()),
   ]);
 
   const profRows = (await db().query(
@@ -84,6 +86,7 @@ export default async function ArtistGrupPage() {
         viewer="artist"
         caps={caps}
         myName={myName}
+        socialPrev={socialPrev}
         today={today()}
       />
     </Suspense>
