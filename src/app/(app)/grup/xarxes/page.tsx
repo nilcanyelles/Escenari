@@ -7,6 +7,7 @@ import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 import { getSocialAccounts, getSocialSnapshots } from "@/lib/social-sync";
 import { youtubeConfigured, spotifyConfigured } from "@/lib/social-stats";
 import { instagramConfigured, tiktokConfigured } from "@/lib/social-oauth";
+import { getWorkspaceBilling } from "@/lib/billing";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export default async function XarxesPage({ searchParams }: { searchParams: Promi
   if (!bandId) redirect("/agenda");
   const band = bands.find((b) => b.id === bandId)!;
 
-  const [accounts, snapshots] = await Promise.all([getSocialAccounts(bandId), getSocialSnapshots(bandId, 13)]);
+  const [accounts, snapshots, billing] = await Promise.all([getSocialAccounts(bandId), getSocialSnapshots(bandId, 13), getWorkspaceBilling(profile.workspaceId)]);
   const str = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] || "" : v || "");
 
   return (
@@ -31,6 +32,8 @@ export default async function XarxesPage({ searchParams }: { searchParams: Promi
       configured={{ youtube: youtubeConfigured(), spotify: spotifyConfigured(), instagram: instagramConfigured(), tiktok: tiktokConfigured() }}
       notice={{ connected: str(sp.connected), error: str(sp.error), platform: str(sp.platform), detail: str(sp.detail) }}
       today={today()}
+      billing={billing}
+      canUpgrade={profile.agencyOwner}
     />
   );
 }

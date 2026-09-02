@@ -10,6 +10,8 @@ import {
 } from "@/lib/social-history";
 import { saveSocialSettingsAction, saveManualSocialStatsAction, refreshBandSocialsAction, disconnectSocialAccountAction } from "@/app/(app)/grup/social-actions";
 import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
+import PlanLock from "@/components/PlanLock";
+import type { BillingInfo } from "@/lib/plans";
 
 // Pàgina de xarxes socials del grup: per a cada plataforma, l'enllaç, la
 // connexió (automàtica o a mà), si se'n fa seguiment i les xifres; a sota,
@@ -141,14 +143,17 @@ function ConnectionStatus({ p, link, account, configured, bandId, onDisconnect, 
   );
 }
 
-export default function SocialsView({ band, accounts, snapshots: initialSnapshots, configured, notice, today }: {
+export default function SocialsView({ band, accounts, snapshots: initialSnapshots, configured, notice, today, billing, canUpgrade = true }: {
   band: Band;
   accounts: ConnectedAccount[];
   snapshots: SocialSnapshot[];
   configured: SocialConfigured;
   notice: SocialNotice;
   today: string;
+  billing?: BillingInfo;
+  canUpgrade?: boolean;
 }) {
+  const historyLocked = !!billing && !billing.caps.socialHistory;
   const router = useRouter();
   const [links, setLinks] = useState<SocialLinks>(band.socialLinks || {});
   const [tracking, setTracking] = useState<SocialTracking>(band.socialTracking || {});
@@ -326,7 +331,9 @@ export default function SocialsView({ band, accounts, snapshots: initialSnapshot
             </div>
           </div>
         </div>
-        {tracked.length === 0 ? (
+        {historyLocked && billing ? (
+          <PlanLock billing={billing} feature="socialHistory" canUpgrade={canUpgrade} title="Evolució mes a mes de seguidors i oients" description="Les xifres es guarden cada dia igualment; els gràfics i el “+123 des del mes passat” són del pla Grup." />
+        ) : tracked.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Activa el seguiment d&apos;alguna xarxa per veure&apos;n l&apos;evolució.</div>
         ) : (
           <div className="sx-charts">

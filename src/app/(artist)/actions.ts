@@ -96,7 +96,8 @@ export async function createGroupAsMusicianAction(input: CreateGroupInput, myIns
   const pool = db();
   const wsId = "ws" + Date.now();
   const logo = input.logo && input.logo.startsWith("data:image/") && input.logo.length < 400_000 ? input.logo : "";
-  await pool.query("insert into workspaces (id, name, logo) values ($1, $2, $3)", [wsId, name, logo]);
+  // 14 dies de prova amb tot inclòs, sense targeta.
+  await pool.query("insert into workspaces (id, name, logo, trial_ends_at) values ($1, $2, $3, now() + interval '14 days')", [wsId, name, logo]);
   await pool.query("insert into company_info (workspace_id) values ($1) on conflict do nothing", [wsId]);
   await pool.query(
     `update profiles set role='manager', workspace_id=$1, agency_owner=true, agency_role='Músic i gestor',

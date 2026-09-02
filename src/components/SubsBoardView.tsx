@@ -7,13 +7,15 @@ import { personPhotoDataUri, instrumentIconFor } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { formatDate } from "@/lib/format";
 import { addTrustedBackupAction } from "@/app/(app)/grup/actions";
+import PlanLock from "@/components/PlanLock";
+import type { BillingInfo } from "@/lib/plans";
 
 type BandOpt = { id: string; name: string; backups: string[] };
 
 // Borsa de suplents per al gestor: filtre per instrument i cerca, targeta
 // per músic amb el que ha volgut compartir, i alta com a suplent de
 // confiança del grup que es triï.
-export default function SubsBoardView({ candidates, bands, today }: { candidates: SubCandidate[]; bands: BandOpt[]; today: string }) {
+export default function SubsBoardView({ candidates, bands, today, billing, canUpgrade = true }: { candidates: SubCandidate[]; bands: BandOpt[]; today: string; billing?: BillingInfo; canUpgrade?: boolean }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [instrument, setInstrument] = useState("");
@@ -54,6 +56,9 @@ export default function SubsBoardView({ candidates, bands, today }: { candidates
         </div>
       </div>
 
+      {billing && !billing.caps.subsBoard ? (
+        <PlanLock billing={billing} feature="subsBoard" canUpgrade={canUpgrade} title="Borsa de suplents d'Escenari" description="Músics disponibles per a suplències, amb instruments, disponibilitat i contacte, per afegir-los als suplents de confiança dels teus grups. Inclòs als plans d'Agència." />
+      ) : (<>
       <div className="filter-bar subs-filterbar">
         <input className="input search" type="text" placeholder="Cerca per nom, instrument o grup…" value={search} onChange={(e) => setSearch(e.target.value)} />
         <select className="input" value={instrument} onChange={(e) => setInstrument(e.target.value)}>
@@ -121,6 +126,7 @@ export default function SubsBoardView({ candidates, bands, today }: { candidates
           })}
         </div>
       )}
+      </>)}
     </div>
   );
 }

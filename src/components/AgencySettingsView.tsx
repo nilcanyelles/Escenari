@@ -5,9 +5,76 @@ import { useRouter } from "next/navigation";
 import type { AgencyMember, AgencyInvitation } from "@/lib/agency";
 import { personPhotoDataUri, bandPhotoDataUri } from "@/lib/tags";
 import { inviteAgencyMembersAction, revokeAgencyInvitationAction, setAgencyMemberAction, removeAgencyMemberAction } from "@/app/(app)/configuracio/actions";
+import { createPortalSessionAction } from "@/app/(app)/billing-actions";
+import { PLANS, AGENCY_TIERS, type BillingInfo, type PlanKey } from "@/lib/plans";
 import CreateGroupModal from "@/components/CreateGroupModal";
+import UpgradeModal from "@/components/UpgradeModal";
+import PlanLock from "@/components/PlanLock";
 
 type BandOpt = { id: string; name: string; logo: string; color1: string };
+
+// El pla d'agència immediatament superior a l'actual (per quan s'arriba al
+// límit de grups).
+function nextAgencyTier(current: PlanKey): PlanKey {
+  const i = AGENCY_TIERS.indexOf(current);
+  if (i < 0) return "agencia_s";
+  return AGENCY_TIERS[Math.min(i + 1, AGENCY_TIERS.length - 1)];
+}
+
+// Targeta del pla: què tens, fins quan, i els botons per canviar-lo o
+// gestionar la subscripció (Stripe).
+function BillingCard({ billing, isOwner, notice }: { billing: BillingInfo; isOwner: boolean; notice: string }) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [portalBusy, setPortalBusy] = useState(false);
+  const [error, setError] = useState("");
+  const fmt = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString("ca-ES") : "");
+  let line = "";
+  if (billing.status === "comped") line = "Sense cost.";
+  else if (billing.trialActive) line = `Prova amb tot inclòs fins al ${fmt(billing.trialEndsAt)}. Després, pla gratuït: 1 grup, 3 enllaços actius, sense contractes ni factures.`;
+  else if (billing.status === "past_due") line = "Hi ha un pagament pendent — revisa la targeta des de “Gestiona la subscripció”.";
+  else if (billing.plan !== "free" && billing.status === "active") line = `Es renova el ${fmt(billing.currentPeriodEnd)}.`;
+  else if (billing.plan !== "free" && ["canceled", "unpaid", "incomplete_expired"].includes(billing.status)) line = "La subscripció s'ha cancel·lat: tornes al pla gratuït.";
+  else if (billing.founder) line = "Membre fundador: pla Grup de per vida.";
+  else line = "Pla gratuït: 1 grup, 3 enllaços actius per grup, sense contractes ni factures.";
+
+  async function portal() {
+    setPortalBusy(true);
+    setError("");
+    const res = await createPortalSessionAction();
+    if (res.url) { window.location.href = res.url; return; }
+    setError(res.error || "No s'ha pogut obrir el portal.");
+    setPortalBusy(false);
+  }
+
+  return (
+    <div className="panel bill-card">
+      {notice === "ok" && <div className="sx-notice ok" style={{ marginBottom: 12 }}>Pagament completat — gràcies! El pla ja està actiu.</div>}
+      {notice === "cancel" && <div className="sx-notice err" style={{ marginBottom: 12 }}>Pagament cancel·lat: no s&apos;ha canviat res.</div>}
+      <div className="bill-row">
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="form-label">El teu pla</div>
+          <div className="bill-plan">
+            {PLANS[billing.effective].label}
+            {billing.trialActive && <span className="badge ag-owner-badge" style={{ marginLeft: 8 }}>prova</span>}
+            {billing.founder && <span className="badge ag-owner-badge" style={{ marginLeft: 8 }}>fundador</span>}
+            {billing.status === "past_due" && <span className="badge" style={{ marginLeft: 8, background: "oklch(0.68 0.18 25 / 0.16)", color: "var(--red)" }}>pagament pendent</span>}
+          </div>
+          <div className="t-dim" style={{ fontSize: 12.5 }}>{line}</div>
+          {error && <div className="fin-neg" style={{ fontSize: 12.5, marginTop: 4 }}>{error}</div>}
+        </div>
+        {isOwner && billing.status !== "comped" && (
+          <div className="bill-actions">
+            <button type="button" className="btn-save" onClick={() => setUpgradeOpen(true)}>{billing.plan === "free" ? "Tria un pla" : "Canvia de pla"}</button>
+            {billing.hasSubscription && (
+              <button type="button" className="btn-outline" disabled={portalBusy} onClick={portal}>{portalBusy ? "Obrint…" : "Gestiona la subscripció"}</button>
+            )}
+          </div>
+        )}
+      </div>
+      {upgradeOpen && <UpgradeModal billing={billing} onClose={() => setUpgradeOpen(false)} />}
+    </div>
+  );
+}
 
 function CopyBtn({ text, small }: { text: string; small?: boolean }) {
   const [copied, setCopied] = useState(false);
@@ -109,13 +176,23 @@ function MemberRow({ m, bands, canEdit, isMe }: { m: AgencyMember; bands: BandOp
   );
 }
 
-export default function AgencySettingsView({ agency, me, members, invitations, bands }: {
+export default function AgencySettingsView({ agency, me, members, invitations, bands, billing, groups, billingNotice = "" }: {
   agency: { name: string; logo: string };
   me: { clerkUserId: string; agencyOwner: boolean; canCreateGroups: boolean };
   members: AgencyMember[];
   invitations: AgencyInvitation[];
   bands: BandOpt[];
+  billing: BillingInfo;
+  groups: { count: number; cap: number | null; reached: boolean };
+  billingNotice?: string;
 }) {
+  const canInvite = billing.caps.agency;
+  const createBtn = (cls: string) => groups.reached ? (
+    <PlanLock billing={billing} required={nextAgencyTier(billing.effective)} compact canUpgrade={me.agencyOwner}
+      title={`El pla ${PLANS[billing.effective].label} permet ${groups.cap} ${groups.cap === 1 ? "grup" : "grups"}`} />
+  ) : (
+    <button type="button" className={cls} onClick={() => setCreateOpen(true)}>+ Crea un grup</button>
+  );
   const router = useRouter();
   const [createOpen, setCreateOpen] = useState(false);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -143,8 +220,10 @@ export default function AgencySettingsView({ agency, me, members, invitations, b
           <div className="sx-title" style={{ fontSize: 22 }}>{agency.name || "La teva agència"}</div>
           <div className="t-dim" style={{ fontSize: 12.5 }}>Configuració · el nom i el logotip es canvien des del teu perfil (a dalt a la dreta)</div>
         </div>
-        {me.canCreateGroups && <button type="button" className="glow-cta" onClick={() => setCreateOpen(true)}>+ Crea un grup</button>}
+        {me.canCreateGroups && createBtn("glow-cta")}
       </div>
+
+      <BillingCard billing={billing} isOwner={me.agencyOwner} notice={billingNotice} />
 
       {/* Membres */}
       <div className="panel">
@@ -155,10 +234,12 @@ export default function AgencySettingsView({ agency, me, members, invitations, b
               {me.agencyOwner ? "Decideix què pot fer cadascú: crear grups, i veure tots els grups o només els que li assignis." : "Només qui mana a l'agència pot canviar permisos."}
             </div>
           </div>
-          {me.agencyOwner && <button type="button" className="btn-outline" onClick={() => setInviteOpen((v) => !v)}>{inviteOpen ? "Tanca" : "+ Convida algú"}</button>}
+          {me.agencyOwner && (canInvite
+            ? <button type="button" className="btn-outline" onClick={() => setInviteOpen((v) => !v)}>{inviteOpen ? "Tanca" : "+ Convida algú"}</button>
+            : <PlanLock billing={billing} feature="agency" compact canUpgrade title="Convidar membres de l'agència necessita un pla d'Agència" />)}
         </div>
 
-        {inviteOpen && me.agencyOwner && (
+        {inviteOpen && me.agencyOwner && canInvite && (
           <div className="ag-invite-form">
             <div className="fin-form-grid">
               <input className="field-input compact-field" placeholder="Nom *" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
@@ -231,8 +312,11 @@ export default function AgencySettingsView({ agency, me, members, invitations, b
       {/* Grups de l'agència */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 12 }}>
-          <div className="panel-title">Grups de l&apos;agència</div>
-          {me.canCreateGroups && <button type="button" className="btn-outline" onClick={() => setCreateOpen(true)}>+ Crea un grup</button>}
+          <div>
+            <div className="panel-title">Grups de l&apos;agència</div>
+            <div className="t-dim" style={{ fontSize: 12.5 }}>{groups.count} {groups.count === 1 ? "grup" : "grups"}{groups.cap != null ? ` de ${groups.cap} del pla ${PLANS[billing.effective].label}` : ""}</div>
+          </div>
+          {me.canCreateGroups && createBtn("btn-outline")}
         </div>
         {bands.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Encara no hi ha cap grup. Crea el primer: nom, logotip, colors i el seu equip, amb un enllaç per a cadascú.</div>

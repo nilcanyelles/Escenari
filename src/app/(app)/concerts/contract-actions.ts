@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireFeature } from "@/lib/billing";
 import { appBaseUrl } from "@/lib/social-oauth";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { formatDateLong, capitalize } from "@/lib/format";
@@ -14,6 +15,7 @@ import type { ContractData } from "@/lib/types";
 
 async function ownConcert(concertId: string) {
   const p = await requireManagerAction();
+  await requireFeature(p.workspaceId, "contracts");
   const c = (await db().query(
     "select id, band_name, date, city, venue, contract_token from concerts where id=$1 and workspace_id=$2",
     [concertId, p.workspaceId]
