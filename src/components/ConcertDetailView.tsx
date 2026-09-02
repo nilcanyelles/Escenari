@@ -28,6 +28,8 @@ import { publishBackupRequestAction, setBackupRequestStatusAction, saveDefaultPa
 import type { Transaction } from "@/lib/finance";
 import { saveTransactionAction, deleteTransactionAction } from "@/app/(app)/estadistiques/finance-actions";
 import RouteSheetEditor from "@/components/RouteSheetEditor";
+import FoldPanel from "@/components/FoldPanel";
+import ContractPanel from "@/components/ContractPanel";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
 import ConcertPosterModal from "@/components/ConcertPosterModal";
@@ -1090,8 +1092,7 @@ export default function ConcertDetailView({
 
       {/* Rider i setlist */}
       {tab === "info" && (
-      <div className="panel cd-section" id="cd-material">
-        <div className="panel-title cd-section-title">Rider i setlist</div>
+      <FoldPanel id="cd-material" title="Rider i setlist" summary={`${selectedRider ? selectedRider.name : "sense rider"} · ${selectedSetlist ? selectedSetlist.name : "sense setlist"}`} defaultOpen={!!(selectedRider || selectedSetlist)}>
         <div className="cd-material-grid">
           <div className="cd-material-col">
             <div className="cd-subtitle">
@@ -1230,14 +1231,13 @@ export default function ConcertDetailView({
             )}
           </div>
         </div>
-      </div>
+      </FoldPanel>
       )}
 
-      {/* Facturació */}
+      {/* Facturació: cada bloc és un desplegable amb el resum a la capçalera */}
       {tab === "facturacio" && (
-      <div className="panel cd-section" id="cd-facturacio">
-        <div className="panel-title cd-section-title">Facturació</div>
-
+      <div className="cd-stack" id="cd-facturacio">
+        <FoldPanel title="Client i factura" summary={invoice ? `${invoice.id} · ${invoice.state}` : "Sense factura"} defaultOpen>
         <div className="cd-fact-grid">
           <div className="cd-fact-col">
             <div className="cd-subtitle">Dades del client</div>
@@ -1409,10 +1409,10 @@ export default function ConcertDetailView({
           </div>
         </div>
 
+        </FoldPanel>
+
         {/* Despeses: es resten del caixet abans de calcular el repartiment */}
-        <div className="cd-subtitle" style={{ marginTop: 22 }}>
-          Despeses{expenseSaving ? " · desant…" : ""}
-        </div>
+        <FoldPanel title="Despeses" summary={expenseList.length ? `${expenseList.length} · ${formatCurrency(totalExpenses)}${expenseSaving ? " · desant…" : ""}` : "Cap despesa"} defaultOpen={expenseList.length > 0}>
         {expenseList.length > 0 && (
           <div className="cd-payout-list" style={{ marginBottom: 10 }}>
             {expenseList.map((t) => (
@@ -1444,9 +1444,11 @@ export default function ConcertDetailView({
           <button type="button" className="btn-outline" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>+ Afegeix despesa</button>
         </div>
 
+        </FoldPanel>
+
         {/* Comissió de l'agència: sempre a part, mai barrejada amb el
             repartiment de músics i crew. */}
-        <div className="cd-subtitle" style={{ marginTop: 22 }}>Comissió de l&apos;agència{payoutsSaving ? " · desant…" : ""}</div>
+        <FoldPanel title="Comissió de l'agència" summary={`${formatCurrency(agencyAmt || 0)}${agencyPct != null ? ` · ${round2(agencyPct)} %` : ""}${payoutsSaving ? " · desant…" : ""}`} defaultOpen={false}>
         {totalExpenses > 0 && (
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, margin: "6px 0 10px" }}>
             <input
@@ -1488,10 +1490,13 @@ export default function ConcertDetailView({
           </div>
         </div>
 
+        </FoldPanel>
+
         {/* Repartiment entre músics i crew: el 100% és el que quedi un cop
             tret el tall de l'agència. */}
-        <div className="cd-subtitle" style={{ marginTop: 22, display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
-          <span>Repartiment entre músics i crew</span>
+        <FoldPanel title="Repartiment entre músics i crew" summary={bandNames.length ? `${bandNames.length} persones · ${formatCurrency(bandTotal)} de ${formatCurrency(bandPool)}` : "Sense participants"} defaultOpen={false}>
+        <div className="cd-subtitle" style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 10 }}>
+          <span className="t-dim" style={{ fontWeight: 400 }}>Imports o percentatges de cadascú</span>
           <button type="button" className="link-btn" onClick={equalSplit}>reparteix a parts iguals</button>
           {band && (
             <button type="button" className="link-btn" disabled={savingDefaultSplit} onClick={saveAsDefaultSplit}>
@@ -1564,16 +1569,19 @@ export default function ConcertDetailView({
             </div>
           </>
         )}
+        </FoldPanel>
+
+        {/* Contracte d'actuació: amb les dades del concert, per enviar al client */}
+        <FoldPanel title="Contracte" summary={concert.contract ? (concert.contractToken ? "Generat · amb enllaç" : "Redactat") : "Sense generar"} defaultOpen={false}>
+          <ContractPanel concert={liveConcert} companyInfo={companyInfo} client={{ name: clientKey, nom: clientForm.nom, cif: clientForm.cif, address: clientForm.address }} emailReady={emailReady} />
+        </FoldPanel>
       </div>
       )}
 
       {/* Comparteix: a Informació i també al final del Full de ruta */}
       {(tab === "info" || tab === "ruta") && (
-      <div className="panel cd-section" id="cd-comparteix">
-        <div className="panel-header-row cd-section-title">
-          <div className="panel-title">Comparteix — formularis per omplir dades</div>
-          {!newLinkOpen && <button type="button" className="glow-cta" onClick={() => setNewLinkOpen(true)}>+ Nou enllaç</button>}
-        </div>
+      <FoldPanel id="cd-comparteix" title="Comparteix — formularis per omplir dades" summary={shareLinks.length ? `${shareLinks.length} ${shareLinks.length === 1 ? "enllaç" : "enllaços"}` : "Cap enllaç"} defaultOpen={shareLinks.length > 0 || newLinkOpen}
+        action={!newLinkOpen && <button type="button" className="glow-cta" onClick={() => setNewLinkOpen(true)}>+ Nou enllaç</button>}>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
           Genera un enllaç caducable perquè l&apos;ajuntament, el promotor o la sala omplin la informació que falta.
           El formulari es pot editar mentre l&apos;enllaç sigui vàlid, encara que ja s&apos;hagi enviat.
@@ -1668,7 +1676,7 @@ export default function ConcertDetailView({
             })}
           </div>
         )}
-      </div>
+      </FoldPanel>
       )}
 
       {rsPreviewOpen && (

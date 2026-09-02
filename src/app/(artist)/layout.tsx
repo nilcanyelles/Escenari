@@ -37,7 +37,9 @@ export default async function ArtistGroupLayout({ children }: { children: React.
         { href: "/artista/perfil", label: "El meu perfil", emoji: "👤" },
         { href: "/artista/biblioteca", label: "Biblioteca de cançons", emoji: "🎵" },
         { href: "/suplencies", label: "Suplències", emoji: "🔄" },
-        { href: "/els-meus-grups", label: "Uneix-te a un grup", emoji: "➕" },
+        { href: "/els-meus-grups", label: profile.workspaceId ? "Els meus grups" : "Uneix-te o crea un grup", emoji: "➕" },
+        // Qui també gestiona (el seu grup o una agència) salta a l'àrea de gestió.
+        ...(profile.workspaceId ? [{ href: "/resum", label: "Gestió del grup", emoji: "🏢" }] : []),
       ]}
       routeBase="/artista"
       homeHref="/artista/perfil"

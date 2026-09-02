@@ -5,6 +5,7 @@ import { getArtistEditableBands } from "@/lib/material-data";
 import { bandPhotoDataUri } from "@/lib/tags";
 import InvitationCard from "./InvitationCard";
 import JoinByCode from "./JoinByCode";
+import CreateGroupLauncher from "./CreateGroupLauncher";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,11 @@ export default async function ArtistGroupsPage() {
 
   return (
     <div>
+      {/* Un músic sense grup propi (ni agència) en pot crear un, i el gestiona. */}
+      {profile.role === "artist" && !profile.workspaceId && (
+        <CreateGroupLauncher selfName={profile.name} selfInstruments={profile.instruments} />
+      )}
+
       {invitations.length > 0 && (
         <>
           <div className="artist-section-title">Invitacions pendents</div>

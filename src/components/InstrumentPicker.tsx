@@ -2,11 +2,12 @@
 
 import { useMemo, useState } from "react";
 import { INSTRUMENT_CATEGORIES, InstrumentSvg, instrumentIconKey } from "@/lib/instruments";
-import { instrumentIconFor } from "@/lib/tags";
+import { instrumentIconFor, customInstrumentList, registerCustomInstruments, INSTRUMENT_ICON_CHOICES } from "@/lib/tags";
 import { normalize } from "@/lib/text";
+import { addCustomInstrumentAction } from "@/app/instrument-actions";
 
-// Per als pocs instruments amb una imatge real pujada (public/instruments/),
-// es mostra aquesta abans que la icona vectorial genèrica.
+// Per als instruments amb una imatge (public/instruments/), es mostra
+// aquesta abans que la icona vectorial genèrica.
 export function InstrumentIcon({ name, icon, size = 15 }: { name: string; icon: Parameters<typeof InstrumentSvg>[0]["icon"]; size?: number }) {
   const photo = instrumentIconFor(name);
   if (photo) return <img className="instr-photo-icon" src={photo} alt="" style={{ width: size, height: size }} />;
@@ -14,7 +15,9 @@ export function InstrumentIcon({ name, icon, size = 15 }: { name: string; icon: 
 }
 
 // Selector d'instruments: cerca en viu, agrupat per família, selecció múltiple
-// amb un clic. Els que no són al catàleg es poden afegir com a text lliure.
+// amb un clic. Els que no són al catàleg s'afegeixen com a instrument
+// personalitzat, triant-li la icona d'un altre instrument; a partir
+// d'aleshores surten a "Personalitzats" per a tothom.
 export default function InstrumentPicker({
   value,
   onChange,
@@ -23,21 +26,31 @@ export default function InstrumentPicker({
   onChange: (next: string[]) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [customTick, setCustomTick] = useState(0);
+  const [iconPickerFor, setIconPickerFor] = useState<string | null>(null);
+  const [savingCustom, setSavingCustom] = useState(false);
   const q = normalize(query.trim());
 
   const selectedLower = useMemo(() => new Set(value.map((v) => v.toLowerCase())), [value]);
 
+  const allCategories = useMemo(() => {
+    const custom = customInstrumentList();
+    if (!custom.length) return INSTRUMENT_CATEGORIES;
+    return INSTRUMENT_CATEGORIES.concat([{ name: "Personalitzats", items: custom.map((c) => ({ name: c.name, icon: instrumentIconKey(c.name) })) }]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customTick]);
+
   const categories = useMemo(() => {
-    if (!q) return INSTRUMENT_CATEGORIES;
-    return INSTRUMENT_CATEGORIES.map((c) => ({
+    if (!q) return allCategories;
+    return allCategories.map((c) => ({
       name: c.name,
       items: c.items.filter((i) => normalize(i.name).includes(q)),
     })).filter((c) => c.items.length > 0);
-  }, [q]);
+  }, [q, allCategories]);
 
   const exactMatch = useMemo(
-    () => INSTRUMENT_CATEGORIES.some((c) => c.items.some((i) => normalize(i.name) === q)),
-    [q]
+    () => allCategories.some((c) => c.items.some((i) => normalize(i.name) === q)),
+    [q, allCategories]
   );
 
   function toggle(name: string) {
@@ -48,11 +61,24 @@ export default function InstrumentPicker({
     }
   }
 
-  function addCustom() {
+  function startCustom() {
     const custom = query.trim();
     if (!custom || selectedLower.has(custom.toLowerCase())) return;
-    onChange([...value, custom]);
+    setIconPickerFor(custom);
+  }
+
+  async function confirmCustom(icon: string) {
+    const name = iconPickerFor;
+    if (!name) return;
+    setSavingCustom(true);
+    const res = await addCustomInstrumentAction(name, icon);
+    if (!res.ok) { alert(res.error); setSavingCustom(false); return; }
+    registerCustomInstruments([{ name, icon }]);
+    setCustomTick((t) => t + 1);
+    onChange([...value, name]);
+    setIconPickerFor(null);
     setQuery("");
+    setSavingCustom(false);
   }
 
   return (
@@ -78,39 +104,58 @@ export default function InstrumentPicker({
             const first = categories[0]?.items[0];
             if (first && exactMatch) toggle(first.name);
             else if (first && categories.length === 1 && categories[0].items.length === 1) toggle(first.name);
-            else if (!first) addCustom();
+            else if (!first) startCustom();
           }
         }}
         placeholder="Cerca un instrument…"
       />
-      <div className="instr-panel">
-        {categories.map((c) => (
-          <div key={c.name}>
-            <div className="instr-cat-title">{c.name}</div>
-            <div className="instr-grid">
-              {c.items.map((i) => {
-                const active = selectedLower.has(i.name.toLowerCase());
-                return (
-                  <button
-                    key={i.name}
-                    type="button"
-                    className={"instr-pill" + (active ? " active" : "")}
-                    onClick={() => toggle(i.name)}
-                  >
-                    <InstrumentIcon name={i.name} icon={i.icon} />
-                    {i.name}
-                  </button>
-                );
-              })}
-            </div>
+      {iconPickerFor ? (
+        <div className="instr-panel instr-custom-panel">
+          <div className="instr-cat-title">Tria una icona per a «{iconPickerFor}»</div>
+          <div className="t-dim" style={{ fontSize: 12 }}>Fes servir la d&apos;un instrument semblant: es veurà a tot arreu on surti «{iconPickerFor}».</div>
+          <div className="instr-icon-grid">
+            {INSTRUMENT_ICON_CHOICES.map((c) => (
+              <button key={c.file} type="button" className="instr-icon-choice" disabled={savingCustom} title={c.label} onClick={() => confirmCustom(c.file)}>
+                <img src={"/instruments/" + c.file} alt="" />
+                <span>{c.label}</span>
+              </button>
+            ))}
           </div>
-        ))}
-        {categories.length === 0 && (
-          <button type="button" className="btn-ghost-sm" onClick={addCustom}>
-            + Afegeix «{query.trim()}»
-          </button>
-        )}
-      </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button type="button" className="btn-outline" disabled={savingCustom} onClick={() => setIconPickerFor(null)}>Cancel·la</button>
+            <button type="button" className="btn-ghost-sm" disabled={savingCustom} onClick={() => confirmCustom("")}>Sense icona</button>
+          </div>
+        </div>
+      ) : (
+        <div className="instr-panel">
+          {categories.map((c) => (
+            <div key={c.name}>
+              <div className="instr-cat-title">{c.name}</div>
+              <div className="instr-grid">
+                {c.items.map((i) => {
+                  const active = selectedLower.has(i.name.toLowerCase());
+                  return (
+                    <button
+                      key={i.name}
+                      type="button"
+                      className={"instr-pill" + (active ? " active" : "")}
+                      onClick={() => toggle(i.name)}
+                    >
+                      <InstrumentIcon name={i.name} icon={i.icon} />
+                      {i.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+          {q && !exactMatch && (
+            <button type="button" className="btn-ghost-sm" onClick={startCustom}>
+              + Afegeix «{query.trim()}» com a instrument nou
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

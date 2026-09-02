@@ -91,6 +91,27 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     return JSON.stringify(stripSectionForDefault(section, rsf[section])) !== sectionBaselineRef.current[section];
   }
 
+  // Camps omplerts / camps a omplir de cada secció (mateix criteri que el
+  // percentatge global del full de ruta).
+  function sectionStats(section: Section): { filled: number; total: number } {
+    let total = 0, filled = 0;
+    const check = (v: unknown) => { total++; if (v && String(v).trim()) filled++; };
+    if (section === "lloc") rsf.lloc.forEach((it) => check(it.value));
+    else if (section === "contacts") rsf.contacts.forEach((it) => { check(it.role); check(it.name); check(it.phone); check(it.company); });
+    else if (section === "schedule") rsf.schedule.forEach((it) => { check(it.start); check(it.end); });
+    else if (section === "hospitalitat") rsf.hospitalitat.forEach((it) => check(it.value));
+    else rsf.tecnic.forEach((it) => { if (!(it.label && it.label.trim().toLowerCase() === "pantalla led")) check(it.value); });
+    return { filled, total };
+  }
+  const [openSections, setOpenSections] = useState<Record<Section, boolean>>(() => {
+    // La primera secció incompleta, oberta; la resta, plegades.
+    const order: Section[] = ["lloc", "contacts", "schedule", "hospitalitat", "tecnic"];
+    const out: Record<Section, boolean> = { lloc: false, contacts: false, schedule: false, hospitalitat: false, tecnic: false };
+    const firstIncomplete = order.find((s) => { const st = sectionStats(s); return st.total === 0 || st.filled < st.total; });
+    out[firstIncomplete || "lloc"] = true;
+    return out;
+  });
+
   async function saveSectionAsDefault(section: Section) {
     const stripped = stripSectionForDefault(section, rsf[section]);
     await saveDefaultRouteSheetSectionAction(concert.bandId, section, stripped as unknown[]);
@@ -487,46 +508,65 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     );
   });
 
+  // Cada secció és un desplegable amb la seva icona, el títol i quants camps
+  // hi ha omplerts: es veu d'un cop d'ull què falta sense haver-ho d'obrir.
+  // Per defecte s'obre la primera secció incompleta; la resta, plegades.
+  const sections: { key: Section; title: string; stats: { filled: number; total: number }; body: React.ReactNode; addLabel: string }[] = [
+    { key: "lloc", title: "Lloc", stats: sectionStats("lloc"), addLabel: "+ Afegeix camp",
+      body: <div className="rs-repeater" data-rs-section="lloc">{llocRows()}</div> },
+    { key: "contacts", title: "Contactes", stats: sectionStats("contacts"), addLabel: "+ Afegeix contacte",
+      body: <div className="rs-repeater" data-rs-section="contacts">{contactRows}</div> },
+    { key: "schedule", title: "Horaris", stats: sectionStats("schedule"), addLabel: "+ Afegeix fase",
+      body: (
+        <>
+          <div className="rs-phase-header rs-phase-header-inner">
+            <span></span>
+            <span className="rs-col-label">Fase</span>
+            <span className="rs-col-label">Inici</span>
+            <span className="rs-col-label">Fi</span>
+            <span></span>
+          </div>
+          <div className="rs-repeater" data-rs-section="schedule">{phaseRows}</div>
+        </>
+      ) },
+    { key: "hospitalitat", title: "Hospitalitat", stats: sectionStats("hospitalitat"), addLabel: "+ Afegeix camp",
+      body: <div className="rs-repeater" data-rs-section="hospitalitat">{regularHospRows}{hotelBlock}</div> },
+    { key: "tecnic", title: "Detalls tècnics", stats: sectionStats("tecnic"), addLabel: "+ Afegeix camp",
+      body: <div className="rs-repeater" data-rs-section="tecnic">{fieldRows("tecnic", rsf.tecnic)}</div> },
+  ];
+  const allOpen = sections.every((s) => openSections[s.key]);
+
   return (
-    <div style={{ position: "relative" }}>
+    <div style={{ position: "relative" }} className="rs-folds">
       {saving && <div className="cf-saving-indicator rs-saving-float">Desant…</div>}
-
-      <div className="rs-section-title">
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><SectionIcon title="Lloc" /><span>Lloc</span></span>
-        <SectionDefaultBtn section="lloc" />
+      <div className="rs-folds-tools">
+        <button type="button" className="link-btn" onClick={() => setOpenSections({ lloc: !allOpen, contacts: !allOpen, schedule: !allOpen, hospitalitat: !allOpen, tecnic: !allOpen })}>
+          {allOpen ? "Plega-ho tot" : "Desplega-ho tot"}
+        </button>
       </div>
-      <div className="rs-repeater" data-rs-section="lloc">{llocRows()}</div>
-      <button type="button" className="rs-add-btn" onClick={() => addItem("lloc")}>+ Afegeix camp</button>
-
-      <div className="rs-section-title">
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><SectionIcon title="Contactes" /><span>Contactes</span></span>
-        <SectionDefaultBtn section="contacts" />
-      </div>
-      <div className="rs-repeater" data-rs-section="contacts">{contactRows}</div>
-      <button type="button" className="rs-add-btn" onClick={() => addItem("contacts")}>+ Afegeix contacte</button>
-
-      <div className="rs-section-title rs-phase-header">
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><SectionIcon title="Horaris" /><span>Horaris</span><SectionDefaultBtn section="schedule" /></span>
-        <span className="rs-col-label">Inici</span>
-        <span className="rs-col-label">Fi</span>
-        <span></span>
-      </div>
-      <div className="rs-repeater" data-rs-section="schedule">{phaseRows}</div>
-      <button type="button" className="rs-add-btn" onClick={() => addItem("schedule")}>+ Afegeix fase</button>
-
-      <div className="rs-section-title">
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><SectionIcon title="Hospitalitat" /><span>Hospitalitat</span></span>
-        <SectionDefaultBtn section="hospitalitat" />
-      </div>
-      <div className="rs-repeater" data-rs-section="hospitalitat">{regularHospRows}{hotelBlock}</div>
-      <button type="button" className="rs-add-btn" onClick={() => addItem("hospitalitat")}>+ Afegeix camp</button>
-
-      <div className="rs-section-title">
-        <span style={{ display: "flex", alignItems: "center", gap: 6 }}><SectionIcon title="Detalls tècnics" /><span>Detalls tècnics</span></span>
-        <SectionDefaultBtn section="tecnic" />
-      </div>
-      <div className="rs-repeater" data-rs-section="tecnic">{fieldRows("tecnic", rsf.tecnic)}</div>
-      <button type="button" className="rs-add-btn" onClick={() => addItem("tecnic")}>+ Afegeix camp</button>
+      {sections.map((s) => {
+        const open = !!openSections[s.key];
+        const complete = s.stats.total > 0 && s.stats.filled >= s.stats.total;
+        return (
+          <div key={s.key} className={"rs-fold" + (open ? " open" : "") + (complete ? " done" : "")}>
+            <button type="button" className="rs-fold-head" aria-expanded={open} onClick={() => setOpenSections((p) => ({ ...p, [s.key]: !p[s.key] }))}>
+              <span className="rs-fold-icon"><SectionIcon title={s.title} /></span>
+              <span className="rs-fold-title">{s.title}</span>
+              <span className={"rs-fold-badge" + (complete ? " done" : "")}>{complete ? "✓ complet" : `${s.stats.filled}/${s.stats.total}`}</span>
+              <span className="rs-fold-chevron" aria-hidden="true">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
+              </span>
+            </button>
+            {open && (
+              <div className="rs-fold-body">
+                <div className="rs-fold-toolbar"><SectionDefaultBtn section={s.key} /></div>
+                {s.body}
+                <button type="button" className="rs-add-btn" onClick={() => addItem(s.key)}>{s.addLabel}</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }

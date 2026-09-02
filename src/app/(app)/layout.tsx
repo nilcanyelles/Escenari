@@ -1,7 +1,7 @@
 import AppShell from "@/components/AppShell";
 import { today, formatDateFull, capitalize } from "@/lib/format";
 import { PAGES } from "@/lib/nav";
-import { requireManager } from "@/lib/current-user";
+import { requireManager, hasBandMembership } from "@/lib/current-user";
 import { getBands } from "@/lib/data";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 import { db } from "@/lib/db";
@@ -19,6 +19,8 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
     // L'agència del gestor: nom i logotip a dalt de la barra de grups.
     db().query("select name, logo from workspaces where id=$1", [profile.workspaceId]).then((r) => r.rows[0] || null),
   ]);
+  // Un gestor que també toca en algun grup té l'àrea de músic a un clic.
+  const isMusician = await hasBandMembership(profile.clerkUserId);
   const selectedBandId = resolveBandScope(bands, selectedRaw);
   // La pestanya "Grup" només existeix quan hi ha un grup seleccionat: amb
   // "tots els grups" no hi ha pàgina de grup.
@@ -39,7 +41,11 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "", tags: b.tags }))}
       selectedBandId={selectedBandId}
       agency={{ name: wsRow?.name || "", logo: wsRow?.logo || "" }}
-      subLinks={[{ href: "/suplents", label: "Suplències", emoji: "🔄" }]}
+      subLinks={[
+        { href: "/configuracio", label: "Configuració", emoji: "⚙️" },
+        { href: "/suplents", label: "Suplències", emoji: "🔄" },
+        ...(isMusician ? [{ href: "/artista", label: "Àrea de músic", emoji: "🎸" }] : []),
+      ]}
     >
       {children}
     </AppShell>
