@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireBandAccess as requirePerm } from "@/lib/band-access";
+import { getProfile } from "@/lib/current-user";
 import { uploadFileBlob, deleteFileBlob } from "@/lib/blob-storage";
 
 const MAX_FILE_BYTES = 100 * 1024 * 1024; // 100 MB per fitxer (backing tracks en WAV poden pesar bastant)
@@ -12,7 +13,7 @@ const MAX_TRACKS_PER_BAND = 150;
 // Comprova els límits de pistes d'àudio (no compta partitures/imatges/etc.,
 // només fitxers d'àudio lligats a una cançó) abans de deixar pujar-ne una
 // de nova. Retorna un missatge d'error si s'ha arribat al límit.
-export async function checkTrackLimits(bandId: string, songId: string | null): Promise<string | null> {
+export async function checkTrackLimits(bandId: string | null, songId: string | null): Promise<string | null> {
   if (songId) {
     const { rows } = await db().query(
       "select count(*)::int as n from files where song_id=$1 and mime like 'audio%'", [songId]
@@ -21,6 +22,7 @@ export async function checkTrackLimits(bandId: string, songId: string | null): P
       return `Aquesta cançó ja té el màxim de ${MAX_TRACKS_PER_SONG} pistes d'àudio. Elimina'n alguna abans d'afegir-ne una de nova.`;
     }
   }
+  if (!bandId) return null; // les cançons pròpies només tenen el límit per cançó
   const { rows } = await db().query(
     "select count(*)::int as n from files where band_id=$1 and song_id is not null and mime like 'audio%'", [bandId]
   );
@@ -37,14 +39,31 @@ async function requireBandAccess(bandId: string): Promise<{ workspaceId: string;
   return { workspaceId: access.workspaceId, who: access.profile.name };
 }
 
-function revalidateSongs(bandId: string) {
+// Igual, però també per a les cançons pròpies d'un músic (sense grup): allà
+// només hi pot tocar el seu propietari.
+async function requireSongAccess(bandId: string | null, songId?: string | null): Promise<{ workspaceId: string | null; who: string; ownerId: string }> {
+  if (bandId) {
+    const access = await requirePerm(bandId, "songs");
+    return { workspaceId: access.workspaceId, who: access.profile.name, ownerId: access.profile.clerkUserId };
+  }
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  if (songId) {
+    const row = (await db().query("select band_id, owner_clerk_user_id from songs where id=$1", [songId])).rows[0];
+    if (!row || row.band_id || row.owner_clerk_user_id !== profile.clerkUserId) throw new Error("Sense accés a aquesta cançó");
+  }
+  return { workspaceId: null, who: profile.name, ownerId: profile.clerkUserId };
+}
+
+function revalidateSongs(bandId: string | null) {
   revalidatePath("/grup");
-  revalidatePath("/material/" + bandId);
+  if (bandId) revalidatePath("/material/" + bandId);
+  revalidatePath("/artista/biblioteca");
 }
 
 export type SaveSongInput = {
   id: string | null;
-  bandId: string;
+  bandId: string | null; // null = cançó pròpia del músic
   title: string;
   artist: string;
   tempo: number;
@@ -57,28 +76,30 @@ export type SaveSongInput = {
 };
 
 export async function saveSongAction(input: SaveSongInput): Promise<{ id: string }> {
-  const { workspaceId } = await requireBandAccess(input.bandId);
+  const bandId = input.bandId || null;
+  const { workspaceId, ownerId } = await requireSongAccess(bandId, input.id);
   const pool = db();
+  const values = [
+    (input.title || "Sense títol").trim(), input.artist || "", input.tempo || 0, input.songKey || "",
+    input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "",
+    JSON.stringify(input.instruments || []),
+  ];
   if (input.id) {
     await pool.query(
       `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7, cover_url=$8, instruments=$9
-       where id=$10 and band_id=$11`,
-      [(input.title || "Sense títol").trim(), input.artist || "", input.tempo || 0, input.songKey || "",
-        input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "",
-        JSON.stringify(input.instruments || []), input.id, input.bandId]
+       where id=$10 and ($11::text is null or band_id=$11::text)`,
+      [...values, input.id, bandId]
     );
-    revalidateSongs(input.bandId);
+    revalidateSongs(bandId);
     return { id: input.id };
   }
   const id = "sg" + Date.now() + Math.floor(Math.random() * 1000);
   await pool.query(
-    `insert into songs (id, workspace_id, band_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url, instruments)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-    [id, workspaceId, input.bandId, (input.title || "Sense títol").trim(), input.artist || "",
-      input.tempo || 0, input.songKey || "", input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "",
-      JSON.stringify(input.instruments || [])]
+    `insert into songs (id, workspace_id, band_id, owner_clerk_user_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url, instruments)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+    [id, workspaceId, bandId, bandId ? null : ownerId, ...values]
   );
-  revalidateSongs(input.bandId);
+  revalidateSongs(bandId);
   return { id };
 }
 
@@ -97,8 +118,8 @@ export type SongLookupResult = {
   lyrics?: string;
 };
 
-export async function lookupSongAction(bandId: string, title: string, artist: string): Promise<SongLookupResult> {
-  await requireBandAccess(bandId);
+export async function lookupSongAction(bandId: string | null, title: string, artist: string): Promise<SongLookupResult> {
+  await requireSongAccess(bandId || null);
   const q = `${title} ${artist}`.trim();
   if (!q) return { found: false };
   const out: SongLookupResult = { found: false };
@@ -162,10 +183,11 @@ export async function lookupSongAction(bandId: string, title: string, artist: st
   return out;
 }
 
-export async function deleteSongAction(bandId: string, songId: string) {
-  await requireBandAccess(bandId);
-  await db().query("delete from songs where id=$1 and band_id=$2", [songId, bandId]);
-  revalidateSongs(bandId);
+export async function deleteSongAction(bandId: string | null, songId: string) {
+  const b = bandId || null;
+  await requireSongAccess(b, songId);
+  await db().query("delete from songs where id=$1 and ($2::text is null or band_id=$2::text)", [songId, b]);
+  revalidateSongs(b);
 }
 
 // Importació ràpida: una cançó per línia — "Títol; Artista; Durada; To; Tempo".
@@ -193,12 +215,12 @@ export async function importSongsAction(bandId: string, raw: string): Promise<{ 
 // El binari va a Vercel Blob, no a Postgres — així no consumeix la quota de
 // transferència de la base de dades.
 export async function uploadFileAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
-  const bandId = String(formData.get("bandId") || "");
+  const bandId = String(formData.get("bandId") || "") || null;
   const songId = String(formData.get("songId") || "") || null;
   const instrument = String(formData.get("instrument") || "");
   const file = formData.get("file") as File | null;
-  if (!bandId || !file) return { ok: false, error: "Falta el fitxer" };
-  const { workspaceId, who } = await requireBandAccess(bandId);
+  if ((!bandId && !songId) || !file) return { ok: false, error: "Falta el fitxer" };
+  const { workspaceId, who } = await requireSongAccess(bandId, songId);
   if (file.size > MAX_FILE_BYTES) return { ok: false, error: "Màxim 100 MB per fitxer" };
   const mime = file.type || "application/octet-stream";
   if (mime.startsWith("audio")) {
@@ -217,12 +239,25 @@ export async function uploadFileAction(formData: FormData): Promise<{ ok: boolea
   return { ok: true };
 }
 
-export async function deleteFileAction(bandId: string, fileId: string) {
-  await requireBandAccess(bandId);
-  const row = (await db().query("select blob_url from files where id=$1 and band_id=$2", [fileId, bandId])).rows[0];
-  await db().query("delete from files where id=$1 and band_id=$2", [fileId, bandId]);
+export async function deleteFileAction(bandId: string | null, fileId: string) {
+  const b = bandId || null;
+  let row: { blob_url?: string } | undefined;
+  if (b) {
+    await requireBandAccess(b);
+    row = (await db().query("select blob_url from files where id=$1 and band_id=$2", [fileId, b])).rows[0];
+    await db().query("delete from files where id=$1 and band_id=$2", [fileId, b]);
+  } else {
+    // Fitxer d'una cançó pròpia: només el seu propietari.
+    const { ownerId } = await requireSongAccess(null);
+    row = (await db().query(
+      "select f.blob_url from files f join songs s on s.id = f.song_id where f.id=$1 and s.band_id is null and s.owner_clerk_user_id=$2",
+      [fileId, ownerId]
+    )).rows[0];
+    if (!row) throw new Error("Sense accés a aquest fitxer");
+    await db().query("delete from files where id=$1", [fileId]);
+  }
   if (row?.blob_url) await deleteFileBlob(row.blob_url).catch(() => { /* orfe al blob, no bloquegem l'esborrat */ });
-  revalidateSongs(bandId);
+  revalidateSongs(b);
 }
 
 export type BandAudioUsage = {

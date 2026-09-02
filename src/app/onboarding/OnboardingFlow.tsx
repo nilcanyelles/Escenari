@@ -39,6 +39,8 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
 
   // Gestor
   const [managerName, setManagerName] = useState(defaultName);
+  const [agencyName, setAgencyName] = useState("");
+  const [agencyLogo, setAgencyLogo] = useState("");
   const [groupName, setGroupName] = useState("");
   const [logo, setLogo] = useState("");
   const [color1, setColor1] = useState(DEFAULT_COLOR1);
@@ -46,24 +48,27 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
   const [invites, setInvites] = useState<{ email: string; name: string }[]>([{ email: "", name: "" }]);
   const [joinCode, setJoinCode] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
+  const agencyFileRef = useRef<HTMLInputElement>(null);
 
-  function onLogoFile(file: File | undefined) {
+  // Llegeix un logotip i el redimensiona a 256px màx. perquè el dataURL que
+  // va a la BD sigui petit.
+  function readLogo(file: File | undefined, set: (dataUrl: string) => void) {
     if (!file) return;
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
-      // Redimensiona a 256px màx. perquè el dataURL que va a la BD sigui petit.
       const max = 256;
       const scale = Math.min(1, max / Math.max(img.width, img.height));
       const canvas = document.createElement("canvas");
       canvas.width = Math.max(1, Math.round(img.width * scale));
       canvas.height = Math.max(1, Math.round(img.height * scale));
       canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      setLogo(canvas.toDataURL("image/png"));
+      set(canvas.toDataURL("image/png"));
       URL.revokeObjectURL(url);
     };
     img.src = url;
   }
+  const onLogoFile = (file: File | undefined) => readLogo(file, setLogo);
 
   async function submitArtist() {
     if (busy) return;
@@ -88,6 +93,8 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
     try {
       const result = await completeManagerOnboardingAction({
         managerName,
+        agencyName,
+        agencyLogo,
         groupName,
         logo,
         color1,
@@ -157,14 +164,34 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
       {step === "manager" && (
         <div className="onboarding-form">
           <button className="onboarding-back" onClick={() => setStep("role")}>← Torna enrere</button>
-          <h1 className="onboarding-title">Crea el teu grup</h1>
+          <h1 className="onboarding-title">La teva agència i el primer grup</h1>
           <div className="field-group">
             <label className="field-label">El teu nom</label>
             <input className="field-input" value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="Nom i cognoms" />
           </div>
+          {/* L'agència (o empresa de gestió) és qui té tots els grups a dins:
+              surt a dalt de la barra de grups amb el seu logotip. */}
           <div className="field-group">
-            <label className="field-label">Nom del grup</label>
-            <input className="field-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Ex.: La Bona Party" autoFocus />
+            <label className="field-label">Agència o empresa per a la qual treballes</label>
+            <input className="field-input" value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="Ex.: Bona Nit Produccions" autoFocus />
+            <div className="logo-upload-row" style={{ marginTop: 8 }}>
+              {agencyLogo ? (
+                <img className="logo-preview" src={agencyLogo} alt="Logotip de l'agència" />
+              ) : (
+                <div className="logo-preview-empty">Sense<br />logo</div>
+              )}
+              <input ref={agencyFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => readLogo(e.target.files?.[0], setAgencyLogo)} />
+              <button className="btn-ghost-sm" style={{ width: "auto" }} type="button" onClick={() => agencyFileRef.current?.click()}>
+                {agencyLogo ? "Canvia el logotip de l'agència" : "Logotip de l'agència (opcional)"}
+              </button>
+              {agencyLogo && (
+                <button className="btn-icon-ghost" type="button" onClick={() => setAgencyLogo("")} aria-label="Treu el logotip">✕</button>
+              )}
+            </div>
+          </div>
+          <div className="field-group">
+            <label className="field-label">Nom del primer grup</label>
+            <input className="field-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Ex.: La Bona Party" />
           </div>
           <div className="field-group">
             <label className="field-label">Logotip</label>

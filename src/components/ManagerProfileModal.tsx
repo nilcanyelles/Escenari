@@ -15,21 +15,26 @@ export type ManagerProfile = {
 };
 
 // Edició del perfil del gestor des del menú de compte: foto, WhatsApp,
-// telèfon, correu i rol. Es reflecteix a l'equip tècnic de tots els grups.
-export default function ManagerProfileModal({ profile, onClose }: { profile: ManagerProfile; onClose: () => void }) {
+// telèfon, correu i rol (es reflecteix a l'equip tècnic de tots els grups),
+// i l'agència (nom i logotip de la barra de grups).
+export default function ManagerProfileModal({ profile, agency, onClose }: { profile: ManagerProfile; agency?: { name: string; logo: string } | null; onClose: () => void }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
+  const agencyLogoRef = useRef<HTMLInputElement>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [agencyLogoPreview, setAgencyLogoPreview] = useState<string | null>(null);
   const [form, setForm] = useState({
     role: profile.roleLabel || "Mànager",
     whatsapp: profile.whatsapp,
     phone: profile.phone,
     email: profile.email,
+    agencyName: agency?.name || "",
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const shownPhoto = photoPreview || profile.photoUrl;
+  const shownAgencyLogo = agencyLogoPreview || agency?.logo || "";
 
   async function handleSave() {
     setBusy(true);
@@ -39,8 +44,11 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
     fd.set("whatsapp", form.whatsapp);
     fd.set("phone", form.phone);
     fd.set("email", form.email);
+    if (agency) fd.set("agencyName", form.agencyName);
     const f = fileRef.current?.files?.[0];
     if (f) fd.set("photo", f);
+    const al = agencyLogoRef.current?.files?.[0];
+    if (al) fd.set("agencyLogo", al);
     const res = await saveManagerProfileAction(fd);
     setBusy(false);
     if (!res.ok) { setError(res.error || "No s'ha pogut desar"); return; }
@@ -90,6 +98,21 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
             <input className="field-input form-field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="tu@exemple.cat" />
             <div className="t-dim" style={{ fontSize: 11.5, marginTop: 4 }}>És el correu que veuen els grups — no canvia el correu d&apos;inici de sessió.</div>
           </div>
+          {agency && (
+            <div className="mp-agency">
+              <label className="form-label">Agència (surt a dalt de la barra de grups)</label>
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 4 }}>
+                <button type="button" className="mp-agency-logo" onClick={() => agencyLogoRef.current?.click()} title="Canvia el logotip de l'agència">
+                  {shownAgencyLogo ? <img src={shownAgencyLogo} alt="" /> : <span>🏢</span>}
+                </button>
+                <input className="field-input" style={{ flex: 1 }} value={form.agencyName} onChange={(e) => setForm({ ...form, agencyName: e.target.value })} placeholder="Nom de l'agència" />
+                <input
+                  ref={agencyLogoRef} type="file" accept="image/*" style={{ display: "none" }}
+                  onChange={(e) => { const f = e.target.files?.[0]; if (f) setAgencyLogoPreview(URL.createObjectURL(f)); }}
+                />
+              </div>
+            </div>
+          )}
           {error && <div className="fin-neg" style={{ fontSize: 13 }}>{error}</div>}
           <div className="modal-actions">
             <button type="button" className="btn-outline" onClick={onClose}>Cancel·la</button>

@@ -8,7 +8,7 @@ import { songDurationSecs, formatTotalDuration } from "@/lib/material-types";
 import type { LinkedMember } from "@/lib/group-data";
 import { emptyRiderContent } from "@/lib/material-types";
 import type { Song as LibrarySong } from "@/lib/songs";
-import { today, pad2, capitalize, MONTH_FULL, WEEKDAY_SHORT } from "@/lib/format";
+import { today, pad2, capitalize, formatDate, MONTH_FULL, WEEKDAY_SHORT } from "@/lib/format";
 import { saveRiderAction, deleteRiderAction, deleteSetlistAction, setBandEditorAction } from "@/app/(app)/grup/material-actions";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
 import SetlistEditor from "@/components/SetlistEditor";
@@ -49,9 +49,12 @@ function ShareBtns({ token, what, bandName }: { token: string; what: string; ban
   );
 }
 
-// Calendari mensual per assignar una setlist a un assaig o bolo: cada dia
-// amb un esdeveniment és clicable, i el que ja té aquesta setlist assignada
-// surt en verd amb un tick.
+const EVENT_KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", reunio: "Reunió", altre: "Esdeveniment" };
+
+// Calendari mensual per assignar una setlist a qualsevol esdeveniment (bolo,
+// assaig, reunió…): cada dia amb un esdeveniment és clicable, i el que ja
+// té aquesta setlist assignada surt en verd amb un tick; a sota, la llista
+// dels propers esdeveniments per assignar-la sense buscar el dia.
 function initialMonthOffset(concerts: Concert[], todayStr: string): number {
   if (!concerts.length) return 0;
   const upcoming = concerts.filter((c) => c.date >= todayStr).sort((a, b) => a.date.localeCompare(b.date))[0];
@@ -83,6 +86,10 @@ function AssignSetlistModal({ setlist, concerts, onClose, onDone }: {
 
   const eventsByDate: Record<string, Concert[]> = {};
   concerts.forEach((c) => { (eventsByDate[c.date] = eventsByDate[c.date] || []).push(c); });
+  const upcoming = concerts
+    .filter((c) => c.date >= todayStr)
+    .sort((a, b) => a.date.localeCompare(b.date) || (a.time || "").localeCompare(b.time || ""))
+    .slice(0, 14);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -92,7 +99,7 @@ function AssignSetlistModal({ setlist, concerts, onClose, onDone }: {
           <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={onClose}>✕</button>
         </div>
         <div className="t-dim" style={{ fontSize: 12.5, margin: "2px 0 14px" }}>
-          Clica l&apos;assaig o bolo on vols que surti aquesta setlist.
+          Clica el dia d&apos;un esdeveniment (bolo, assaig, reunió…) o tria&apos;l de la llista de sota.
         </div>
         <div className="assign-cal-nav">
           <button type="button" className="row-rs-btn" title="Mes anterior" onClick={() => setMonthOffset((v) => v - 1)}>‹</button>
@@ -113,7 +120,7 @@ function AssignSetlistModal({ setlist, concerts, onClose, onDone }: {
                 type="button"
                 className={"assign-cal-day" + (dateStr === todayStr ? " today" : "") + (evs.length ? " has" : "") + (assigned ? " assigned" : "")}
                 disabled={!ev || busyId === ev.id}
-                title={ev ? `${(ev.kind || "bolo") === "assaig" ? "Assaig" : "Bolo"}${ev.venue ? " · " + ev.venue : ""}` : undefined}
+                title={ev ? `${EVENT_KIND_LABELS[ev.kind || "bolo"] || "Bolo"}${ev.venue ? " · " + ev.venue : ""}` : undefined}
                 onClick={async () => {
                   if (!ev) return;
                   setBusyId(ev.id);
@@ -128,7 +135,26 @@ function AssignSetlistModal({ setlist, concerts, onClose, onDone }: {
           })}
         </div>
         {concerts.length === 0 && (
-          <div className="t-dim" style={{ fontSize: 12.5, marginTop: 10 }}>Aquest grup encara no té cap assaig ni bolo.</div>
+          <div className="t-dim" style={{ fontSize: 12.5, marginTop: 10 }}>Aquest grup encara no té cap esdeveniment.</div>
+        )}
+        {upcoming.length > 0 && (
+          <div className="assign-list">
+            <div className="instr-cat-title">Propers esdeveniments</div>
+            {upcoming.map((ev) => {
+              const assigned = ev.setlistId === setlist.id;
+              return (
+                <button
+                  key={ev.id} type="button" className={"assign-row" + (assigned ? " on" : "")}
+                  disabled={busyId === ev.id}
+                  onClick={async () => { setBusyId(ev.id); await onDone(ev.id, !assigned); setBusyId(null); }}
+                >
+                  <span className="assign-row-date">{formatDate(ev.date)}{ev.time ? ` · ${ev.time}` : ""}</span>
+                  <span className="assign-row-main">{EVENT_KIND_LABELS[ev.kind || "bolo"] || "Bolo"}{ev.venue || ev.city ? ` · ${ev.venue || ev.city}` : ""}</span>
+                  <span className="assign-row-state">{busyId === ev.id ? "…" : assigned ? "✓ Assignada" : "Assigna"}</span>
+                </button>
+              );
+            })}
+          </div>
         )}
       </div>
     </div>
@@ -259,8 +285,9 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
   const router = useRouter();
   const [editing, setEditing] = useState<{ setlist: Setlist | null } | null>(null);
   const [assigning, setAssigning] = useState<Setlist | null>(null);
-  // Assaigs i bolos d'aquest grup on es pot penjar una setlist.
-  const assignableConcerts = concerts.filter((c) => (c.kind || "bolo") === "bolo" || c.kind === "assaig");
+  // Qualsevol esdeveniment del grup (bolo, assaig, reunió…) pot portar la
+  // setlist — tret dels cancel·lats.
+  const assignableConcerts = concerts.filter((c) => c.status !== "cancel·lat");
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
@@ -287,8 +314,8 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
                   <div className="material-card-actions">
                     <button type="button" className="btn-outline stage-mode-btn" title="Mode escenari: lletres a pantalla completa amb auto-scroll" onClick={() => router.push(`/escenari-mode/${s.id}`)}>▶ Escenari</button>
                     <ShareBtns token={s.publicToken} what="Setlist" bandName={band.name} />
-                    {isManager && (
-                      <button type="button" className="row-rs-btn" title="Assigna a un assaig o bolo" aria-label="Assigna a un assaig o bolo"
+                    {(isManager || canEdit) && (
+                      <button type="button" className="row-rs-btn" title="Assigna a un esdeveniment (bolo, assaig, reunió…)" aria-label="Assigna a un esdeveniment"
                         onClick={() => setAssigning(s)}>
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line><line x1="12" y1="14" x2="12" y2="18"></line><line x1="10" y1="16" x2="14" y2="16"></line></svg>
                       </button>

@@ -11,7 +11,9 @@ export type SongFile = {
 
 export type Song = {
   id: string;
-  bandId: string;
+  // null a les cançons pròpies d'un músic (biblioteca), que no són de cap grup.
+  bandId: string | null;
+  ownerClerkUserId: string | null;
   title: string;
   artist: string;
   tempo: number;
@@ -30,34 +32,49 @@ function iso(v: Date | string): string {
   return typeof v === "string" ? v : v.toISOString();
 }
 
+const SONG_SELECT = `select s.*, coalesce(json_agg(json_build_object(
+    'id', f.id, 'name', f.name, 'mime', f.mime, 'size', f.size, 'instrument', f.instrument, 'createdAt', f.created_at
+  ) order by f.created_at) filter (where f.id is not null), '[]') as file_list
+  from songs s
+  left join files f on f.song_id = s.id`;
+
+function mapSongRow(r: Record<string, unknown>): Song {
+  return {
+    id: r.id as string,
+    bandId: (r.band_id as string) || null,
+    ownerClerkUserId: (r.owner_clerk_user_id as string) || null,
+    title: r.title as string,
+    artist: r.artist as string,
+    tempo: r.tempo as number,
+    songKey: r.song_key as string,
+    duration: r.duration as string,
+    tags: (r.tags as string[]) || [],
+    notes: r.notes as string,
+    lyrics: r.lyrics as string,
+    coverUrl: (r.cover_url as string) || "",
+    instruments: (r.instruments as string[]) || [],
+    files: ((r.file_list as Record<string, unknown>[]) || []).map((f) => ({ ...f, instrument: f.instrument || "", createdAt: String(f.createdAt) })) as SongFile[],
+    updatedAt: iso(r.updated_at as Date | string),
+  };
+}
+
 export async function getSongs(bandId: string): Promise<Song[]> {
+  const { rows } = await db().query(`${SONG_SELECT} where s.band_id=$1 group by s.id order by lower(s.title)`, [bandId]);
+  return rows.map(mapSongRow);
+}
+
+// Cançons pròpies d'un músic (sense grup): la seva biblioteca personal.
+export async function getPersonalSongs(clerkUserId: string): Promise<Song[]> {
   const { rows } = await db().query(
-    `select s.*, coalesce(json_agg(json_build_object(
-        'id', f.id, 'name', f.name, 'mime', f.mime, 'size', f.size, 'instrument', f.instrument, 'createdAt', f.created_at
-      ) order by f.created_at) filter (where f.id is not null), '[]') as file_list
-     from songs s
-     left join files f on f.song_id = s.id
-     where s.band_id=$1
-     group by s.id
-     order by lower(s.title)`,
-    [bandId]
+    `${SONG_SELECT} where s.band_id is null and s.owner_clerk_user_id=$1 group by s.id order by lower(s.title)`,
+    [clerkUserId]
   );
-  return rows.map((r) => ({
-    id: r.id,
-    bandId: r.band_id,
-    title: r.title,
-    artist: r.artist,
-    tempo: r.tempo,
-    songKey: r.song_key,
-    duration: r.duration,
-    tags: r.tags || [],
-    notes: r.notes,
-    lyrics: r.lyrics,
-    coverUrl: r.cover_url || "",
-    instruments: r.instruments || [],
-    files: (r.file_list || []).map((f: Record<string, unknown>) => ({ ...f, instrument: f.instrument || "", createdAt: String(f.createdAt) })) as SongFile[],
-    updatedAt: iso(r.updated_at),
-  }));
+  return rows.map(mapSongRow);
+}
+
+export async function getSong(songId: string): Promise<Song | null> {
+  const { rows } = await db().query(`${SONG_SELECT} where s.id=$1 group by s.id`, [songId]);
+  return rows[0] ? mapSongRow(rows[0]) : null;
 }
 
 export type BandFile = SongFile & { songId: string | null; uploadedBy: string };

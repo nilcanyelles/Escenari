@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
 import { saveConcertAction, createEventAction } from "@/app/(app)/concerts/actions";
@@ -37,6 +38,12 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
   const [freq, setFreq] = useState<"cap" | "setmanal" | "quinzenal" | "mensual">("cap");
   const [count, setCount] = useState(4);
   const [busy, setBusy] = useState(false);
+  // Els popups es pengen de <body> via portal: el botó viu dins la barra de
+  // filtres (que té backdrop-filter), i un overlay "fixed" a dins seu
+  // quedava atrapat i sortia per sota de la pàgina.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  const portal = (node: React.ReactNode) => (mounted ? createPortal(node, document.body) : null);
 
   const band = bands.find((b) => b.id === bandId) || null;
 
@@ -91,7 +98,7 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
     <>
       <button className="glow-cta" onClick={() => setStep("kind")}>+ Nou esdeveniment</button>
 
-      {step === "kind" && (
+      {step === "kind" && portal(
         <div className="modal-overlay" onClick={() => setStep("closed")}>
           <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
@@ -113,7 +120,7 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
         </div>
       )}
 
-      {step === "quick" && (
+      {step === "quick" && portal(
         <div className="modal-overlay" onClick={() => setStep("closed")}>
           <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">

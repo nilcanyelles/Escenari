@@ -27,5 +27,11 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
   const isOwner = !!me && !!data.clerkUserId && me.clerkUserId === data.clerkUserId;
   const isManager = !!me && me.role === "manager" && me.workspaceId === data.workspaceId;
 
-  return <ProfileView data={data} isOwner={isOwner} isManager={isManager} today={today()} />;
+  // Qui no és el músic ni el seu gestor veu la disponibilitat (verd/vermell)
+  // però no els bolos: ni la llista ni el motiu dels dies ocupats.
+  const safe = isOwner || isManager
+    ? data
+    : { ...data, concerts: [], busyDays: Object.fromEntries(Object.keys(data.busyDays).map((d) => [d, ""])) };
+
+  return <ProfileView data={safe} isOwner={isOwner} isManager={isManager} today={today()} />;
 }

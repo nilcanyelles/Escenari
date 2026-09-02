@@ -8,6 +8,7 @@ import { bandPhotoDataUri, personPhotoDataUriColored, instrumentIconFor, tagColo
 import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, formatNumber } from "@/lib/social-history";
 import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
 import { updateBandBioAction } from "../actions";
+import BandShareModal from "./BandShareModal";
 
 const ICONS: Record<SocialPlatform, React.ReactNode> = {
   instagram: <InstagramIcon />, tiktok: <TiktokIcon />, spotify: <SpotifyIcon />, youtube: <YoutubeIcon />,
@@ -25,24 +26,11 @@ export default function BandPublicView({ data, canEdit, backHref }: {
   const [draft, setDraft] = useState(data.bio);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [shareOpen, setShareOpen] = useState(false);
 
   const c1 = data.color1 || "#8b7bff";
   const c2 = data.color2 || "#e86bd0";
   const logo = data.logo || bandPhotoDataUri({ id: data.bandId, name: data.name, tags: data.tags });
-
-  async function share() {
-    const url = window.location.href;
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: data.name, text: `${data.name} a Escenari`, url });
-        return;
-      } catch { /* cancel·lat */ }
-    }
-    await navigator.clipboard.writeText(url);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1600);
-  }
 
   async function saveBio() {
     setSaving(true);
@@ -76,7 +64,7 @@ export default function BandPublicView({ data, canEdit, backHref }: {
           )}
           <span className="pf-brand" style={{ margin: 0 }}>ESCENARI</span>
         </div>
-        <button type="button" className="btn-save" onClick={share}>{copied ? "Enllaç copiat ✓" : "Comparteix"}</button>
+        <button type="button" className="btn-save" onClick={() => setShareOpen(true)}>Comparteix</button>
       </div>
 
       <div className="pv-grid">
@@ -183,6 +171,9 @@ export default function BandPublicView({ data, canEdit, backHref }: {
           )}
         </main>
       </div>
+
+      {/* Imatge compartible (PNG) amb tot el que hi ha a la pàgina */}
+      {shareOpen && <BandShareModal data={{ ...data, bio }} logoUrl={logo} onClose={() => setShareOpen(false)} />}
 
       <div className="pf-footer" style={{ paddingBottom: 28 }}>Pàgina de grup generada amb Escenari</div>
     </div>

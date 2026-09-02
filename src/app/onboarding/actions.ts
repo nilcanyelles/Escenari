@@ -38,6 +38,9 @@ export async function completeArtistOnboardingAction(data: { name: string; instr
 
 export type ManagerOnboardingInput = {
   managerName: string;
+  // Agència o empresa del gestor: és el workspace que té tots els grups.
+  agencyName: string;
+  agencyLogo?: string; // data URL o buit
   groupName: string;
   logo: string; // data URL o buit
   color1: string;
@@ -45,14 +48,20 @@ export type ManagerOnboardingInput = {
   invites: { email: string; name: string }[];
 };
 
+// Un dataURL corrupte o desmesurat no ha d'entrar a la base de dades.
+function safeDataUrl(v: string | undefined): string {
+  return v && v.startsWith("data:image/") && v.length < 400_000 ? v : "";
+}
+
 export async function completeManagerOnboardingAction(data: ManagerOnboardingInput) {
   const { userId, email } = await requireClerkUser();
   const pool = db();
   const managerName = (data.managerName || "").trim();
+  const agencyName = (data.agencyName || "").trim();
   const groupName = (data.groupName || "").trim();
-  if (!managerName || !groupName) return { ok: false as const, error: "Cal el teu nom i el nom del grup." };
-  // Un dataURL corrupte o desmesurat no ha d'entrar a la base de dades.
-  const logo = data.logo && data.logo.startsWith("data:image/") && data.logo.length < 400_000 ? data.logo : "";
+  if (!managerName || !agencyName || !groupName) return { ok: false as const, error: "Cal el teu nom, el nom de l'agència i el nom del grup." };
+  const logo = safeDataUrl(data.logo);
+  const agencyLogo = safeDataUrl(data.agencyLogo);
 
   const existing = (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0];
   if (existing) return { ok: true as const, joinCode: "" };
@@ -79,8 +88,18 @@ export async function completeManagerOnboardingAction(data: ManagerOnboardingInp
     let wsId = "ws_legacy";
     if (!joinsLegacy) {
       wsId = "ws" + Date.now();
-      await client.query("insert into workspaces (id, name) values ($1, $2)", [wsId, groupName]);
+      await client.query("insert into workspaces (id, name, logo) values ($1, $2, $3)", [wsId, agencyName, agencyLogo]);
       await client.query("insert into company_info (workspace_id) values ($1)", [wsId]);
+    } else {
+      // El workspace compartit només agafa el nom/logo si encara té els de
+      // sèrie (un co-gestor que arriba després no trepitja els que ja hi ha).
+      await client.query(
+        `update workspaces set
+           name = case when name in ('', 'Escenari') then $1 else name end,
+           logo = case when logo = '' then $2 else logo end
+         where id = 'ws_legacy'`,
+        [agencyName, agencyLogo]
+      );
     }
 
     await client.query(

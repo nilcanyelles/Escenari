@@ -24,6 +24,25 @@ export async function saveManagerProfileAction(formData: FormData): Promise<{ ok
   const token = await getOrCreatePersonProfile(profile.workspaceId, name);
   await pool.query("update person_profiles set clerk_user_id=$1 where id=$2 and clerk_user_id is null", [profile.clerkUserId, token]);
 
+  // Agència (el workspace): nom i logotip de la barra de grups.
+  const agencyName = formData.get("agencyName");
+  if (typeof agencyName === "string" && agencyName.trim()) {
+    await pool.query("update workspaces set name=$1 where id=$2", [agencyName.trim(), profile.workspaceId]);
+  }
+  const agencyLogo = formData.get("agencyLogo") as File | null;
+  if (agencyLogo && agencyLogo.size > 0) {
+    if (agencyLogo.size > 8 * 1024 * 1024) return { ok: false, error: "El logotip pot fer 8 MB com a màxim" };
+    if (!agencyLogo.type.startsWith("image/")) return { ok: false, error: "El logotip ha de ser una imatge" };
+    const buf = Buffer.from(await agencyLogo.arrayBuffer());
+    const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+    const blobUrl = await uploadFileBlob("files/" + id, buf, agencyLogo.type);
+    await pool.query(
+      "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+      [id, profile.workspaceId, agencyLogo.name || "logo", agencyLogo.type, agencyLogo.size, name, blobUrl]
+    );
+    await pool.query("update workspaces set logo=$1 where id=$2", [`/api/file/${id}`, profile.workspaceId]);
+  }
+
   // Foto opcional (mateix circuit que els perfils de músic: taula files).
   const file = formData.get("photo") as File | null;
   if (file && file.size > 0) {
