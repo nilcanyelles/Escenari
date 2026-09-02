@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { requireArtistAction, getProfile, type Profile } from "@/lib/current-user";
+import { createBandWithPeople, type CreateGroupInput, type CreateGroupResult } from "@/lib/group-create";
 import type { Person } from "@/lib/types";
 
 function revalidateArtist() {
@@ -81,6 +82,54 @@ export async function respondInvitationAction(invitationId: string, accept: bool
   if (accept) await addMembership(invitation.band_id, profile, { claimName: invitation.name || undefined });
   revalidateArtist();
   return { ok: true as const };
+}
+
+// Un músic crea el seu propi grup (un de sol): es converteix en gestor de la
+// seva pròpia agència (un workspace amb aquest grup) i hi entra alhora com a
+// músic. No en podrà crear cap altre des d'aquí.
+export async function createGroupAsMusicianAction(input: CreateGroupInput, myInstruments: string[]): Promise<CreateGroupResult> {
+  const profile = await requireArtistAction();
+  if (profile.workspaceId) throw new Error("Ja tens un grup creat (o formes part d'una agència).");
+  if (profile.role !== "artist") throw new Error("Només els músics poden crear el seu grup des d'aquí.");
+  const name = (input.name || "").trim();
+  if (!name) throw new Error("Cal el nom del grup");
+  const pool = db();
+  const wsId = "ws" + Date.now();
+  const logo = input.logo && input.logo.startsWith("data:image/") && input.logo.length < 400_000 ? input.logo : "";
+  await pool.query("insert into workspaces (id, name, logo) values ($1, $2, $3)", [wsId, name, logo]);
+  await pool.query("insert into company_info (workspace_id) values ($1) on conflict do nothing", [wsId]);
+  await pool.query(
+    `update profiles set role='manager', workspace_id=$1, agency_owner=true, agency_role='Músic i gestor',
+       can_create_groups=false, view_all_groups=true
+     where clerk_user_id=$2`,
+    [wsId, profile.clerkUserId]
+  );
+  const instruments = (myInstruments || []).filter(Boolean).length ? myInstruments.filter(Boolean) : profile.instruments;
+  const res = await createBandWithPeople({
+    workspaceId: wsId,
+    creatorName: profile.name,
+    input,
+    self: { clerkUserId: profile.clerkUserId, name: profile.name, email: profile.email, instruments },
+  });
+  revalidateArtist();
+  revalidatePath("/grup");
+  revalidatePath("/configuracio");
+  return { bandId: res.bandId, invites: res.invites };
+}
+
+// Reclama un perfil de grup des de l'enllaç d'invitació (/i/token): queda
+// vinculat exactament al membre creat pel gestor, sigui músic o crew, i
+// no cal que el correu coincideixi.
+export async function claimBandInvitationAction(token: string) {
+  const profile = await requireArtistAction();
+  const pool = db();
+  const inv = (await pool.query("select id, band_id, name, as_crew, status from invitations where token=$1", [token])).rows[0];
+  if (!inv) return { ok: false as const, error: "Aquest enllaç no és vàlid." };
+  if (inv.status !== "pendent") return { ok: false as const, error: "Aquesta invitació ja s'ha fet servir." };
+  await pool.query("update invitations set status='acceptada' where id=$1", [inv.id]);
+  await addMembership(inv.band_id, profile, { claimName: inv.name || undefined, asCrew: !!inv.as_crew });
+  revalidateArtist();
+  return { ok: true as const, bandId: inv.band_id as string };
 }
 
 export async function joinByCodeAction(code: string, asCrew = false) {

@@ -4,7 +4,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // riders, /p = perfils de músic, /g = pàgines públiques de grup. Els feeds
 // iCal/públics i el cron van per token propi.
 const isPublic = createRouteMatcher([
-  "/", "/sign-in(.*)", "/sign-up(.*)", "/f/(.*)", "/m/(.*)", "/a/(.*)", "/p/(.*)", "/g/(.*)", "/conf/(.*)",
+  "/", "/sign-in(.*)", "/sign-up(.*)", "/f/(.*)", "/m/(.*)", "/a/(.*)", "/p/(.*)", "/g/(.*)", "/j/(.*)", "/i/(.*)", "/ct/(.*)", "/conf/(.*)",
   "/api/ics/(.*)", "/api/public-events/(.*)", "/api/cron/(.*)", "/api/file/(.*)", "/api/rider-pdf/(.*)",
 ]);
 

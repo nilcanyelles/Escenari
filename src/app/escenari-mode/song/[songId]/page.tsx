@@ -46,5 +46,5 @@ export default async function PerformSongPage({ params }: { params: Promise<{ so
   };
 
   const backHref = profile.role === "manager" ? "/grup?tab=cancons" : "/artista/biblioteca";
-  return <PerformView name={song.title} bandName={bandName} songs={[performSong]} backHref={backHref} />;
+  return <PerformView name={song.title} bandName={bandName} songs={[performSong]} backHref={backHref} skipIntro />;
 }

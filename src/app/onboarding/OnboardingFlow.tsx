@@ -3,31 +3,58 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import InstrumentPicker from "@/components/InstrumentPicker";
-import { completeArtistOnboardingAction, completeManagerOnboardingAction } from "./actions";
+import { completeArtistOnboardingAction, completeAgencyOnboardingAction } from "./actions";
 
-type Step = "role" | "artist" | "manager" | "manager-done";
+type Step = "role" | "artist" | "agency" | "agency-done";
 
-const DEFAULT_COLOR1 = "#8b7bff";
-const DEFAULT_COLOR2 = "#e86bd0";
+type Invite = { name: string; role: string; email: string };
 
 function RoleIcon({ paths }: { paths: string }) {
   return (
-    <svg
-      className="role-card-icon"
-      width="26"
-      height="26"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: paths }}
-    />
+    <span className="role-card-icon-wrap">
+      <svg
+        className="role-card-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        dangerouslySetInnerHTML={{ __html: paths }}
+      />
+    </span>
   );
 }
 
-export default function OnboardingFlow({ defaultName }: { defaultName: string }) {
+// Llegeix una imatge i la redimensiona (256px màx.) perquè el dataURL que
+// va a la BD sigui petit.
+function readImage(file: File | undefined, set: (dataUrl: string) => void, max = 256) {
+  if (!file) return;
+  const img = new Image();
+  const url = URL.createObjectURL(file);
+  img.onload = () => {
+    const scale = Math.min(1, max / Math.max(img.width, img.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+    set(canvas.toDataURL("image/png"));
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button type="button" className="btn-outline" style={{ padding: "7px 11px", fontSize: 12 }}
+      onClick={async () => { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }}>
+      {copied ? "Copiat ✓" : "Copia l'enllaç"}
+    </button>
+  );
+}
+
+export default function OnboardingFlow({ defaultName, next }: { defaultName: string; next?: string }) {
   const router = useRouter();
   const [step, setStep] = useState<Step>("role");
   const [busy, setBusy] = useState(false);
@@ -37,38 +64,16 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
   const [artistName, setArtistName] = useState(defaultName);
   const [instruments, setInstruments] = useState<string[]>([]);
 
-  // Gestor
-  const [managerName, setManagerName] = useState(defaultName);
+  // Agència
   const [agencyName, setAgencyName] = useState("");
   const [agencyLogo, setAgencyLogo] = useState("");
-  const [groupName, setGroupName] = useState("");
-  const [logo, setLogo] = useState("");
-  const [color1, setColor1] = useState(DEFAULT_COLOR1);
-  const [color2, setColor2] = useState(DEFAULT_COLOR2);
-  const [invites, setInvites] = useState<{ email: string; name: string }[]>([{ email: "", name: "" }]);
-  const [joinCode, setJoinCode] = useState("");
-  const fileRef = useRef<HTMLInputElement>(null);
-  const agencyFileRef = useRef<HTMLInputElement>(null);
-
-  // Llegeix un logotip i el redimensiona a 256px màx. perquè el dataURL que
-  // va a la BD sigui petit.
-  function readLogo(file: File | undefined, set: (dataUrl: string) => void) {
-    if (!file) return;
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const max = 256;
-      const scale = Math.min(1, max / Math.max(img.width, img.height));
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(img.width * scale));
-      canvas.height = Math.max(1, Math.round(img.height * scale));
-      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
-      set(canvas.toDataURL("image/png"));
-      URL.revokeObjectURL(url);
-    };
-    img.src = url;
-  }
-  const onLogoFile = (file: File | undefined) => readLogo(file, setLogo);
+  const [managerName, setManagerName] = useState(defaultName);
+  const [managerPhoto, setManagerPhoto] = useState("");
+  const [managerRole, setManagerRole] = useState("Mànager");
+  const [invites, setInvites] = useState<Invite[]>([{ name: "", role: "", email: "" }]);
+  const [inviteLinks, setInviteLinks] = useState<{ name: string; email: string; url: string }[]>([]);
+  const agencyLogoRef = useRef<HTMLInputElement>(null);
+  const photoRef = useRef<HTMLInputElement>(null);
 
   async function submitArtist() {
     if (busy) return;
@@ -77,7 +82,8 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
     try {
       const result = await completeArtistOnboardingAction({ name: artistName, instruments });
       if (!result.ok) { setError(result.error); return; }
-      router.push("/artista");
+      // Si venia d'un enllaç d'invitació a un grup, hi torna per reclamar-lo.
+      router.push(next && next.startsWith("/") ? next : "/artista");
       router.refresh();
     } catch {
       setError("No s'ha pogut completar l'alta. Torna-ho a provar.");
@@ -86,51 +92,40 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
     }
   }
 
-  async function submitManager() {
+  async function submitAgency() {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
-      const result = await completeManagerOnboardingAction({
-        managerName,
-        agencyName,
-        agencyLogo,
-        groupName,
-        logo,
-        color1,
-        color2,
-        invites: invites.filter((i) => i.email.trim()),
+      const result = await completeAgencyOnboardingAction({
+        agencyName, agencyLogo, managerName, managerPhoto, managerRole,
+        invites: invites.filter((i) => i.name.trim() || i.email.trim()),
       });
       if (!result.ok) { setError(result.error); return; }
-      setJoinCode(result.joinCode || "");
-      setStep("manager-done");
+      setInviteLinks(result.invites);
+      setStep("agency-done");
     } catch {
-      setError("No s'ha pogut crear el grup. Torna-ho a provar.");
+      setError("No s'ha pogut crear l'agència. Torna-ho a provar.");
     } finally {
       setBusy(false);
     }
   }
 
+  const wide = step === "role" || step === "agency" || step === "agency-done";
+
   return (
-    <div className="onboarding-card">
+    <div className={"onboarding-card" + (wide ? " wide" : "")}>
       {step === "role" && (
         <>
-          <h1 className="onboarding-title">Benvingut/da a Escenari</h1>
-          <p className="onboarding-sub">Abans de començar, digue&apos;ns quin és el teu paper.</p>
+          <h1 className="onboarding-title center">Com faràs servir Escenari?</h1>
           <div className="role-cards">
-            <button className="role-card" onClick={() => setStep("manager")}>
-              <RoleIcon paths='<path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 21v-6h6v6"></path>' />
-              <div className="role-card-title">Soc gestor/a</div>
-              <div className="role-card-desc">
-                Porto un o més grups: calendari, concerts, facturació i logística. Crearàs el teu grup i convidaràs els músics.
-              </div>
+            <button className="role-card" onClick={() => setStep("agency")}>
+              <RoleIcon paths='<path d="M3 21h18"></path><path d="M5 21V7l7-4 7 4v14"></path><path d="M9 21v-6h6v6"></path><path d="M9 10h.01"></path><path d="M15 10h.01"></path><path d="M9 13h.01"></path><path d="M15 13h.01"></path>' />
+              <div className="role-card-title">Soc una agència</div>
             </button>
             <button className="role-card" onClick={() => setStep("artist")}>
               <RoleIcon paths='<path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>' />
               <div className="role-card-title">Soc artista</div>
-              <div className="role-card-desc">
-                Toco en un o més grups. Veuràs els teus bolos, confirmaràs assistència i t&apos;uniràs als grups amb una invitació o un codi.
-              </div>
             </button>
           </div>
         </>
@@ -161,127 +156,102 @@ export default function OnboardingFlow({ defaultName }: { defaultName: string })
         </div>
       )}
 
-      {step === "manager" && (
+      {step === "agency" && (
         <div className="onboarding-form">
           <button className="onboarding-back" onClick={() => setStep("role")}>← Torna enrere</button>
-          <h1 className="onboarding-title">La teva agència i el primer grup</h1>
-          <div className="field-group">
-            <label className="field-label">El teu nom</label>
-            <input className="field-input" value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="Nom i cognoms" />
-          </div>
-          {/* L'agència (o empresa de gestió) és qui té tots els grups a dins:
-              surt a dalt de la barra de grups amb el seu logotip. */}
-          <div className="field-group">
-            <label className="field-label">Agència o empresa per a la qual treballes</label>
-            <input className="field-input" value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="Ex.: Bona Nit Produccions" autoFocus />
-            <div className="logo-upload-row" style={{ marginTop: 8 }}>
-              {agencyLogo ? (
-                <img className="logo-preview" src={agencyLogo} alt="Logotip de l'agència" />
-              ) : (
-                <div className="logo-preview-empty">Sense<br />logo</div>
-              )}
-              <input ref={agencyFileRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => readLogo(e.target.files?.[0], setAgencyLogo)} />
-              <button className="btn-ghost-sm" style={{ width: "auto" }} type="button" onClick={() => agencyFileRef.current?.click()}>
-                {agencyLogo ? "Canvia el logotip de l'agència" : "Logotip de l'agència (opcional)"}
+          <h1 className="onboarding-title">La teva agència</h1>
+
+          {/* L'agència: és qui té tots els grups a dins i surt a dalt de la
+              barra de grups amb el seu logotip. */}
+          <div className="ob-section">
+            <div className="ob-section-title">Agència</div>
+            <div className="ob-row-logo">
+              <button type="button" className="ob-logo-btn" onClick={() => agencyLogoRef.current?.click()} title="Logotip de l'agència">
+                {agencyLogo ? <img src={agencyLogo} alt="" /> : <span>Logo</span>}
               </button>
-              {agencyLogo && (
-                <button className="btn-icon-ghost" type="button" onClick={() => setAgencyLogo("")} aria-label="Treu el logotip">✕</button>
-              )}
-            </div>
-          </div>
-          <div className="field-group">
-            <label className="field-label">Nom del primer grup</label>
-            <input className="field-input" value={groupName} onChange={(e) => setGroupName(e.target.value)} placeholder="Ex.: La Bona Party" />
-          </div>
-          <div className="field-group">
-            <label className="field-label">Logotip</label>
-            <div className="logo-upload-row">
-              {logo ? (
-                <img className="logo-preview" src={logo} alt="Logotip del grup" />
-              ) : (
-                <div className="logo-preview-empty">Sense<br />logo</div>
-              )}
-              <input
-                ref={fileRef}
-                type="file"
-                accept="image/*"
-                style={{ display: "none" }}
-                onChange={(e) => onLogoFile(e.target.files?.[0])}
-              />
-              <button className="btn-ghost-sm" style={{ width: "auto" }} type="button" onClick={() => fileRef.current?.click()}>
-                {logo ? "Canvia el logotip" : "Puja un logotip"}
-              </button>
-              {logo && (
-                <button className="btn-icon-ghost" type="button" onClick={() => setLogo("")} aria-label="Treu el logotip">✕</button>
-              )}
-            </div>
-          </div>
-          <div className="field-group">
-            <label className="field-label">Colors del grup</label>
-            <div className="color-row">
-              <div className="color-field">
-                <input type="color" value={color1} onChange={(e) => setColor1(e.target.value)} />
-                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Principal</span>
-              </div>
-              <div className="color-field">
-                <input type="color" value={color2} onChange={(e) => setColor2(e.target.value)} />
-                <span style={{ fontSize: 12.5, color: "var(--text-muted)" }}>Secundari</span>
+              <input ref={agencyLogoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => readImage(e.target.files?.[0], setAgencyLogo)} />
+              <div className="field-group" style={{ flex: 1 }}>
+                <label className="field-label">Nom de l&apos;agència</label>
+                <input className="field-input" value={agencyName} onChange={(e) => setAgencyName(e.target.value)} placeholder="Ex.: Bona Nit Produccions" autoFocus />
               </div>
             </div>
           </div>
-          <div className="field-group">
-            <label className="field-label">Convida els membres (correu electrònic)</label>
-            {invites.map((invite, idx) => (
-              <div className="invite-row" key={idx}>
-                <input
-                  className="field-input"
-                  type="email"
-                  value={invite.email}
-                  onChange={(e) => setInvites(invites.map((v, i) => (i === idx ? { ...v, email: e.target.value } : v)))}
-                  placeholder="musica@exemple.cat"
-                />
-                <input
-                  className="field-input"
-                  value={invite.name}
-                  onChange={(e) => setInvites(invites.map((v, i) => (i === idx ? { ...v, name: e.target.value } : v)))}
-                  placeholder="Nom (opcional)"
-                />
-                <button
-                  className="btn-icon-ghost"
-                  type="button"
-                  onClick={() => setInvites(invites.filter((_, i) => i !== idx))}
-                  aria-label="Treu la invitació"
-                >
-                  ✕
-                </button>
+
+          {/* Qui ets tu dins l'agència. */}
+          <div className="ob-section">
+            <div className="ob-section-title">Tu</div>
+            <div className="ob-row-logo">
+              <button type="button" className="ob-logo-btn round" onClick={() => photoRef.current?.click()} title="La teva foto">
+                {managerPhoto ? <img src={managerPhoto} alt="" /> : <span>Foto</span>}
+              </button>
+              <input ref={photoRef} type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => readImage(e.target.files?.[0], setManagerPhoto, 512)} />
+              <div className="ob-two">
+                <div className="field-group">
+                  <label className="field-label">El teu nom</label>
+                  <input className="field-input" value={managerName} onChange={(e) => setManagerName(e.target.value)} placeholder="Nom i cognoms" />
+                </div>
+                <div className="field-group">
+                  <label className="field-label">El teu càrrec</label>
+                  <input className="field-input" value={managerRole} onChange={(e) => setManagerRole(e.target.value)} placeholder="Mànager, booking, producció…" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* La resta de l'equip: cadascú rep un enllaç que el deixa dins
+              l'agència directament. */}
+          <div className="ob-section">
+            <div className="ob-section-title">Convida el teu equip <span className="t-dim" style={{ fontWeight: 400, textTransform: "none", letterSpacing: 0 }}>(opcional)</span></div>
+            {invites.map((inv, idx) => (
+              <div className="invite-row invite-row-3" key={idx}>
+                <input className="field-input" value={inv.name} placeholder="Nom"
+                  onChange={(e) => setInvites(invites.map((v, i) => (i === idx ? { ...v, name: e.target.value } : v)))} />
+                <input className="field-input" value={inv.role} placeholder="Càrrec"
+                  onChange={(e) => setInvites(invites.map((v, i) => (i === idx ? { ...v, role: e.target.value } : v)))} />
+                <input className="field-input" type="email" value={inv.email} placeholder="Correu (opcional)"
+                  onChange={(e) => setInvites(invites.map((v, i) => (i === idx ? { ...v, email: e.target.value } : v)))} />
+                <button className="btn-icon-ghost" type="button" onClick={() => setInvites(invites.filter((_, i) => i !== idx))} aria-label="Treu la invitació">✕</button>
               </div>
             ))}
-            <button className="btn-ghost-sm" type="button" onClick={() => setInvites([...invites, { email: "", name: "" }])}>
-              + Afegeix un altre membre
+            <button className="btn-ghost-sm" type="button" onClick={() => setInvites([...invites, { name: "", role: "", email: "" }])}>
+              + Afegeix una persona
             </button>
           </div>
+
           <div className="onboarding-error">{error}</div>
-          <button className="btn-primary" onClick={submitManager} disabled={busy}>
-            {busy ? "Creant el grup..." : "Crea el grup"}
+          <button className="btn-primary" onClick={submitAgency} disabled={busy}>
+            {busy ? "Creant l'agència..." : "Crea l'agència"}
           </button>
         </div>
       )}
 
-      {step === "manager-done" && (
+      {step === "agency-done" && (
         <div className="onboarding-form">
-          <h1 className="onboarding-title">Grup creat! 🎉</h1>
-          <p className="onboarding-sub">
-            Els membres que has convidat veuran la invitació quan entrin a Escenari amb el seu correu.
-            També poden unir-se al grup amb aquest codi:
-          </p>
-          <div className="join-code-box">
-            <div className="join-code-value">{joinCode || "—"}</div>
-            <div className="join-code-label">Codi d&apos;invitació del grup</div>
-          </div>
+          <h1 className="onboarding-title">Agència creada 🎉</h1>
+          {inviteLinks.length > 0 ? (
+            <>
+              <p className="onboarding-sub">
+                Passa aquests enllaços a cada persona: en entrar-hi quedaran dins de l&apos;agència directament (als que tenen correu també els l&apos;hem enviat, si el correu està configurat).
+              </p>
+              <div className="ob-links">
+                {inviteLinks.map((l) => (
+                  <div key={l.url} className="ob-link-row">
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="t-strong" style={{ fontSize: 13.5 }}>{l.name || l.email}</div>
+                      <div className="t-dim" style={{ fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.url}</div>
+                    </div>
+                    <CopyButton text={l.url} />
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="onboarding-sub">Ara crea el primer grup i convida&apos;n els músics des de Configuració.</p>
+          )}
           <button
             className="btn-primary"
             onClick={() => {
-              router.push("/resum");
+              router.push("/configuracio");
               router.refresh();
             }}
           >

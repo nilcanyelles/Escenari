@@ -63,6 +63,16 @@ export type Band = {
   bio?: string;
 };
 
+// Contracte d'actuació d'un concert: text de les clàusules (paràgrafs
+// separats per línies en blanc), notes extra i qui signa per l'artista.
+export type ContractData = {
+  clauses: string;
+  extra: string;
+  signerName: string;
+  signerRole: string;
+  updatedAt?: string;
+};
+
 export type Concert = {
   id: string;
   date: string;
@@ -96,6 +106,9 @@ export type Concert = {
   kind?: "bolo" | "assaig" | "reunio" | "altre";
   invited?: string[];
   attToken?: string;
+  // Contracte d'actuació: clàusules editables i enllaç públic per enviar-lo.
+  contract?: ContractData | null;
+  contractToken?: string;
 };
 
 export type Invoice = {

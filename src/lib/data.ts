@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { visibleBandIds } from "./current-user";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact } from "./types";
 
 function toDateStr(d: Date | string): string {
@@ -6,8 +7,14 @@ function toDateStr(d: Date | string): string {
   return d.toISOString().slice(0, 10);
 }
 
+// Els gestors que només tenen alguns grups assignats veuen només aquests
+// (i els seus concerts i factures) a tota l'app.
 export async function getBands(workspaceId: string): Promise<Band[]> {
-  const { rows } = await db().query("select * from bands where workspace_id=$1 order by name", [workspaceId]);
+  const [{ rows: allRows }, scope] = await Promise.all([
+    db().query("select * from bands where workspace_id=$1 order by name", [workspaceId]),
+    visibleBandIds(),
+  ]);
+  const rows = scope ? allRows.filter((r) => scope.has(r.id)) : allRows;
   return rows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -38,7 +45,11 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
 }
 
 export async function getConcerts(workspaceId: string): Promise<Concert[]> {
-  const { rows } = await db().query("select * from concerts where workspace_id=$1 order by date desc", [workspaceId]);
+  const [{ rows: allRows }, scope] = await Promise.all([
+    db().query("select * from concerts where workspace_id=$1 order by date desc", [workspaceId]),
+    visibleBandIds(),
+  ]);
+  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
   return rows.map((r) => ({
     id: r.id,
     date: toDateStr(r.date),
@@ -64,6 +75,8 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     kind: r.kind || "bolo",
     invited: r.invited || [],
     attToken: r.att_token || "",
+    contract: r.contract || null,
+    contractToken: r.contract_token || "",
   }));
 }
 
@@ -105,7 +118,15 @@ export async function getContacts(workspaceId: string): Promise<Contact[]> {
 }
 
 export async function getInvoices(workspaceId: string): Promise<Invoice[]> {
-  const { rows } = await db().query("select * from invoices where workspace_id=$1 order by issue_date desc", [workspaceId]);
+  const [{ rows: allRows }, scope] = await Promise.all([
+    db().query(
+      `select i.*, c.band_id from invoices i left join concerts c on c.id = i.concert_id
+       where i.workspace_id=$1 order by i.issue_date desc`,
+      [workspaceId]
+    ),
+    visibleBandIds(),
+  ]);
+  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
   return rows.map((r) => ({
     id: r.id,
     concertId: r.concert_id,

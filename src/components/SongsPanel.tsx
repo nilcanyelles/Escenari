@@ -6,7 +6,7 @@ import type { Band } from "@/lib/types";
 import type { Song } from "@/lib/songs";
 import { transposeChord, parseChordLine, hasChords } from "@/lib/songs";
 import { normalize } from "@/lib/text";
-import { saveSongAction, deleteSongAction, importSongsAction, uploadFileAction, deleteFileAction, lookupSongAction } from "@/app/(app)/grup/songs-actions";
+import { saveSongAction, deleteSongAction, uploadFileAction, deleteFileAction, lookupSongAction } from "@/app/(app)/grup/songs-actions";
 import SpecularButton from "@/components/SpecularButton";
 
 function fmtSize(bytes: number): string {
@@ -41,10 +41,6 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
-
-  const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
-  const [importing, setImporting] = useState(false);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -73,7 +69,6 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
           <div className="panel-title">Repertori</div>
           {canEdit && (
             <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-              <button type="button" className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>
               <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.3} baseColor="#8b7bff" lineColor="#ffffff" disabled={creating}
                 onClick={async () => {
                   setCreating(true);
@@ -88,22 +83,6 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
             </div>
           )}
         </div>
-
-        {importOpen && (
-          <div className="import-box">
-            <div className="t-dim" style={{ fontSize: 12 }}>Una cançó per línia: <code>Títol; Artista; Durada; To; Tempo</code> (només el títol és obligatori).</div>
-            <textarea className="field-input rider-textarea" rows={5} value={importText} onChange={(e) => setImportText(e.target.value)}
-              placeholder={"La nit és nostra; ; 3:45; Am; 120\nCamins; Sopa de Cabra; 4:10; C"} />
-            <button type="button" className="btn-save" disabled={importing} style={{ alignSelf: "flex-start" }}
-              onClick={async () => {
-                setImporting(true);
-                const { imported } = await importSongsAction(band.id, importText);
-                setImportText(""); setImportOpen(false); setImporting(false);
-                router.refresh();
-                alert(`${imported} cançons importades.`);
-              }}>{importing ? "Important…" : "Importa"}</button>
-          </div>
-        )}
 
         <input className="input search" style={{ marginBottom: 12, maxWidth: 320 }} placeholder="Cerca per títol o artista…" value={search} onChange={(e) => setSearch(e.target.value)} />
 

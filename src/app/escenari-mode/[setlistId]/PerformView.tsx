@@ -46,11 +46,12 @@ function fmtTime(secs: number): string {
   return `${m}:${s}`;
 }
 
-export default function PerformView({ name, bandName, songs, backHref }: { name: string; bandName: string; songs: PerformSong[]; backHref: string }) {
+export default function PerformView({ name, bandName, songs, backHref, skipIntro = false }: { name: string; bandName: string; songs: PerformSong[]; backHref: string; skipIntro?: boolean }) {
   // Menú inicial: nom de la setlist, bombolles per triar la veu que
   // seguiràs, i la llista de cançons — clicar-ne una hi entra directament
-  // amb aquella veu ja preseleccionada (si hi és disponible).
-  const [showIntro, setShowIntro] = useState(true);
+  // amb aquella veu ja preseleccionada (si hi és disponible). Amb una sola
+  // cançó (des de la biblioteca) s'entra directament a la cançó.
+  const [showIntro, setShowIntro] = useState(!skipIntro);
   const [pickedInstrument, setPickedInstrument] = useState<string | null>(null);
   // Cada veu numerada (Clarinet 1, Clarinet 2…) surt com una opció separada
   // — només es fonen entrades amb el nom EXACTAMENT igual repetides a

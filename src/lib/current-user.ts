@@ -10,6 +10,12 @@ export type Profile = {
   name: string;
   instruments: string[];
   workspaceId: string | null;
+  // Membre d'agència (gestors): càrrec, si mana a l'agència i permisos.
+  agencyRole: string;
+  agencyOwner: boolean;
+  canCreateGroups: boolean;
+  viewAllGroups: boolean;
+  assignedBandIds: string[];
 };
 
 // cache(): una sola consulta per petició encara que la cridin layout i pàgina.
@@ -17,7 +23,9 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
   const { userId } = await auth();
   if (!userId) return null;
   const { rows } = await db().query(
-    "select clerk_user_id, email, role, name, instruments, workspace_id from profiles where clerk_user_id = $1",
+    `select clerk_user_id, email, role, name, instruments, workspace_id,
+            agency_role, agency_owner, can_create_groups, view_all_groups, assigned_band_ids
+     from profiles where clerk_user_id = $1`,
     [userId]
   );
   const r = rows[0];
@@ -29,7 +37,21 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     name: r.name,
     instruments: r.instruments || [],
     workspaceId: r.workspace_id,
+    agencyRole: r.agency_role || "",
+    agencyOwner: !!r.agency_owner,
+    canCreateGroups: r.agency_owner || r.can_create_groups !== false,
+    viewAllGroups: r.agency_owner || r.view_all_groups !== false,
+    assignedBandIds: r.assigned_band_ids || [],
   };
+});
+
+// Grups que el gestor de la petició pot veure: null = tots (mana a
+// l'agència, veu tots els grups, o no és gestor); si no, només els que té
+// assignats. Ho apliquen getBands/getConcerts/getInvoices.
+export const visibleBandIds = cache(async (): Promise<Set<string> | null> => {
+  const p = await getProfile();
+  if (!p || p.role !== "manager" || p.viewAllGroups) return null;
+  return new Set(p.assignedBandIds);
 });
 
 // Email principal del compte de Clerk (per casar invitacions).
@@ -47,11 +69,18 @@ export async function requireManager(): Promise<Profile & { workspaceId: string 
   return profile as Profile & { workspaceId: string };
 }
 
+// Un gestor que també toca (ha creat el seu grup com a músic, o s'hi ha
+// afegit com a músic) entra a l'àrea de músic igual que un artista.
+export const hasBandMembership = cache(async (clerkUserId: string): Promise<boolean> => {
+  const { rows } = await db().query("select 1 from band_members where clerk_user_id=$1 limit 1", [clerkUserId]);
+  return rows.length > 0;
+});
+
 // Per a pàgines d'artista.
 export async function requireArtist(): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
-  if (profile.role !== "artist") redirect("/resum");
+  if (profile.role !== "artist" && !(await hasBandMembership(profile.clerkUserId))) redirect("/resum");
   return profile;
 }
 
@@ -67,6 +96,7 @@ export async function requireManagerAction(): Promise<Profile & { workspaceId: s
 
 export async function requireArtistAction(): Promise<Profile> {
   const profile = await getProfile();
-  if (!profile || profile.role !== "artist") throw new Error("Sessió d'artista no vàlida");
+  if (!profile) throw new Error("Sessió d'artista no vàlida");
+  if (profile.role !== "artist" && !(await hasBandMembership(profile.clerkUserId))) throw new Error("Sessió d'artista no vàlida");
   return profile;
 }

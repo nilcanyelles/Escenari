@@ -292,9 +292,6 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
         <div className="studio-name studio-name-display">{form.title || "Sense títol"}</div>
         <div className="studio-topbar-right">
           <span className="t-dim" style={{ fontSize: 12 }}>{saving ? "Desant…" : "Desat ✓"}</span>
-          <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.3} baseColor="#8b7bff" lineColor="#ffffff" disabled={looking} onClick={handleLookup}>
-            {looking ? "Cercant…" : "🔍 Autocompleta"}
-          </SpecularButton>
           <button type="button" className="btn-save" disabled={saving} onClick={handleSaveAndExit}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: "-2px" }}>
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -314,7 +311,14 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
             <img className="ss-cover" src={form.coverUrl || bandLogo || undefined} alt=""
               style={!form.coverUrl && !bandLogo ? { background: `linear-gradient(135deg, ${bandColor}, #17141f)` } : undefined} />
             <div className="ss-meta-grid">
-              <label className="song-meta">Títol<input className="field-input compact-field" value={form.title} placeholder="Títol de la cançó" onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+              {/* El botó d'autocompletar va enganxat al títol: és d'aquí d'on
+                  treu l'artista, la caràtula, la durada, el BPM i la lletra. */}
+              <div className="ss-title-row">
+                <label className="song-meta" style={{ flex: 1, minWidth: 0 }}>Títol<input className="field-input compact-field" value={form.title} placeholder="Títol de la cançó" onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+                <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.3} baseColor="#8b7bff" lineColor="#ffffff" disabled={looking} onClick={handleLookup}>
+                  {looking ? "Cercant…" : "🔍 Autocompleta"}
+                </SpecularButton>
+              </div>
               <label className="song-meta">Artista<input className="field-input compact-field" value={form.artist} onChange={(e) => setForm({ ...form, artist: e.target.value })} /></label>
               <div className="song-meta-pair">
                 <label className="song-meta">BPM<input className="field-input compact-field" type="number" value={form.tempo} onChange={(e) => setForm({ ...form, tempo: e.target.value })} /></label>

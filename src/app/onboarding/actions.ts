@@ -2,6 +2,9 @@
 
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { uploadFileBlob } from "@/lib/blob-storage";
+import { getOrCreatePersonProfile } from "@/lib/person-profile";
+import { createAgencyInvitations } from "@/lib/agency";
 
 async function requireClerkUser() {
   const { userId } = await auth();
@@ -10,14 +13,6 @@ async function requireClerkUser() {
   const email =
     user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "";
   return { userId, email };
-}
-
-// Sense caràcters ambigus (0/O, 1/I/L).
-const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
-function generateJoinCode(): string {
-  let code = "";
-  for (let i = 0; i < 6; i++) code += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
-  return code;
 }
 
 export async function completeArtistOnboardingAction(data: { name: string; instruments: string[] }) {
@@ -36,38 +31,57 @@ export async function completeArtistOnboardingAction(data: { name: string; instr
   return { ok: true as const };
 }
 
-export type ManagerOnboardingInput = {
-  managerName: string;
-  // Agència o empresa del gestor: és el workspace que té tots els grups.
-  agencyName: string;
-  agencyLogo?: string; // data URL o buit
-  groupName: string;
-  logo: string; // data URL o buit
-  color1: string;
-  color2: string;
-  invites: { email: string; name: string }[];
-};
-
 // Un dataURL corrupte o desmesurat no ha d'entrar a la base de dades.
 function safeDataUrl(v: string | undefined): string {
   return v && v.startsWith("data:image/") && v.length < 400_000 ? v : "";
 }
 
-export async function completeManagerOnboardingAction(data: ManagerOnboardingInput) {
+// Guarda una imatge (data URL) com a fitxer del workspace i en torna l'id.
+async function storeDataUrlFile(workspaceId: string, dataUrl: string, name: string, uploadedBy: string): Promise<string | null> {
+  const m = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(dataUrl);
+  if (!m) return null;
+  const mime = m[1];
+  const buf = Buffer.from(m[2], "base64");
+  const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const blobUrl = await uploadFileBlob("files/" + id, buf, mime);
+  await db().query(
+    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+    [id, workspaceId, name, mime, buf.length, uploadedBy, blobUrl]
+  );
+  return id;
+}
+
+export type AgencyOnboardingInput = {
+  agencyName: string;
+  agencyLogo?: string;   // data URL o buit
+  managerName: string;
+  managerPhoto?: string; // data URL o buit
+  managerRole: string;
+  invites: { name: string; role: string; email: string }[];
+};
+
+export type AgencyOnboardingResult =
+  | { ok: true; invites: { name: string; email: string; url: string }[] }
+  | { ok: false; error: string };
+
+// Alta d'una agència: el workspace (nom i logotip), el primer gestor (que hi
+// mana) amb la seva foto i càrrec, i les invitacions a la resta de l'equip.
+// Els grups es creen després, des de Configuració.
+export async function completeAgencyOnboardingAction(data: AgencyOnboardingInput): Promise<AgencyOnboardingResult> {
   const { userId, email } = await requireClerkUser();
   const pool = db();
   const managerName = (data.managerName || "").trim();
   const agencyName = (data.agencyName || "").trim();
-  const groupName = (data.groupName || "").trim();
-  if (!managerName || !agencyName || !groupName) return { ok: false as const, error: "Cal el teu nom, el nom de l'agència i el nom del grup." };
-  const logo = safeDataUrl(data.logo);
+  const managerRole = (data.managerRole || "").trim() || "Mànager";
+  if (!managerName || !agencyName) return { ok: false, error: "Cal el nom de l'agència i el teu nom." };
   const agencyLogo = safeDataUrl(data.agencyLogo);
+  const managerPhoto = safeDataUrl(data.managerPhoto);
 
   const existing = (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0];
-  if (existing) return { ok: true as const, joinCode: "" };
+  if (existing) return { ok: true, invites: [] };
 
   const client = await pool.connect();
-  let joinCode = "";
+  let wsId = "ws_legacy";
   try {
     await client.query("begin");
 
@@ -85,7 +99,6 @@ export async function completeManagerOnboardingAction(data: ManagerOnboardingInp
     const joinsLegacy = ownerEmails.length
       ? ownerEmails.includes(email.toLowerCase())
       : !legacyTaken;
-    let wsId = "ws_legacy";
     if (!joinsLegacy) {
       wsId = "ws" + Date.now();
       await client.query("insert into workspaces (id, name, logo) values ($1, $2, $3)", [wsId, agencyName, agencyLogo]);
@@ -103,33 +116,10 @@ export async function completeManagerOnboardingAction(data: ManagerOnboardingInp
     }
 
     await client.query(
-      `insert into profiles (clerk_user_id, email, role, name, workspace_id)
-       values ($1, $2, 'manager', $3, $4)`,
-      [userId, email, managerName, wsId]
+      `insert into profiles (clerk_user_id, email, role, name, workspace_id, agency_role, agency_owner, can_create_groups, view_all_groups)
+       values ($1, $2, 'manager', $3, $4, $5, true, true, true)`,
+      [userId, email, managerName, wsId, managerRole]
     );
-
-    const bandId = "b" + Date.now();
-    for (let attempt = 0; attempt < 5; attempt++) {
-      joinCode = generateJoinCode();
-      const clash = (await client.query("select 1 from bands where join_code=$1", [joinCode])).rows[0];
-      if (!clash) break;
-    }
-    await client.query(
-      `insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code, join_code_active, logo, color1, color2)
-       values ($1, $2, '', 0, $3, '', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $4, $5, true, $6, $7, $8)`,
-      [bandId, groupName, managerName, wsId, joinCode, logo, data.color1 || "", data.color2 || ""]
-    );
-
-    for (const invite of data.invites || []) {
-      const inviteEmail = (invite.email || "").trim().toLowerCase();
-      if (!inviteEmail || !inviteEmail.includes("@")) continue;
-      await client.query(
-        `insert into invitations (id, band_id, email, name)
-         values ($1, $2, $3, $4)
-         on conflict (band_id, lower(email)) do nothing`,
-        ["inv" + Date.now() + Math.floor(Math.random() * 10000), bandId, inviteEmail, (invite.name || "").trim()]
-      );
-    }
 
     await client.query("commit");
   } catch (err) {
@@ -139,5 +129,17 @@ export async function completeManagerOnboardingAction(data: ManagerOnboardingInp
     client.release();
   }
 
-  return { ok: true as const, joinCode };
+  // Perfil de persona del gestor (foto i càrrec), com a Edita el perfil.
+  const token = await getOrCreatePersonProfile(wsId, managerName);
+  await pool.query(
+    "update person_profiles set clerk_user_id=$1, role_label=$2 where id=$3",
+    [userId, managerRole, token]
+  );
+  if (managerPhoto) {
+    const fileId = await storeDataUrlFile(wsId, managerPhoto, "foto", managerName).catch(() => null);
+    if (fileId) await pool.query("update person_profiles set photo_file_id=$1 where id=$2", [fileId, token]);
+  }
+
+  const invites = await createAgencyInvitations(wsId, managerName, data.invites || []);
+  return { ok: true, invites };
 }

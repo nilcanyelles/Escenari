@@ -37,9 +37,59 @@ export const INSTRUMENT_PRESETS = [
   "Ukelele", "Vibràfon", "Viola", "Violí", "Violoncel", "Xequeré", "Xilòfon", "Xiulet",
 ];
 
-// Only a handful of instruments have a real icon asset so far (public/instruments/);
-// the rest of INSTRUMENT_PRESETS simply render without one.
+// Icona de cada instrument (public/instruments/). Els que encara no tenen
+// una il·lustració pròpia fan servir la de l'instrument més semblant de la
+// mateixa família (còpia del fitxer amb el seu propi nom, per poder-la
+// substituir per una de dibuixada sense tocar res més).
 const INSTRUMENT_ICON_FILES: Record<string, string> = {
+  "trompeta": "trompeta.png",
+  "trombó": "trombo.png",
+  "tuba": "tuba.png",
+  "gralla": "gralla.png",
+  "gralla seca": "gralla.png",
+  "gralla dolça": "gralla.png",
+  "gralla baixa": "gralla.png",
+  "tarota": "tarota.png",
+  "tenora": "tenora.png",
+  "tible": "tible.png",
+  "cornamusa": "cornamusa.png",
+  "gaita": "gaita.png",
+  "flautí": "flauti.png",
+  "xiulet": "xiulet.png",
+  "ocarina": "ocarina.png",
+  "flabiol i tamborí": "flabiol-i-tambori.png",
+  "harmònica": "harmonica.png",
+  "melòdica": "melodica.png",
+  "guitarra": "guitarra.png",
+  "guitarra espanyola": "guitarra.png",
+  "guitarró": "guitarra.png",
+  "ukelele": "ukelele.png",
+  "mandolina": "mandolina.png",
+  "viola": "viola.png",
+  "violoncel": "violoncel.png",
+  "orgue": "orgue.png",
+  "celesta": "celesta.png",
+  "glockenspiel": "glockenspiel.png",
+  "metal·lòfon": "metallofon.png",
+  "xilòfon": "xilofon.png",
+  "vibràfon": "vibrafon.png",
+  "campanes tubulars": "campanes-tubulars.png",
+  "contrasurdo": "contrasurdo.png",
+  "darbukka": "darbukka.png",
+  "pandereta": "pandereta.png",
+  "pandero": "pandero.png",
+  "tabal": "tabal.png",
+  "timbal": "timbal.png",
+  "timbala": "timbala.png",
+  "plats": "plats.png",
+  "platerets": "plats.png",
+  "címbals": "plats.png",
+  "gong": "gong.png",
+  "triangle": "triangle.png",
+  "maraques": "maraques.png",
+  "xequeré": "xequere.png",
+  "saxofon baríton": "saxo-bariton.png",
+  "cors": "cors.png",
   "acordió": "acordio.png",
   "acordió cromàtic": "acordio.png",
   "acordió diatònic": "acordio.png",
@@ -92,10 +142,31 @@ const GENERIC_INSTRUMENT_ICON = "data:image/svg+xml;utf8," + encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>'
 );
 
+// Instruments personalitzats (afegits des del selector amb la icona d'un
+// altre instrument): registre en memòria que l'app omple en carregar-se —
+// al servidor i al client — a partir de la taula custom_instruments.
+export type CustomInstrument = { name: string; icon: string };
+const CUSTOM_INSTRUMENTS = new Map<string, CustomInstrument>();
+export function registerCustomInstruments(list: CustomInstrument[]) {
+  list.forEach((c) => { if (c.name && c.name.trim()) CUSTOM_INSTRUMENTS.set(c.name.trim().toLowerCase(), { name: c.name.trim(), icon: c.icon || "" }); });
+}
+export function customInstrumentList(): CustomInstrument[] {
+  return Array.from(CUSTOM_INSTRUMENTS.values()).sort((a, b) => a.name.localeCompare(b.name, "ca"));
+}
+
 export function instrumentIconFor(name: string): string {
-  const file = INSTRUMENT_ICON_FILES[(name || "").trim().toLowerCase()];
+  const key = (name || "").trim().toLowerCase();
+  const file = INSTRUMENT_ICON_FILES[key] || CUSTOM_INSTRUMENTS.get(key)?.icon;
   return file ? "/instruments/" + file : GENERIC_INSTRUMENT_ICON;
 }
+
+// Icones entre les quals triar per a un instrument personalitzat: una per
+// fitxer, etiquetada amb el primer instrument que la fa servir.
+export const INSTRUMENT_ICON_CHOICES: { file: string; label: string }[] = (() => {
+  const seen = new Map<string, string>();
+  Object.entries(INSTRUMENT_ICON_FILES).forEach(([k, f]) => { if (!seen.has(f)) seen.set(f, k.charAt(0).toUpperCase() + k.slice(1)); });
+  return Array.from(seen, ([file, label]) => ({ file, label })).sort((a, b) => a.label.localeCompare(b.label, "ca"));
+})();
 
 export const TAG_HUE: Record<string, number> = {
   "Rock": 290, "Pop": 340, "Indie": 250, "Electrònica": 200, "Jazz": 170, "Flamenc/Rumba": 25, "Hip-hop": 60, "Folk/Tradicional": 110,
