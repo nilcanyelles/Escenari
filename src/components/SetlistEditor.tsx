@@ -13,7 +13,8 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
   const [songs, setSongs] = useState<Song[]>(setlist?.songs?.length ? setlist.songs : [{ title: "", duration: "", key: "", notes: "" }]);
   const [setlistId, setSetlistId] = useState<string | null>(setlist?.id || null);
   const [saving, setSaving] = useState(false);
-  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const saveTimer = useRef<number | null>(null);
   const isFirst = useRef(true);
 
@@ -33,12 +34,16 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
 
   const totalSecs = songs.reduce((s, song) => s + songDurationSecs(song.duration), 0);
 
-  function move(i: number, dir: -1 | 1) {
-    const j = i + dir;
-    if (j < 0 || j >= songs.length) return;
-    const next = songs.slice();
-    [next[i], next[j]] = [next[j], next[i]];
-    setSongs(next);
+  function handleDrop(i: number) {
+    setDragOverIndex(null);
+    if (dragIndex === null || dragIndex === i) { setDragIndex(null); return; }
+    setSongs((prev) => {
+      const next = prev.slice();
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(i, 0, moved);
+      return next;
+    });
+    setDragIndex(null);
   }
 
   function update(i: number, patch: Partial<Song>) {
@@ -78,49 +83,55 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
           </div>
 
           <div className="rider-table">
-            <div className="rider-table-head setlist-cols"><div>#</div><div>Cançó</div><div>Durada</div><div>To</div><div>Notes</div><div></div></div>
+            <div className="rider-table-head setlist-cols">
+              <div className="setlist-title-cell"><span className="setlist-num-head">#</span>Cançó</div>
+              <div>Notes</div>
+              <div></div>
+            </div>
             {songs.map((s, i) => (
-              <div key={i} className="rider-table-row setlist-cols">
-                <div className="setlist-order">
-                  <span className="setlist-num">{i + 1}</span>
-                  <span className="setlist-arrows">
-                    <button type="button" onClick={() => move(i, -1)} disabled={i === 0}>▲</button>
-                    <button type="button" onClick={() => move(i, 1)} disabled={i === songs.length - 1}>▼</button>
-                  </span>
+              <div
+                key={i}
+                className={"rider-table-row setlist-cols" + (dragOverIndex === i ? " setlist-row-dragover" : "") + (dragIndex === i ? " setlist-row-dragging" : "")}
+                onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragOverIndex !== i) setDragOverIndex(i); }}
+                onDragLeave={() => setDragOverIndex((v) => (v === i ? null : v))}
+                onDrop={() => handleDrop(i)}
+              >
+                <div className="setlist-title-cell">
+                  <div className="setlist-order">
+                    <span
+                      className="setlist-drag-handle"
+                      draggable
+                      title="Arrossega per canviar l'ordre"
+                      onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = "move"; }}
+                      onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                    >⠿</span>
+                    <span className="setlist-num">{i + 1}</span>
+                  </div>
+                  <input className="field-input compact-field" placeholder="Títol" value={s.title} onChange={(e) => update(i, { title: e.target.value })} />
                 </div>
-                <input className="field-input compact-field" placeholder="Títol" value={s.title} onChange={(e) => update(i, { title: e.target.value })} />
-                <input className="field-input compact-field" placeholder="3:45" value={s.duration} onChange={(e) => update(i, { duration: e.target.value })} />
-                <input className="field-input compact-field" placeholder="Am" value={s.key} onChange={(e) => update(i, { key: e.target.value })} />
                 <input className="field-input compact-field" placeholder="Solo llarg, enllaça amb la següent…" value={s.notes} onChange={(e) => update(i, { notes: e.target.value })} />
                 <button type="button" className="row-delete-btn" onClick={() => setSongs(songs.filter((_, j) => j !== i))}>✕</button>
               </div>
             ))}
           </div>
-          <div>
-            <button type="button" className="btn-outline" onClick={() => setAddMenuOpen((o) => !o)}>
-              {addMenuOpen ? "Amaga els suggeriments ▲" : "+ Afegeix cançó…"}
-            </button>
-            {addMenuOpen && (
-              <div className="instr-panel">
-                <div>
-                  <div className="instr-cat-title">Del repertori</div>
-                  {librarySuggestions.length > 0 ? (
-                    <div className="access-box-list">
-                      {librarySuggestions.map((s) => (
-                        <button key={s.id} type="button" className="access-chip" onClick={() => addFromLibrary(s)}>
-                          {s.title}{s.duration ? ` · ${s.duration}` : ""}
-                        </button>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="t-dim" style={{ fontSize: 12 }}>
-                      {librarySongs.length === 0 ? "Encara no hi ha cap cançó al repertori." : "Ja hi són totes les cançons del repertori."}
-                    </div>
-                  )}
+          <div className="instr-panel">
+            <div>
+              <div className="instr-cat-title">Del repertori</div>
+              {librarySuggestions.length > 0 ? (
+                <div className="access-box-list">
+                  {librarySuggestions.map((s) => (
+                    <button key={s.id} type="button" className="access-chip" onClick={() => addFromLibrary(s)}>
+                      {s.title}
+                    </button>
+                  ))}
                 </div>
-                <button type="button" className="btn-ghost-sm" onClick={addBlank}>+ Entrada en blanc (fora del repertori)</button>
-              </div>
-            )}
+              ) : (
+                <div className="t-dim" style={{ fontSize: 12 }}>
+                  {librarySongs.length === 0 ? "Encara no hi ha cap cançó al repertori." : "Ja has afegit totes les cançons del repertori."}
+                </div>
+              )}
+            </div>
+            <button type="button" className="btn-ghost-sm" onClick={addBlank}>+ Entrada en blanc (fora del repertori)</button>
           </div>
         </div>
       </div>

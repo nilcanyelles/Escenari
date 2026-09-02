@@ -9,7 +9,10 @@ export type RiderInput = { ch: string; source: string; mic: string; stand: strin
 export type RiderOutput = { ch: string; dest: string; kind: string; notes: string };
 export type RiderMonitor = { who: string; kind: string; notes: string };
 export type RiderBacklineItem = { item: string; providedBy: "grup" | "organitzacio"; notes: string };
-export type RiderPage = { title: string; body: string };
+// Una pàgina d'annex pot ser text lliure (títol + cos) o un document penjat
+// (fileUrl) que s'incorpora tal qual — les seves pàgines originals — al PDF
+// final generat, sense passar pel redactat de text.
+export type RiderPage = { id?: string; title: string; body: string; fileUrl?: string; fileMime?: string; fileName?: string };
 
 export type StageItem = { id: string; kind: string; label: string; x: number; y: number; scale: number };
 export type StageSetup = { widthM: number; depthM: number; items: StageItem[] };
@@ -27,8 +30,28 @@ export type RiderContent = {
   power: string;
   hospitality: string;
   notes: string;
+  // Camps lliures (títol + text) dins la pestanya "Detalls" — reordenables,
+  // no confondre amb "pages" (els annexos de pàgina sencera del PDF).
+  customFields: RiderPage[];
+  // Ordre de totes les seccions de la pestanya "Detalls": les quatre fixes
+  // ("audio"/"power"/"lighting"/"hospitality") i els camps lliures
+  // ("cf:<id>"), reordenables juntes arrossegant.
+  detailsOrder: string[];
   pages: RiderPage[];
 };
+
+export const FIXED_DETAIL_KEYS = ["audio", "power", "lighting", "hospitality"] as const;
+
+// Manté detailsOrder sincronitzat amb els camps lliures existents: afegeix
+// les claus que falten (fixes o de camps nous) al final i treu les que ja
+// no existeixen (camps esborrats).
+export function syncDetailsOrder(order: string[], customFields: RiderPage[]): string[] {
+  const cfKeys = customFields.map((f) => "cf:" + f.id);
+  const valid = new Set<string>([...FIXED_DETAIL_KEYS, ...cfKeys]);
+  const kept = order.filter((k) => valid.has(k));
+  const missing = [...FIXED_DETAIL_KEYS, ...cfKeys].filter((k) => !kept.includes(k));
+  return kept.concat(missing);
+}
 
 export type Rider = {
   id: string;
@@ -80,6 +103,8 @@ export function emptyRiderContent(): RiderContent {
     power: "",
     hospitality: "",
     notes: "",
+    customFields: [],
+    detailsOrder: [...FIXED_DETAIL_KEYS],
     pages: [],
   };
 }
@@ -87,10 +112,14 @@ export function emptyRiderContent(): RiderContent {
 // Mapa d'etiquetes antigues (escenari v1: icones png/emoji) a tipus de la
 // llibreria SVG nova, per no perdre plànols ja fets.
 const LEGACY_KIND_GUESS: [RegExp, string][] = [
-  [/bateria/i, "drumkit"], [/caix/i, "cajon"], [/bongo|conga/i, "congas"],
-  [/guitarra el/i, "electric-guitar"], [/guitarra/i, "acoustic-guitar"], [/baix/i, "bass"],
-  [/violí|viola/i, "violin"], [/tecla|piano|sintetitzador/i, "keyboard"],
-  [/saxo/i, "sax"], [/trompeta|fiscorn|corneta/i, "trumpet"], [/flauta|flabiol|gralla|dolçaina/i, "flute"],
+  [/bateria/i, "drumkit"], [/caix/i, "cajon"], [/bongo|conga/i, "congas"], [/pandereta/i, "tambourine"],
+  [/guitarra el/i, "electric-guitar"], [/guitarra/i, "acoustic-guitar"],
+  [/violoncel/i, "cello"], [/contrabaix/i, "double-bass"], [/baix/i, "bass"],
+  [/violí|viola/i, "violin"], [/acordió|acordio/i, "accordion"],
+  [/piano.*cua|cua.*piano/i, "grand-piano"], [/piano/i, "upright-piano"], [/tecla|sintetitzador/i, "keyboard"],
+  [/saxo/i, "sax"], [/trompeta|fiscorn|corneta/i, "trumpet"],
+  [/tenora/i, "tenora"], [/tible/i, "tible"], [/gralla|dolçaina/i, "gralla"],
+  [/flabiol/i, "flabiol"], [/flauta/i, "flute"],
   [/veu|micro/i, "mic"], [/monitor/i, "wedge"], [/di\b/i, "di"], [/ampli/i, "amp"],
   [/corrent/i, "power"], [/taula/i, "mixer"],
 ];
@@ -125,6 +154,13 @@ export function normalizeRiderContent(c: unknown): RiderContent {
     };
   }
 
+  // Camps lliures: assegura que cadascun té un id estable (migració de
+  // riders antics desats abans d'existir "id" a RiderPage).
+  const customFields: RiderPage[] = (Array.isArray(o.customFields) ? (o.customFields as RiderPage[]) : []).map(
+    (f, i) => (f.id ? f : { ...f, id: "cf" + i + "_" + Date.now() })
+  );
+  const detailsOrder = syncDetailsOrder(Array.isArray(o.detailsOrder) ? (o.detailsOrder as string[]) : def.detailsOrder, customFields);
+
   return {
     intro: (o.intro as string) || "",
     contacts: Array.isArray(o.contacts) && o.contacts.length ? (o.contacts as RiderContact[]) : def.contacts,
@@ -138,6 +174,8 @@ export function normalizeRiderContent(c: unknown): RiderContent {
     power: (o.power as string) || "",
     hospitality: (o.hospitality as string) || "",
     notes: (o.notes as string) || "",
+    customFields,
+    detailsOrder,
     pages: Array.isArray(o.pages) ? (o.pages as RiderPage[]) : [],
   };
 }

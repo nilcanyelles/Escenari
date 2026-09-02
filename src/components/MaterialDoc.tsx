@@ -9,27 +9,41 @@ import { instrumentsFor } from "@/lib/tags";
 type BandLite = { name: string; logo: string; color1: string; city: string; contact: string; phone: string; members: Person[] };
 
 // Document imprimible (rider o setlist) que veu qualsevol persona amb l'enllaç.
-export default function MaterialDoc({ kind, name, band, rider, songs }: {
+export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
   kind: "rider" | "setlist";
   name: string;
   band: BandLite;
   rider: RiderContent | null;
   songs: Song[];
+  // Token públic del rider — només cal quan hi ha annexos penjats (fileUrl),
+  // per fusionar-los tal qual via /api/rider-pdf/[token] en comptes del
+  // print-to-PDF del navegador (que no pot incorporar-hi un PDF ja fet).
+  token?: string;
 }) {
   const accent = band.color1 || "#8b7bff";
   const totalSecs = songs.reduce((s, x) => s + songDurationSecs(x.duration), 0);
   const stageAspect = rider ? Math.max(0.8, Math.min(4, rider.stage.widthM / rider.stage.depthM || 1.33)) : 1.33;
+  const hasFileAnnexes = !!rider?.pages.some((p) => p.fileUrl);
 
   return (
     <div className="md-screen">
       <div className="md-toolbar no-print">
         <span className="pf-brand" style={{ margin: 0 }}>ESCENARI</span>
-        <button type="button" className="md-pdf-btn" onClick={() => window.print()}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
-          </svg>
-          Descarrega en PDF
-        </button>
+        {hasFileAnnexes && token ? (
+          <a className="md-pdf-btn" href={`/api/rider-pdf/${token}?dl=1`}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            Descarrega en PDF (amb annexos)
+          </a>
+        ) : (
+          <button type="button" className="md-pdf-btn" onClick={() => window.print()}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            Descarrega en PDF
+          </button>
+        )}
       </div>
 
       <div className="md-doc" style={{ ["--md-accent" as string]: accent }}>
@@ -151,23 +165,53 @@ export default function MaterialDoc({ kind, name, band, rider, songs }: {
               </section>
             )}
 
-            {[
-              ["Àudio (PA / control)", rider.audio],
-              ["Llums", rider.lighting],
-              ["Corrent elèctric", rider.power],
-              ["Hospitalitat", rider.hospitality],
-              ["Altres notes", rider.notes],
-            ].filter(([, v]) => v && String(v).trim()).map(([title, v]) => (
-              <section key={title as string} className="md-section">
-                <h2>{title}</h2>
-                <p className="md-text">{v}</p>
+            {(() => {
+              const fixedTitles: Record<string, string> = {
+                audio: "Àudio", lighting: "Llums", power: "Corrent elèctric", hospitality: "Hospitalitat",
+              };
+              const fixedValues: Record<string, string> = {
+                audio: rider.audio, lighting: rider.lighting, power: rider.power, hospitality: rider.hospitality,
+              };
+              return rider.detailsOrder.map((key) => {
+                if (key.startsWith("cf:")) {
+                  const f = rider.customFields.find((x) => "cf:" + x.id === key);
+                  if (!f || !f.body || !f.body.trim()) return null;
+                  return (
+                    <section key={key} className="md-section">
+                      <h2>{f.title || "Camp"}</h2>
+                      <p className="md-text">{f.body}</p>
+                    </section>
+                  );
+                }
+                const v = fixedValues[key];
+                if (!v || !v.trim()) return null;
+                return (
+                  <section key={key} className="md-section">
+                    <h2>{fixedTitles[key]}</h2>
+                    <p className="md-text">{v}</p>
+                  </section>
+                );
+              });
+            })()}
+
+            {rider.notes && rider.notes.trim() && (
+              <section className="md-section">
+                <h2>Altres notes</h2>
+                <p className="md-text">{rider.notes}</p>
               </section>
-            ))}
+            )}
 
             {rider.pages.map((pg, i) => (
               <section key={i} className="md-section md-extra-page">
                 <h2>{pg.title}</h2>
-                <p className="md-text">{pg.body}</p>
+                {pg.fileUrl ? (
+                  <p className="md-text no-print">
+                    📄 Document adjunt ({pg.fileName || "document"}) — surt tal qual, com a pàgines pròpies, al PDF
+                    generat amb el botó de dalt.
+                  </p>
+                ) : (
+                  <p className="md-text">{pg.body}</p>
+                )}
               </section>
             ))}
           </>

@@ -23,6 +23,7 @@ export default async function PublicMaterialPage({ params }: { params: Promise<{
         band={{ name: riderRow.band_name, logo: riderRow.logo || "", color1: riderRow.color1 || "", city: riderRow.city || "", contact: riderRow.contact || "", phone: riderRow.phone || "", members: riderRow.members || [] }}
         rider={normalizeRiderContent(riderRow.content)}
         songs={[]}
+        token={token}
       />
     );
   }

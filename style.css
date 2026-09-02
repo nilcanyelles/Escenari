@@ -2372,10 +2372,15 @@ button { font-family: inherit; }
   font-family: inherit;
 }
 .access-chip.active { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
+/* Variant de dues línies (nom a sobre, càrrec/instrument a sota) per al
+   picker de contactes del rider. */
+.access-chip-2l { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-radius: 10px; padding: 7px 12px; text-align: left; line-height: 1.25; }
+.access-chip-sub { font-size: 10.5px; color: var(--text-fainter); }
+.access-chip-2l.active .access-chip-sub { color: inherit; opacity: 0.85; }
 
 /* Editor de rider */
 .rider-editor { max-width: 880px; width: min(880px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
-.setlist-editor { max-width: 1180px; width: min(1180px, 96vw); height: 96vh; max-height: 96vh; display: flex; flex-direction: column; }
+.setlist-editor { max-width: 1600px; width: 96vw; height: 96vh; max-height: 96vh; display: flex; flex-direction: column; }
 .rider-editor-body, .setlist-editor-body {
   flex: 1;
   min-height: 0;
@@ -2407,10 +2412,20 @@ button { font-family: inherit; }
 .rider-table-head { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
 .rider-table-head, .rider-table-row { display: grid; gap: 8px; align-items: center; }
 .rider-table-row > * { min-width: 0; }
-.rider-input-cols { grid-template-columns: 46px 1.4fr 1fr 0.8fr 1.2fr 28px; }
-.rider-monitor-cols { grid-template-columns: 1.2fr 0.9fr 1.6fr 28px; }
-.rider-backline-cols { grid-template-columns: 1.6fr 1fr 1.4fr 28px; }
-.setlist-cols { grid-template-columns: 64px 1.8fr 0.6fr 0.5fr 1.6fr 28px; }
+.rider-input-cols { grid-template-columns: 56px 1.4fr 1fr 0.8fr 1.2fr 28px; }
+.rider-monitor-cols { grid-template-columns: 56px 1.2fr 0.9fr 1.6fr 28px; }
+.rider-backline-cols { grid-template-columns: 56px 1.6fr 1fr 1.4fr 28px; }
+.rider-monitor-cols select.field-input, .rider-backline-cols select.field-input {
+  appearance: none; -webkit-appearance: none; -moz-appearance: none;
+  min-width: 0; width: 100%;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-dim) 50%), linear-gradient(135deg, var(--text-dim) 50%, transparent 50%);
+  background-position: calc(100% - 14px) calc(50% - 2px), calc(100% - 9px) calc(50% - 2px);
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  padding-right: 24px;
+}
+.rider-contact-cols { grid-template-columns: 28px 1fr 1.2fr 1fr 1.4fr 28px; }
+.rider-contact-draft-cols { grid-template-columns: 1fr 1.2fr 1fr 1.4fr 28px 28px; margin-top: 12px; }
+.setlist-cols { grid-template-columns: 3fr 1.2fr 28px; }
 
 /* Stage plot */
 .sp-wrap { display: flex; flex-direction: column; gap: 10px; }
@@ -2517,15 +2532,18 @@ button { font-family: inherit; }
 
 /* Setlist editor */
 .setlist-summary { display: flex; gap: 22px; font-size: 13px; color: var(--text-muted); }
-.setlist-order { display: flex; align-items: center; gap: 4px; }
+/* El bloc mànec+número i la casella del títol van enganxats, sense el gap
+   normal de la graella, perquè el títol comenci just al costat del número. */
+.setlist-title-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.setlist-title-cell .field-input { flex: 1; min-width: 0; }
+.setlist-order { display: flex; align-items: center; gap: 4px; flex: none; }
 .setlist-num { font-size: 12px; color: var(--text-faint); width: 18px; text-align: right; }
-.setlist-arrows { display: flex; flex-direction: column; }
-.setlist-arrows button {
-  border: none; background: transparent; color: var(--text-ghost);
-  font-size: 8px; cursor: pointer; padding: 1px 4px; line-height: 1;
-}
-.setlist-arrows button:hover:not(:disabled) { color: var(--text); }
-.setlist-arrows button:disabled { opacity: 0.25; cursor: default; }
+.setlist-num-head { display: inline-block; width: 18px; margin-right: 4px; }
+.setlist-drag-handle { color: var(--text-ghost); font-size: 14px; cursor: grab; line-height: 1; user-select: none; touch-action: none; }
+.setlist-drag-handle:hover { color: var(--text); }
+.setlist-drag-handle:active { cursor: grabbing; }
+.setlist-row-dragging { opacity: 0.4; }
+.setlist-row-dragover { opacity: 0.35; box-shadow: inset 0 2px 0 var(--accent); transition: opacity .1s; }
 
 /* Concert: secció rider/setlist */
 .cd-material-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
@@ -2655,9 +2673,10 @@ button { font-family: inherit; }
 .md-footer { text-align: center; font-size: 11px; color: #a09cb2; border-top: 1px solid #e8e6f0; padding-top: 14px; margin-top: 26px; }
 
 @media print {
+  @page { size: A4; margin: 0; }
   .no-print { display: none !important; }
   .md-screen { background: white; padding: 0; }
-  .md-doc { border-radius: 0; padding: 10mm 12mm; max-width: none; }
+  .md-doc { border-radius: 0; padding: 10mm 12mm; max-width: none; width: 210mm; min-height: 297mm; box-sizing: border-box; }
   body { background: white; }
 }
 
@@ -2777,6 +2796,13 @@ button { font-family: inherit; }
   margin-bottom: 12px;
 }
 .studio-page-head { display: flex; align-items: center; gap: 10px; }
+.annex-file-chip {
+  display: flex; align-items: center; gap: 5px; flex: none; white-space: nowrap;
+  font-size: 12px; color: var(--text-dim); background: var(--bg-deep); border: 1px solid var(--border-soft);
+  border-radius: 999px; padding: 5px 11px; max-width: 220px; overflow: hidden; text-overflow: ellipsis;
+  text-decoration: none;
+}
+.annex-file-chip:hover { color: var(--text); border-color: var(--border-input); }
 
 /* Escenari: paleta + canvas */
 .studio-stage { display: flex; gap: 20px; align-items: flex-start; }
@@ -3112,12 +3138,25 @@ button { font-family: inherit; }
 .perform-transpose { gap: 8px; }
 .perform-transpose button { border: none; background: transparent; color: inherit; cursor: pointer; font-family: inherit; font-size: 13px; padding: 0 3px; }
 .perform-transpose button:disabled { opacity: 0.3; cursor: default; }
-.perform-list {
-  position: absolute; top: 54px; left: 50%; transform: translateX(-50%);
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
-  padding: 8px; z-index: 40; min-width: 320px; max-height: 60vh; overflow-y: auto;
-  box-shadow: 0 20px 60px oklch(0 0 0 / 0.6); display: flex; flex-direction: column; gap: 2px;
+/* Menú lateral de cançons de la setlist — es pot obrir des de la barra
+   superior o des del visor de partitura en pantalla completa (per portal,
+   sempre per sobre de tot). */
+.perform-sidebar-overlay { position: fixed; inset: 0; z-index: 500; background: rgba(0, 0, 0, 0.55); display: flex; }
+.perform-sidebar {
+  width: min(320px, 84vw); height: 100%; background: var(--bg-card); border-right: 1px solid var(--border);
+  box-shadow: 20px 0 60px oklch(0 0 0 / 0.5); display: flex; flex-direction: column;
+  animation: performSidebarIn 0.2s ease-out;
 }
+@keyframes performSidebarIn {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(0); }
+}
+.perform-sidebar-head {
+  flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 16px 18px; border-bottom: 1px solid var(--border-soft);
+}
+.perform-sidebar-title { font-weight: 700; font-size: 15px; }
+.perform-sidebar-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
 .perform-list-item {
   display: flex; align-items: center; gap: 10px;
   border: none; background: transparent; color: var(--text-dim);
@@ -3126,6 +3165,10 @@ button { font-family: inherit; }
 }
 .perform-list-item:hover { background: oklch(1 0 0 / 0.06); }
 .perform-list-item.active { background: oklch(0.68 0.19 290 / 0.18); color: white; }
+/* Cançó sense partitura de l'instrument triat al menú inicial: en gris i
+   sense poder-la seleccionar. */
+.perform-list-item-disabled { color: var(--text-ghost); cursor: default; opacity: 0.45; }
+.perform-list-item-disabled:hover { background: transparent; }
 .perform-list-num { color: var(--text-ghost); font-size: 12px; min-width: 20px; }
 .perform-body { flex: 1; min-height: 0; overflow-y: auto; padding: 30px clamp(18px, 8vw, 120px); scroll-behavior: auto; }
 .perform-song-head h1 { font-family: "Space Grotesk", sans-serif; font-size: 1.6em; margin: 0 0 6px; }
@@ -3133,6 +3176,154 @@ button { font-family: inherit; }
 .perform-body .lyrics-view { background: transparent; border: none; padding: 0; font-size: 1em; line-height: 1.65; text-align: center; }
 .perform-body .lyrics-line-chords { justify-content: center; }
 .perform-no-lyrics { color: var(--text-ghost); font-size: 0.7em; }
+/* Menú previ per triar la veu, abans d'obrir la partitura en pantalla
+   completa. */
+.perform-score-menu { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; }
+.perform-score-menu-title { font-size: 0.6em; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.04em; }
+.perform-score-menu-list, .perform-score-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+/* Bombolla de veu, amb la icona de l'instrument al costat del nom —
+   reutilitzada tant al menú previ com al selector compacte dins el visor
+   en pantalla completa. */
+.perform-score-chip {
+  all: unset; cursor: pointer; box-sizing: border-box;
+  padding: 10px 16px; border-radius: 999px; font-size: 0.62em; font-weight: 600;
+  background: var(--bg-card); border: 1px solid var(--border-soft); color: var(--text);
+  display: inline-flex; align-items: center; gap: 8px;
+}
+.perform-score-chip img { width: 16px; height: 16px; object-fit: contain; flex: none; }
+.perform-score-chip:hover { background: oklch(0.68 0.19 290 / 0.14); border-color: var(--accent); }
+.perform-score-chip.active { background: oklch(0.68 0.19 290 / 0.22); border-color: var(--accent); color: var(--accent-text); }
+.perform-score-chips-compact { flex-wrap: nowrap; overflow-x: auto; }
+.perform-score-chips-compact .perform-score-chip { font-size: 12px; padding: 6px 12px; white-space: nowrap; }
+.perform-score-fallback { align-self: center; color: var(--accent-text); font-size: 14px; text-decoration: underline; }
+/* Visor de partitura en pantalla completa, per sobre de tot (portal a
+   <body>), amb un mode clar (com el PDF natiu) i un mode fosc (fons fosc +
+   la partitura invertida perquè no enlluerni). */
+.perform-score-fs { position: fixed; inset: 0; z-index: 300; display: flex; flex-direction: column; }
+.perform-score-fs.light { background: #fff; }
+.perform-score-fs.dark { background: #0a0a0f; }
+.perform-score-fs-bar {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 10px 16px;
+  background: #08070e; border-bottom: 1px solid oklch(1 0 0 / 0.1);
+}
+.perform-score-fs-bar .row-rs-btn { color: var(--text-muted); }
+.perform-score-fs-bar .row-rs-btn.active { background: oklch(0.68 0.19 290 / 0.22); color: var(--accent-text); }
+/* Un spacer flexible a cada banda del selector de veu: el ✕/menú es queda
+   arran d'esquerra i el clar/fosc arran de dreta (tal com ja estaven),
+   només el selector queda centrat entremig. */
+.perform-score-fs-spacer { flex: 1; }
+/* Interruptor clar/fosc: una pastilla amb el sol i la lluna fixos i una
+   bola que llisca d'un costat a l'altre segons el mode actiu, amb el lila
+   d'accent de l'app. */
+.perform-theme-switch {
+  all: unset; box-sizing: border-box; position: relative; cursor: pointer; flex: none;
+  width: 52px; height: 26px; border-radius: 999px;
+  background: oklch(0.68 0.19 290 / 0.16); border: 1px solid oklch(0.68 0.19 290 / 0.4);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 6px;
+}
+.perform-theme-switch-icon { display: flex; z-index: 1; color: var(--text-fainter); transition: color 0.2s; }
+.perform-theme-switch:not(.dark) .perform-theme-switch-icon:nth-child(1) { color: #fff; }
+.perform-theme-switch.dark .perform-theme-switch-icon:nth-child(2) { color: #fff; }
+.perform-theme-switch-knob {
+  position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4); transition: transform 0.2s ease;
+}
+.perform-theme-switch.dark .perform-theme-switch-knob { transform: translateX(26px); }
+.perform-score-fs-body { flex: 1; min-height: 0; display: flex; overflow: hidden; background: #fff; }
+/* El fons del marc sempre és blanc (el color real del paper de la
+   partitura) — en mode fosc no es torna negre "a mà": és el mateix filtre
+   invert() qui l'enfosqueix a la vegada que la pàgina, així els marges que
+   es veuen en reduir el PDF sempre casen amb el fons de la pàgina. */
+.perform-score-fs-frame { flex: 1; width: 100%; height: 100%; border: none; background: #fff; }
+.perform-score-fs-frame.inverted { filter: invert(1) hue-rotate(180deg); }
+/* Visor de PDF propi (pdf.js): zoom limitat a l'alçada com a mínim, i
+   clicar a banda i banda passa de pàgina. */
+.pdfv { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: #fff; position: relative; }
+/* Control vertical d'arrossegar per fer zoom, penjat a la dreta. */
+.pdfv-zoom-slider { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); z-index: 5; }
+.pdfv-zoom-slider-track {
+  position: relative; width: 30px; height: 160px; border-radius: 999px;
+  background: oklch(0 0 0 / 0.08); border: 1px solid oklch(0 0 0 / 0.12);
+  touch-action: none; cursor: ns-resize;
+}
+.pdfv-zoom-slider-fill {
+  position: absolute; left: 3px; right: 3px; bottom: 3px;
+  border-radius: 999px; background: oklch(0.68 0.19 290 / 0.35); pointer-events: none;
+}
+.pdfv-zoom-slider-thumb {
+  position: absolute; left: 50%; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--accent); box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, 50%); pointer-events: none;
+}
+.pdfv.dark .pdfv-zoom-slider-track { background: oklch(1 0 0 / 0.08); border-color: oklch(1 0 0 / 0.16); }
+/* Negre pur, no el negre blavós del tema de l'app: el filtre invert()
+   converteix el blanc de la pàgina en #000 exacte, així que els marges
+   (que no passen pel filtre, són el fons real d'aquest contenidor) han de
+   ser també #000 perquè no es notin. */
+.pdfv.dark { background: #000; }
+.pdfv-zoom-bar {
+  flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 14px;
+  background: #f0f0f0; border-bottom: 1px solid #ddd; font-size: 12px; color: #444;
+}
+.pdfv-zoom-bar .row-rs-btn { color: #444; }
+/* En mode nit tota la pantalla ha de quedar en tons foscos — la barra de
+   zoom queda per sobre de la partitura invertida, així que cal enfosquir-la
+   nosaltres (el filtre invert() només afecta l'àrea de la pàgina). */
+.pdfv.dark .pdfv-zoom-bar { background: #15151c; border-bottom-color: #2b2b35; color: #ccc; }
+.pdfv.dark .pdfv-zoom-bar .row-rs-btn { color: #ccc; }
+.pdfv.dark .pdfv-zoom-bar .row-rs-btn:hover { background: oklch(1 0 0 / 0.1); }
+.pdfv-zoom-val { min-width: 42px; text-align: center; font-variant-numeric: tabular-nums; }
+.pdfv-page-count { font-variant-numeric: tabular-nums; }
+/* Control d'autoscroll (−/⇣/+), igual patró que a la vista de lletra i
+   acords, empès a la dreta de la barra. */
+.pdfv-scroll-ctl {
+  margin-left: auto; display: flex; align-items: center; gap: 2px;
+  border: 1px solid #ddd; border-radius: 8px; padding: 2px;
+}
+.pdfv-scroll-ctl button {
+  border: none; background: transparent; color: #444; cursor: pointer;
+  font-family: inherit; font-size: 12px; padding: 4px 7px; border-radius: 6px;
+  display: flex; align-items: center;
+}
+.pdfv-scroll-ctl button:hover:not(:disabled) { background: oklch(0 0 0 / 0.06); }
+.pdfv-scroll-ctl button:disabled { opacity: 0.35; cursor: default; }
+.pdfv-scroll-ctl.active { border-color: oklch(0.68 0.19 290 / 0.5); background: oklch(0.68 0.19 290 / 0.12); }
+.pdfv-scroll-ctl.active button { color: oklch(0.68 0.19 290); }
+.pdfv.dark .pdfv-scroll-ctl { border-color: #2b2b35; }
+.pdfv.dark .pdfv-scroll-ctl button { color: #ccc; }
+.pdfv.dark .pdfv-scroll-ctl button:hover:not(:disabled) { background: oklch(1 0 0 / 0.1); }
+.pdfv-pages {
+  flex: 1; min-height: 0; overflow: auto; position: relative; cursor: pointer;
+  display: flex; align-items: flex-start; justify-content: center;
+}
+.pdfv.dark .pdfv-pages { filter: invert(1) hue-rotate(180deg); }
+.pdfv-canvas { display: block; margin: 0 auto; }
+/* En mode 2 pàgines les dues ja van "enganxades" (les tela sense espai
+   entre elles), però el marge blanc imprès de cada full encara deixa un
+   buit visual entre el pentagrama d'una i l'altra — se solapen una mica
+   per compensar-ho i que quedin més juntes de veritat. */
+.pdfv-canvas + .pdfv-canvas { margin-left: -18px; }
+/* Fora del mode "llibre obert": les pàgines que segueixen la primera van
+   apilades a sota, separades per una línia fina, perquè en baixar amb
+   l'scroll (a mà o amb l'autoscroll) es vagin veient seguides. */
+.pdfv-stack { display: flex; flex-direction: column; align-items: center; }
+.pdfv-stack-item { display: flex; flex-direction: column; align-items: center; width: 100%; }
+.pdfv-stack-sep { width: 100%; max-width: 100%; height: 1px; background: oklch(0 0 0 / 0.15); margin: 10px 0; }
+.pdfv-error { margin: auto; color: var(--text-muted); font-size: 14px; }
+.pdfv-flash {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 64px; height: 64px; border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  color: #fff; background: rgba(0, 0, 0, 0.55); pointer-events: none;
+  animation: pdfvFlash 0.45s ease-out forwards;
+}
+.pdfv-flash-left { left: 18px; }
+.pdfv-flash-right { right: 18px; }
+@keyframes pdfvFlash {
+  0% { opacity: 0; transform: translateY(-50%) scale(0.7); }
+  25% { opacity: 1; transform: translateY(-50%) scale(1.05); }
+  100% { opacity: 0; transform: translateY(-50%) scale(1); }
+}
 .perform-bottom { position: sticky; bottom: 0; background: #08070e; z-index: 15; }
 .perform-nav {
   display: flex; justify-content: space-between; padding: 12px 20px;
@@ -3146,6 +3337,14 @@ button { font-family: inherit; }
 .perform-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: white; }
 .perform-nav-btn:disabled { opacity: 0.3; cursor: default; }
 .perform-empty { margin: auto; text-align: center; display: flex; flex-direction: column; gap: 12px; }
+
+/* Menú inicial del mode escenari: nom de la setlist, bombolles per triar
+   l'instrument i la llista de cançons, una sota l'altra. */
+.perform-intro-body { flex: 1; min-height: 0; overflow-y: auto; padding: 32px clamp(18px, 8vw, 120px) 60px; display: flex; flex-direction: column; gap: 6px; }
+.perform-intro-title { font-family: "Space Grotesk", sans-serif; font-size: 1.9em; margin: 0; }
+.perform-intro-section { margin-top: 28px; display: flex; flex-direction: column; gap: 12px; }
+.perform-intro-label { font-size: 12px; color: var(--text-faint); text-transform: uppercase; letter-spacing: 0.06em; }
+.perform-intro-songs { display: flex; flex-direction: column; gap: 2px; max-width: 480px; }
 
 /* Reproductor multipista (mode escenari) */
 .perform-audiobar {
@@ -4159,20 +4358,26 @@ button { font-family: inherit; }
   position: absolute; top: 100%; left: 50%; margin-top: 6px; transform: translateX(-50%);
   filter: blur(4px); opacity: 0.45; pointer-events: none; z-index: 0;
 }
-.chroma-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.5rem; justify-content: flex-start; }
-.chroma-compact .chroma-card { width: 100%; border-radius: 12px; }
-.chroma-compact .chroma-img-wrapper { padding: 6px; }
-.chroma-compact .chroma-img-wrapper img { width: 100%; aspect-ratio: 1 / 1; border-radius: 8px; }
+.chroma-compact { grid-template-columns: repeat(auto-fill, minmax(76px, 76px)); gap: 0.5rem; justify-content: flex-start; }
+/* La targeta petita és tota ella la foto en ràtio 3:4 (mateixa amplada de
+   sempre, 76px) — el nom hi va superposat a sobre com una etiqueta amb
+   degradat, no en un peu a part, perquè afegir-hi text mai en faci créixer
+   l'alçada més enllà del 3:4. */
+.chroma-compact .chroma-card { width: 76px; aspect-ratio: 3 / 4; border-radius: 12px; }
+.chroma-compact .chroma-img-wrapper { position: absolute; inset: 0; padding: 0; }
+.chroma-compact .chroma-img-wrapper img { width: 100%; height: 100%; aspect-ratio: auto; object-fit: cover; border-radius: 12px; }
 .chroma-compact .chroma-info {
-  padding: 0 0.6rem 0.6rem;
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  padding: 0.3rem 0.4rem 0.28rem;
   grid-template-columns: 1fr;
-  row-gap: 0.1rem;
+  row-gap: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0) 85%);
+  border-radius: 0 0 12px 12px;
 }
-/* Que el nom i el rol es puguin veure sencers (fent salt de línia si cal)
-   en comptes de retallar-se amb "…" per no caber en una targeta petita. */
-.chroma-compact .chroma-info .name { font-size: 12px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.25; }
+.chroma-compact .chroma-info .name { font-size: 9.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.2; }
 .chroma-compact .chroma-info .handle { display: none; }
-.chroma-compact .chroma-info .role { font-size: 10.5px; white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.3; align-items: flex-start; }
+.chroma-compact .chroma-info .role { display: none; }
 .chroma-compact .chroma-info .role-icon { display: none; }
 /* En passar el ratolí per una targeta petita, apareix literalment la
    targeta grossa (la mateixa que a la pestanya Equip) flotant per sobre
@@ -4196,7 +4401,8 @@ button { font-family: inherit; }
   animation: bentoChromaFlyoutOpen 0.16s ease-out;
 }
 @media (max-width: 480px) {
-  .chroma-compact { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .chroma-compact { grid-template-columns: repeat(auto-fill, minmax(64px, 64px)); }
+  .chroma-compact .chroma-card { width: 64px; }
 }
 
 /* ============ Perfil públic de músic ============ */
@@ -4591,20 +4797,28 @@ button { font-family: inherit; }
 
 /* ============ Estudi de canco (pagina completa) ============ */
 .ss-lookup-msg { padding: 6px 24px; font-size: 12.5px; color: var(--text-muted); background: var(--bg); }
+/* Totes les caselles de l'estudi de cançó, una sota l'altra. */
+.ss-top-wrap { padding: 20px 24px 0; max-width: 720px; width: 100%; margin: 0 auto; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; }
+.ss-top-card { min-width: 0; }
 .ss-body {
   flex: 1;
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) 400px;
+  display: flex;
+  flex-direction: column;
   gap: 22px;
   padding: 20px 24px 40px;
-  max-width: 1300px;
+  max-width: 720px;
   width: 100%;
   margin: 0 auto;
 }
 .ss-main { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .ss-lyrics { flex: 1; min-height: 58vh; resize: vertical; font-family: "JetBrains Mono", Consolas, monospace; font-size: 13.5px; line-height: 1.7; }
-.ss-lyrics-view { max-height: 70vh; overflow-y: auto; }
+.ss-lyrics-view { flex: 1; max-height: 70vh; overflow-y: auto; }
 .ss-side { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+.ss-expand-btn { font-size: 12px; padding: 5px 10px; flex: none; white-space: nowrap; }
+/* Per defecte la caixa de lletra i acords surt petita; el botó "Amplia"
+   torna a l'alçada gran d'abans. */
+.ss-lyrics-compact { min-height: 130px; }
+.ss-lyrics-view-compact { max-height: 130px; }
 .ss-card {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
@@ -4754,6 +4968,30 @@ button { font-family: inherit; }
 }
 .calx-mini-day.today { background: var(--accent); color: white; font-weight: 700; }
 .calx-mini-day.selected:not(.today) { outline: 1.5px solid var(--accent); }
+
+/* Calendari mensual per assignar una setlist a un assaig/bolo */
+.assign-cal-modal { width: 380px; }
+.assign-cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.assign-cal-title { font-size: 14px; font-weight: 700; }
+.assign-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.assign-cal-wd { font-size: 10px; color: var(--text-ghost); text-align: center; text-transform: uppercase; padding-bottom: 4px; }
+.assign-cal-day {
+  border: none; background: transparent; color: var(--text-muted);
+  font-size: 13px; font-family: inherit; border-radius: 8px;
+  aspect-ratio: 1; cursor: pointer; position: relative;
+  display: flex; align-items: center; justify-content: center;
+}
+.assign-cal-day:disabled { cursor: default; opacity: 0.35; }
+.assign-cal-day.has:not(:disabled) { background: oklch(1 0 0 / 0.06); font-weight: 600; color: var(--text); }
+.assign-cal-day.has:not(:disabled):hover { background: oklch(1 0 0 / 0.12); }
+.assign-cal-day.today { outline: 1.5px solid var(--accent); }
+.assign-cal-day.assigned { background: oklch(0.62 0.17 145); color: white; font-weight: 700; }
+.assign-cal-day.assigned:hover { background: oklch(0.66 0.17 145); }
+.assign-cal-daynum { line-height: 1; }
+.assign-cal-check {
+  position: absolute; bottom: 2px; right: 2px;
+  font-size: 8px; line-height: 1; font-weight: 900;
+}
 
 /* Graella principal */
 .calx-main { min-width: 0; }

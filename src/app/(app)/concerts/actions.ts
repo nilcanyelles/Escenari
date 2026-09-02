@@ -422,42 +422,67 @@ export async function getStreetWaysAction(lat: number, lon: number, radiusM = 90
   const dLon = dLat / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
   const south = lat - dLat, north = lat + dLat, west = lon - dLon, east = lon + dLon;
   const bbox: [number, number, number, number] = [south, west, north, east];
+
+  // Cache permanent per punt (arrodonit) + radi: un cop es resol un lloc no
+  // cal tornar-lo a demanar mai més — sobretot útil perquè un grup sol
+  // tocar moltes vegades als mateixos recintes, i perquè Overpass falla
+  // sovint puntualment (saturat, bloqueig temporal per excés d'ús...).
+  const cacheKey = `${lat.toFixed(3)},${lon.toFixed(3)}@${radiusM}`;
+  const pool = db();
+  try {
+    const cached = (await pool.query("select bbox, ways from street_ways_cache where key=$1", [cacheKey])).rows[0];
+    if (cached) return { bbox: cached.bbox, ways: cached.ways };
+  } catch (err) {
+    console.error("getStreetWaysAction: error llegint la cache", err);
+  }
+
   const query = `[out:json][timeout:15];way["highway"](${south},${west},${north},${east});out geom;`;
   // Diversos punts d'accés públics d'Overpass, per si el principal està
-  // saturat o bloqueja temporalment per excés de peticions (com ha passat
-  // avui) — es proven en ordre i es queda amb el primer que respongui.
+  // saturat o bloqueja temporalment per excés de peticions — es proven en
+  // ordre i es queda amb el primer que respongui; si cap dels tres respon
+  // a la primera volta (sol ser un problema puntual, no permanent), es
+  // torna a provar un cop més abans de rendir-se del tot.
   const endpoints = [
     "https://overpass-api.de/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
   ];
-  for (const url of endpoints) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-          "Accept": "application/json",
-          "User-Agent": "Escenari (escenari.app, contacte via l'app)",
-        },
-        body: "data=" + encodeURIComponent(query),
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!res.ok) {
-        console.error("getStreetWaysAction: Overpass ha respost", url, res.status, await res.text().catch(() => ""));
-        continue;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "Escenari (escenari.app, contacte via l'app)",
+          },
+          body: "data=" + encodeURIComponent(query),
+          signal: AbortSignal.timeout(7000),
+        });
+        if (!res.ok) {
+          console.error("getStreetWaysAction: Overpass ha respost", url, res.status, await res.text().catch(() => ""));
+          continue;
+        }
+        const data = await res.json();
+        const elements: { type: string; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] }[] = data.elements || [];
+        const ways = elements
+          .filter((e) => e.type === "way" && e.geometry && e.geometry.length > 1)
+          .map((e) => ({
+            highway: e.tags?.highway || "",
+            pts: e.geometry!.map((g) => [g.lon, g.lat] as [number, number]),
+          }));
+        if (ways.length) {
+          pool.query(
+            "insert into street_ways_cache (key, bbox, ways) values ($1,$2,$3) on conflict (key) do update set bbox=$2, ways=$3, updated_at=now()",
+            [cacheKey, JSON.stringify(bbox), JSON.stringify(ways)]
+          ).catch((err) => console.error("getStreetWaysAction: error desant la cache", err));
+        }
+        return { bbox, ways };
+      } catch (err) {
+        console.error("getStreetWaysAction: error cridant Overpass", url, err);
       }
-      const data = await res.json();
-      const elements: { type: string; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[] }[] = data.elements || [];
-      const ways = elements
-        .filter((e) => e.type === "way" && e.geometry && e.geometry.length > 1)
-        .map((e) => ({
-          highway: e.tags?.highway || "",
-          pts: e.geometry!.map((g) => [g.lon, g.lat] as [number, number]),
-        }));
-      return { bbox, ways };
-    } catch (err) {
-      console.error("getStreetWaysAction: error cridant Overpass", url, err);
     }
   }
   return { bbox, ways: [] };

@@ -110,6 +110,23 @@ function Keyboard() {
     </g>
   );
 }
+function GrandPiano() {
+  return (
+    <g>
+      <path d="M28 16c14 0 24 6 24 16s-10 16-24 16z" fill={DARK} stroke={DARKER} strokeWidth="1.6" />
+      <rect x="10" y="16" width="18" height="32" rx="2" fill={DARK} stroke={DARKER} strokeWidth="1.6" />
+      <rect x="9.5" y="20" width="8" height="24" rx="1" fill="#f5f2ea" stroke={DARKER} strokeWidth="0.8" />
+    </g>
+  );
+}
+function UprightPiano() {
+  return (
+    <g>
+      <rect x="10" y="20" width="44" height="16" rx="2" fill={DARK} stroke={DARKER} strokeWidth="1.6" />
+      <rect x="14" y="24.5" width="36" height="6" rx="1" fill="#f5f2ea" stroke={DARKER} strokeWidth="0.8" />
+    </g>
+  );
+}
 function Sax() {
   return (
     <g transform="rotate(15 32 32)">
@@ -269,6 +286,40 @@ function PowerDrop() {
     </g>
   );
 }
+// Instrument de vent cònic de fusta (gralla, tenora, tible, dolçaina...):
+// mateixa silueta bàsica, prou per distingir-lo a cop d'ull al plànol.
+function Gralla() {
+  return (
+    <g transform="rotate(-20 32 32)">
+      <path d="M29 8h6l3 32a5 5 0 0 1-5 6h-2a5 5 0 0 1-5-6z" fill={WOOD} stroke={WOOD_D} strokeWidth="1.4" />
+      <rect x="28.4" y="3" width="7.2" height="8" rx="2.2" fill={DARK} stroke={DARKER} strokeWidth="1" />
+      {[17, 22, 27, 32].map((y) => <circle key={y} cx="32" cy={y} r="1.3" fill={WOOD_D} />)}
+    </g>
+  );
+}
+function Accordion() {
+  return (
+    <g>
+      <rect x="9" y="18" width="15" height="28" rx="3" fill={CREAM} stroke={DARK} strokeWidth="1.6" />
+      <rect x="40" y="18" width="15" height="28" rx="3" fill={CREAM} stroke={DARK} strokeWidth="1.6" />
+      {[26, 29.5, 33, 36.5].map((x) => <line key={x} x1={x} y1="20" x2={x} y2="44" stroke={DARK} strokeWidth="1.6" />)}
+      <circle cx="16.5" cy="32" r="3" fill={DARK} />
+      <circle cx="47.5" cy="32" r="3" fill={DARK} />
+    </g>
+  );
+}
+function Tambourine() {
+  const jingles = [0, 60, 120, 180, 240, 300].map((deg) => {
+    const rad = (deg * Math.PI) / 180;
+    return { x: 32 + 18 * Math.cos(rad), y: 32 + 18 * Math.sin(rad) };
+  });
+  return (
+    <g>
+      <circle cx="32" cy="32" r="18" fill={CREAM} stroke={WOOD_D} strokeWidth="3" />
+      {jingles.map((p, i) => <circle key={i} cx={p.x} cy={p.y} r="2.6" fill={METAL} stroke={METAL_D} strokeWidth="1" />)}
+    </g>
+  );
+}
 
 export const STAGE_LIBRARY: StageCategory[] = [
   {
@@ -278,6 +329,7 @@ export const STAGE_LIBRARY: StageCategory[] = [
       { kind: "cajon", label: "Caixó", svg: <Cajon /> },
       { kind: "congas", label: "Congues", svg: <Congas /> },
       { kind: "timbal", label: "Timbal", svg: <Timbal /> },
+      { kind: "tambourine", label: "Pandereta", svg: <Tambourine />, defaultScale: 0.8 },
     ],
   },
   {
@@ -287,11 +339,18 @@ export const STAGE_LIBRARY: StageCategory[] = [
       { kind: "acoustic-guitar", label: "Guitarra acústica", svg: <AcousticGuitar /> },
       { kind: "bass", label: "Baix", svg: <Bass /> },
       { kind: "violin", label: "Violí", svg: <Violin /> },
+      { kind: "cello", label: "Violoncel", svg: <Violin />, defaultScale: 1.3 },
+      { kind: "double-bass", label: "Contrabaix", svg: <Violin />, defaultScale: 1.7 },
     ],
   },
   {
     id: "teclats", label: "Teclats", color: "#5a7fd6",
-    items: [{ kind: "keyboard", label: "Teclat", svg: <Keyboard />, defaultScale: 1.3 }],
+    items: [
+      { kind: "keyboard", label: "Teclat", svg: <Keyboard />, defaultScale: 1.3 },
+      { kind: "grand-piano", label: "Piano de cua", svg: <GrandPiano />, defaultScale: 1.7 },
+      { kind: "upright-piano", label: "Piano de paret", svg: <UprightPiano />, defaultScale: 1.3 },
+      { kind: "accordion", label: "Acordió", svg: <Accordion /> },
+    ],
   },
   {
     id: "vent", label: "Vent", color: "#c8a13f",
@@ -299,6 +358,10 @@ export const STAGE_LIBRARY: StageCategory[] = [
       { kind: "sax", label: "Saxo", svg: <Sax /> },
       { kind: "trumpet", label: "Trompeta", svg: <Trumpet /> },
       { kind: "flute", label: "Flauta", svg: <Flute /> },
+      { kind: "gralla", label: "Gralla", svg: <Gralla /> },
+      { kind: "tenora", label: "Tenora", svg: <Gralla />, defaultScale: 1.15 },
+      { kind: "tible", label: "Tible", svg: <Gralla />, defaultScale: 0.9 },
+      { kind: "flabiol", label: "Flabiol", svg: <Flute />, defaultScale: 0.7 },
     ],
   },
   {
@@ -341,6 +404,16 @@ STAGE_LIBRARY.forEach((cat) => cat.items.forEach((it) => { KIND_MAP[it.kind] = i
 
 export function stageKindDef(kind: string): StageKindDef {
   return KIND_MAP[kind] || KIND_MAP["person"];
+}
+
+// Categories que són instruments de veritat (per generar canals a la
+// llista d'entrades) — no equipament d'àudio, persones ni estructura.
+const INSTRUMENT_CATEGORY_IDS = new Set(["percussio", "cordes", "teclats", "vent"]);
+const INSTRUMENT_KIND_SET = new Set(
+  STAGE_LIBRARY.filter((cat) => INSTRUMENT_CATEGORY_IDS.has(cat.id)).flatMap((cat) => cat.items.map((it) => it.kind))
+);
+export function isInstrumentKind(kind: string): boolean {
+  return INSTRUMENT_KIND_SET.has(kind);
 }
 
 export function StageItemSvg({ kind, size = 44 }: { kind: string; size?: number }) {

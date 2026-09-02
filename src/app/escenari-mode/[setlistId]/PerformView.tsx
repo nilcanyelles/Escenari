@@ -1,10 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { LyricsView } from "@/components/SongsPanel";
+import { instrumentIconFor } from "@/lib/tags";
+import PdfViewer from "@/components/PdfViewer";
+
+// "Gralla dolça 1" -> "Gralla dolça" (per buscar la icona de l'instrument
+// sense l'índex de la instància).
+function scoreIconName(instrument: string): string {
+  return instrument.replace(/\s+\d+$/, "").trim();
+}
 
 export type PerformTrack = { id: string; name: string };
+export type PerformScore = { id: string; name: string; mime: string; instrument: string };
 
 export type PerformSong = {
   title: string;
@@ -14,6 +24,8 @@ export type PerformSong = {
   tempo: number;
   lyrics: string;
   tracks: PerformTrack[];
+  scores: PerformScore[];
+  instruments: string[];
 };
 
 type TrackMix = { name: string; volume: number; muted: boolean; solo: boolean };
@@ -35,6 +47,22 @@ function fmtTime(secs: number): string {
 }
 
 export default function PerformView({ name, bandName, songs, backHref }: { name: string; bandName: string; songs: PerformSong[]; backHref: string }) {
+  // Menú inicial: nom de la setlist, bombolles per triar la veu que
+  // seguiràs, i la llista de cançons — clicar-ne una hi entra directament
+  // amb aquella veu ja preseleccionada (si hi és disponible).
+  const [showIntro, setShowIntro] = useState(true);
+  const [pickedInstrument, setPickedInstrument] = useState<string | null>(null);
+  // Cada veu numerada (Clarinet 1, Clarinet 2…) surt com una opció separada
+  // — només es fonen entrades amb el nom EXACTAMENT igual repetides a
+  // diverses cançons.
+  const introInstruments = useMemo(() => {
+    const seen = new Set<string>();
+    const list: string[] = [];
+    songs.forEach((s) => s.scores.forEach((sc) => {
+      if (!seen.has(sc.instrument)) { seen.add(sc.instrument); list.push(sc.instrument); }
+    }));
+    return list;
+  }, [songs]);
   const [idx, setIdx] = useState(0);
   const [semitones, setSemitones] = useState(0);
   const [autoScroll, setAutoScroll] = useState(false);
@@ -71,6 +99,64 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
 
   const song = songs[idx] || null;
   const tracks = song?.tracks || [];
+  const scores = song?.scores || [];
+  const [scoreIdx, setScoreIdx] = useState(0);
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const [scoreDark, setScoreDark] = useState(false);
+  const curScore = scores[scoreIdx] || null;
+  // Quan es canvia de cançó arrossegant al límit de la partitura (no pel
+  // menú de cançons), es recorda l'instrument que s'estava veient perquè la
+  // cançó següent obri directament la mateixa veu, sense passar pel menú.
+  const pendingInstrumentRef = useRef<string | null>(null);
+
+  // Troba la veu buscada dins les partitures d'una cançó: primer per nom
+  // exacte (per no confondre "Clarinet 1" amb "Clarinet 2" quan una cançó
+  // té les dues veus separades) i, si no hi és, per nom base sense número
+  // (per si l'altra cançó només en té una instància, sense numerar).
+  function findScoreMatch(sc: PerformScore[], wanted: string): number {
+    const exact = sc.findIndex((x) => x.instrument === wanted);
+    if (exact >= 0) return exact;
+    return sc.findIndex((x) => scoreIconName(x.instrument) === scoreIconName(wanted));
+  }
+
+  // Tria quina partitura obrir per a una cançó donada: si es demana un
+  // instrument concret i hi és, l'obre directament; si no, torna al menú
+  // de tria de veu, preseleccionant "Totes les veus" si n'hi ha.
+  function resolveScoreForSong(songIdx: number, wanted: string | null) {
+    const sc = songs[songIdx]?.scores || [];
+    if (wanted) {
+      const matchIdx = findScoreMatch(sc, wanted);
+      if (matchIdx >= 0) {
+        setScoreIdx(matchIdx);
+        setScoreOpen(true);
+        return;
+      }
+    }
+    const allIdx = sc.findIndex((x) => x.instrument === "Totes les veus");
+    setScoreIdx(allIdx >= 0 ? allIdx : 0);
+    setScoreOpen(false);
+  }
+
+  // En canviar de cançó, torna a mostrar el menú de tria de veu (mai obre
+  // directament la partitura d'abans), tret que hi hagi un instrument
+  // pendent de continuar (arrossegant al límit, o triat al menú inicial).
+  useEffect(() => {
+    const wanted = pendingInstrumentRef.current;
+    pendingInstrumentRef.current = null;
+    resolveScoreForSong(idx, wanted);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idx]);
+
+  // Des del visor de partitura: si ja ets a la primera/última pàgina i
+  // tornes a tirar cap a aquell costat, passa a la cançó anterior/següent
+  // mantenint el mateix instrument (si hi és).
+  function goSongFromScoreEdge(dir: -1 | 1) {
+    const nextIdx = idx + dir;
+    if (nextIdx < 0 || nextIdx >= songs.length) return;
+    pendingInstrumentRef.current = curScore?.instrument || null;
+    setIdx(nextIdx);
+    setAutoScroll(false);
+  }
   const duration = tracks.reduce((max, t) => Math.max(max, trackDurations[t.id] || 0), 0);
 
   function ctx(): AudioContext {
@@ -312,6 +398,7 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
   }, [autoScroll, idx, speedIdx]);
 
   function go(delta: number) {
+    if (scoreOpen && curScore) pendingInstrumentRef.current = curScore.instrument;
     setIdx((i) => Math.min(songs.length - 1, Math.max(0, i + delta)));
     setAutoScroll(false);
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -340,6 +427,60 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
     );
   }
 
+  if (showIntro) {
+    return (
+      <div className="perform perform-intro">
+        <div className="perform-topbar">
+          <Link href={backHref} className="cd-back">← Surt</Link>
+        </div>
+        <div className="perform-intro-body">
+          <h1 className="perform-intro-title">{name}</h1>
+          <div className="t-dim" style={{ fontSize: 13 }}>{bandName}</div>
+          {introInstruments.length > 0 && (
+            <div className="perform-intro-section">
+              <div className="perform-intro-label">El teu instrument</div>
+              <div className="perform-score-chips">
+                {introInstruments.map((instrument) => (
+                  <button key={instrument} type="button"
+                    className={"perform-score-chip" + (pickedInstrument === instrument ? " active" : "")}
+                    onClick={() => setPickedInstrument((v) => (v === instrument ? null : instrument))}>
+                    <img src={instrumentIconFor(scoreIconName(instrument))} alt="" />
+                    {instrument}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="perform-intro-section">
+            <div className="perform-intro-label">Cançons</div>
+            <div className="perform-intro-songs">
+              {songs.map((s, i) => {
+                const missing = !!pickedInstrument && findScoreMatch(s.scores, pickedInstrument) < 0;
+                return (
+                  <button key={i} type="button" className={"perform-list-item" + (missing ? " perform-list-item-disabled" : "")}
+                    disabled={missing}
+                    title={missing ? `Aquesta cançó no té partitura de ${pickedInstrument}` : undefined}
+                    onClick={() => {
+                      // Si ja hi érem (la cançó per defecte, idx 0), canviar
+                      // l'índex al mateix valor no torna a disparar l'efecte
+                      // que aplica l'instrument triat — cal fer-ho ara mateix.
+                      if (i === idx) resolveScoreForSong(i, pickedInstrument);
+                      else pendingInstrumentRef.current = pickedInstrument;
+                      setIdx(i);
+                      setShowIntro(false);
+                    }}>
+                    <span className="perform-list-num">{i + 1}</span> {s.title}
+                    <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{s.duration}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const prevBtn = (
     <button type="button" className="perform-nav-btn" title="Cançó anterior" aria-label="Cançó anterior" disabled={idx === 0} onClick={() => go(-1)}>
       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="4" width="2.5" height="16" rx="1"></rect><path d="M19 4.5v15a1 1 0 0 1-1.6.8L7 12.8a1 1 0 0 1 0-1.6L17.4 3.7A1 1 0 0 1 19 4.5z"></path></svg>
@@ -359,43 +500,38 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
           {name} · {idx + 1}/{songs.length} ▾
         </button>
         <div className="perform-controls">
-          <div className={"perform-ctl perform-transpose perform-scroll-ctl" + (autoScroll ? " active" : "")}>
-            <button type="button" title={speedIdx === 0 ? "Atura l'autoscroll" : "Redueix el ritme"}
-              onClick={() => { if (speedIdx === 0) setAutoScroll(false); else setSpeedIdx((i) => Math.max(0, i - 1)); }}>−</button>
-            <button type="button" title={`Autoscroll (espai) — ritme ${speedIdx + 1}`} onClick={() => setAutoScroll((v) => !v)}>⇣ Scroll</button>
-            <button type="button" title={!autoScroll ? "Comença l'autoscroll" : "Augmenta el ritme"}
-              disabled={autoScroll && speedIdx === SCROLL_SPEEDS.length - 1}
-              onClick={() => { if (!autoScroll) setAutoScroll(true); else setSpeedIdx((i) => Math.min(SCROLL_SPEEDS.length - 1, i + 1)); }}>+</button>
-          </div>
+          {!!song?.lyrics.trim() && (
+            <div className={"perform-ctl perform-transpose perform-scroll-ctl" + (autoScroll ? " active" : "")}>
+              <button type="button" title={speedIdx === 0 ? "Atura l'autoscroll" : "Redueix el ritme"}
+                onClick={() => { if (speedIdx === 0) setAutoScroll(false); else setSpeedIdx((i) => Math.max(0, i - 1)); }}>−</button>
+              <button type="button" title={`Autoscroll (espai) — ritme ${speedIdx + 1}`} onClick={() => setAutoScroll((v) => !v)}>⇣ Scroll</button>
+              <button type="button" title={!autoScroll ? "Comença l'autoscroll" : "Augmenta el ritme"}
+                disabled={autoScroll && speedIdx === SCROLL_SPEEDS.length - 1}
+                onClick={() => { if (!autoScroll) setAutoScroll(true); else setSpeedIdx((i) => Math.min(SCROLL_SPEEDS.length - 1, i + 1)); }}>+</button>
+            </div>
+          )}
           {song && song.tempo > 0 && (
             <button type="button" className={"perform-ctl" + (metronomeOn ? " active" : "")} title={`Metrònom ${song.tempo} BPM`} onClick={() => setMetronomeOn((v) => !v)}>
               ♩ {song.tempo}
             </button>
           )}
           {song?.key && <button type="button" className="perform-ctl" title="Toca el to inicial" onClick={playPitch}>♪ {song.key}</button>}
-          <div className="perform-ctl perform-transpose">
-            <button type="button" onClick={() => setSemitones((s) => s - 1)}>−</button>
-            <span>{semitones > 0 ? "+" + semitones : semitones}</span>
-            <button type="button" onClick={() => setSemitones((s) => s + 1)}>+</button>
-          </div>
-          <div className="perform-ctl perform-transpose">
-            <button type="button" onClick={() => setFontSize((f) => Math.max(14, f - 2))}>A−</button>
-            <button type="button" onClick={() => setFontSize((f) => Math.min(40, f + 2))}>A+</button>
-          </div>
+          {!!song?.lyrics.trim() && (
+            <>
+              <div className="perform-ctl perform-transpose">
+                <button type="button" onClick={() => setSemitones((s) => s - 1)}>−</button>
+                <span>{semitones > 0 ? "+" + semitones : semitones}</span>
+                <button type="button" onClick={() => setSemitones((s) => s + 1)}>+</button>
+              </div>
+              <div className="perform-ctl perform-transpose">
+                <button type="button" onClick={() => setFontSize((f) => Math.max(14, f - 2))}>A−</button>
+                <button type="button" onClick={() => setFontSize((f) => Math.min(40, f + 2))}>A+</button>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
-      {listOpen && (
-        <div className="perform-list">
-          {songs.map((s, i) => (
-            <button key={i} type="button" className={"perform-list-item" + (i === idx ? " active" : "")}
-              onClick={() => { setIdx(i); setListOpen(false); setAutoScroll(false); if (scrollRef.current) scrollRef.current.scrollTop = 0; }}>
-              <span className="perform-list-num">{i + 1}</span> {s.title}
-              <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{s.duration}</span>
-            </button>
-          ))}
-        </div>
-      )}
 
       <div className="perform-body" ref={scrollRef} style={{ fontSize }}>
         <div className="perform-song-head">
@@ -405,11 +541,21 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
             {song!.notes ? ` — ${song!.notes}` : ""}
           </div>
         </div>
-        {song!.lyrics.trim() ? (
-          <LyricsView lyrics={song!.lyrics} semitones={semitones} />
-        ) : (
-          <div className="perform-no-lyrics">Sense lletra al repertori — afegeix-la a la pestanya Cançons del grup.</div>
+        {scores.length > 0 && !scoreOpen && (
+          <div className="perform-score-menu">
+            <div className="perform-score-menu-title">Partitura — tria la veu</div>
+            <div className="perform-score-menu-list">
+              {scores.map((sc, i) => (
+                <button key={sc.id} type="button" className="perform-score-chip"
+                  onClick={() => { setScoreIdx(i); setScoreOpen(true); }}>
+                  <img src={instrumentIconFor(scoreIconName(sc.instrument))} alt="" />
+                  {sc.instrument}{scores.filter((x) => x.instrument === sc.instrument).length > 1 ? ` — ${sc.name}` : ""}
+                </button>
+              ))}
+            </div>
+          </div>
         )}
+        {song!.lyrics.trim() && <LyricsView lyrics={song!.lyrics} semitones={semitones} />}
         <div style={{ height: "45vh" }}></div>
       </div>
 
@@ -449,6 +595,27 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
         </button>
       )}
 
+      {listOpen && createPortal(
+        <div className="perform-sidebar-overlay" onClick={() => setListOpen(false)}>
+          <div className="perform-sidebar" onClick={(e) => e.stopPropagation()}>
+            <div className="perform-sidebar-head">
+              <div className="perform-sidebar-title">{name}</div>
+              <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setListOpen(false)}>✕</button>
+            </div>
+            <div className="perform-sidebar-list">
+              {songs.map((s, i) => (
+                <button key={i} type="button" className={"perform-list-item" + (i === idx ? " active" : "")}
+                  onClick={() => { if (scoreOpen && curScore) pendingInstrumentRef.current = curScore.instrument; setIdx(i); setListOpen(false); setAutoScroll(false); if (scrollRef.current) scrollRef.current.scrollTop = 0; }}>
+                  <span className="perform-list-num">{i + 1}</span> {s.title}
+                  <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{s.duration}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
       {mixerOpen && (
         <div className="perform-mixer-overlay" onClick={() => setMixerOpen(false)}>
           <div className="perform-mixer-panel" onClick={(e) => e.stopPropagation()}>
@@ -485,6 +652,49 @@ export default function PerformView({ name, bandName, songs, backHref }: { name:
             </div>
           </div>
         </div>
+      )}
+
+      {scoreOpen && curScore && createPortal(
+        <div className={"perform-score-fs" + (scoreDark ? " dark" : " light")}>
+          <div className="perform-score-fs-bar">
+            <button type="button" className={"row-rs-btn" + (listOpen ? " active" : "")} title="Cançons de la setlist" aria-label="Cançons de la setlist" onClick={() => setListOpen((v) => !v)}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="14" y2="18"></line></svg>
+            </button>
+            <button type="button" className="row-rs-btn" title="Torna a triar la veu" aria-label="Torna a triar la veu" onClick={() => setScoreOpen(false)}>✕</button>
+            <div className="perform-score-fs-spacer" />
+            {scores.length > 1 && (
+              <div className="perform-score-chips perform-score-chips-compact">
+                {scores.map((sc, i) => (
+                  <button key={sc.id} type="button" className={"perform-score-chip" + (i === scoreIdx ? " active" : "")}
+                    onClick={() => setScoreIdx(i)}>
+                    <img src={instrumentIconFor(scoreIconName(sc.instrument))} alt="" />
+                    {sc.instrument}{scores.filter((x) => x.instrument === sc.instrument).length > 1 ? ` — ${sc.name}` : ""}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="perform-score-fs-spacer" />
+            <button type="button" className={"perform-theme-switch" + (scoreDark ? " dark" : "")} title={scoreDark ? "Mode fosc — clica per mode clar" : "Mode clar — clica per mode fosc"} aria-label="Canvia entre mode clar i fosc" onClick={() => setScoreDark((v) => !v)}>
+              <span className="perform-theme-switch-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              </span>
+              <span className="perform-theme-switch-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+              </span>
+              <span className="perform-theme-switch-knob" />
+            </button>
+          </div>
+          <div className="perform-score-fs-body">
+            {curScore.mime.startsWith("image") ? (
+              <img className={"perform-score-fs-frame" + (scoreDark ? " inverted" : "")} src={`/api/file/${curScore.id}`} alt={curScore.name} />
+            ) : curScore.mime === "application/pdf" ? (
+              <PdfViewer key={curScore.id} url={`/api/file/${curScore.id}`} dark={scoreDark} onEdge={goSongFromScoreEdge} />
+            ) : (
+              <a className="perform-score-fallback" href={`/api/file/${curScore.id}`} target="_blank" rel="noopener noreferrer">Obre &ldquo;{curScore.name}&rdquo;</a>
+            )}
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

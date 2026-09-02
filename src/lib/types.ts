@@ -6,6 +6,20 @@ export type BackupPerson = { name: string; instruments: string[]; phone: string;
 
 export type Vehicle = { type: string; brand: string; color: string; owner: string; plate: string };
 
+export type SocialLinks = { instagram?: string; youtube?: string; tiktok?: string; spotify?: string };
+
+export type SocialStats = {
+  instagramFollowers?: number;
+  // Seguidors de Spotify: es pot llegir automàticament de l'API pública.
+  spotifyFollowers?: number;
+  // Oients mensuals: només ho veu el mateix grup a Spotify for Artists —
+  // l'API pública no ho dona a ningú, sempre és manual.
+  spotifyMonthlyListeners?: number;
+  tiktokFollowers?: number;
+  // Visites totals del canal de YouTube: es pot llegir automàticament.
+  youtubeViews?: number;
+};
+
 export type Band = {
   id: string;
   name: string;
@@ -32,6 +46,8 @@ export type Band = {
   // interruptors, mai detalls ni enllaços) que s'aplica als concerts nous
   // d'aquest grup en comptes de la plantilla genèrica.
   defaultRouteSheet?: import("./route-sheet").RouteSheetDefaults;
+  socialLinks?: SocialLinks;
+  socialStats?: SocialStats;
 };
 
 export type Concert = {

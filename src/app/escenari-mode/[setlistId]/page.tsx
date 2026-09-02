@@ -41,6 +41,10 @@ export default async function PerformPage({ params }: { params: Promise<{ setlis
       const tracks = (match?.files || [])
         .filter((f) => f.mime.startsWith("audio"))
         .map((f) => ({ id: f.id, name: f.name || f.instrument }));
+      // Partitures (PDF/imatge/document) penjades a la cançó, per veu.
+      const scores = (match?.files || [])
+        .filter((f) => !f.mime.startsWith("audio"))
+        .map((f) => ({ id: f.id, name: f.name, mime: f.mime, instrument: f.instrument || "Totes les veus" }));
       return {
         title: s.title,
         duration: s.duration || match?.duration || "",
@@ -49,6 +53,8 @@ export default async function PerformPage({ params }: { params: Promise<{ setlis
         tempo: match?.tempo || 0,
         lyrics: match?.lyrics || "",
         tracks,
+        scores,
+        instruments: match?.instruments || [],
       };
     });
 

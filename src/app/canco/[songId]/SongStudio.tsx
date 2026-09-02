@@ -4,13 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Song } from "@/lib/songs";
-import { hasChords } from "@/lib/songs";
 import { convertChordLyrics } from "@/lib/chords-detect";
 import { instrumentIconFor } from "@/lib/tags";
 import { INSTRUMENT_CATEGORIES } from "@/lib/instruments";
 import { InstrumentIcon } from "@/components/InstrumentPicker";
 import { normalize } from "@/lib/text";
-import { LyricsView } from "@/components/SongsPanel";
 import { saveSongAction, uploadFileAction, deleteFileAction, lookupSongAction } from "@/app/(app)/grup/songs-actions";
 import StorageManagerModal from "@/components/StorageManagerModal";
 import SpecularButton from "@/components/SpecularButton";
@@ -80,14 +78,20 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
   // Els instruments propis del grup surten preseleccionats de bon
   // començament (només quan la cançó encara no en té cap de desat).
   const [instruments, setInstruments] = useState<string[]>(song.instruments && song.instruments.length ? song.instruments : bandInstruments);
+  // La caixa de lletra i acords només té sentit si algú hi canta.
+  const hasVoice = instruments.some((x) => {
+    const base = instrumentBaseName(x).toLowerCase();
+    return base === "veu" || base === "cors";
+  });
   const [customIns, setCustomIns] = useState("");
   const [insMenuOpen, setInsMenuOpen] = useState(false);
   const [audiosOpen, setAudiosOpen] = useState(false);
   const [storageManagerOpen, setStorageManagerOpen] = useState(false);
   const [audioDurations, setAudioDurations] = useState<Record<string, string>>({});
   const [backingProgress, setBackingProgress] = useState<{ index: number; total: number; percent: number } | null>(null);
-  const [semitones, setSemitones] = useState(0);
-  const [tab, setTab] = useState<"edita" | "vista">(song.lyrics ? "vista" : "edita");
+  // Per defecte la casella de lletra i acords surt petita i a sobre de tot;
+  // amb aquest botó s'amplia a la vista grossa d'abans (dues columnes).
+  const [lyricsExpanded, setLyricsExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [looking, setLooking] = useState(false);
   const [lookupMsg, setLookupMsg] = useState<string | null>(null);
@@ -115,6 +119,18 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
     return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form, instruments]);
+
+  async function handleSaveAndExit() {
+    if (saveTimer.current) window.clearTimeout(saveTimer.current);
+    setSaving(true);
+    await saveSongAction({
+      id: song.id, bandId, title: form.title, artist: form.artist,
+      tempo: parseInt(form.tempo, 10) || 0, songKey: form.songKey, duration: form.duration,
+      notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments,
+    });
+    setSaving(false);
+    router.push(backHref);
+  }
 
   async function handleLookup() {
     if (!form.title.trim()) { setLookupMsg("Escriu primer el títol"); return; }
@@ -279,146 +295,143 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
           <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.3} baseColor="#8b7bff" lineColor="#ffffff" disabled={looking} onClick={handleLookup}>
             {looking ? "Cercant…" : "🔍 Autocompleta"}
           </SpecularButton>
+          <button type="button" className="btn-save" disabled={saving} onClick={handleSaveAndExit}>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: "-2px" }}>
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+              <polyline points="17 21 17 13 7 13 7 21" />
+              <polyline points="7 3 7 8 15 8" />
+            </svg>
+            {saving ? "Desant…" : "Desa"}
+          </button>
         </div>
       </div>
       {lookupMsg && <div className="ss-lookup-msg">{lookupMsg}</div>}
 
-      <div className="ss-body">
-        {/* Lletra i acords */}
-        <div className="ss-main">
-          <div className="song-lyrics-head">
-            <div className="stats-tabs">
-              <button className={"stats-tab" + (tab === "edita" ? " active" : "")} onClick={() => setTab("edita")}>Edita</button>
-              <button className={"stats-tab" + (tab === "vista" ? " active" : "")} onClick={() => setTab("vista")}>Vista</button>
+      {/* Títol, artista i altres dades bàsiques — sempre a dalt de tot */}
+      <div className="ss-top-wrap">
+        <div className="ss-card ss-top-card">
+          <div className="ss-cover-row">
+            <img className="ss-cover" src={form.coverUrl || bandLogo || undefined} alt=""
+              style={!form.coverUrl && !bandLogo ? { background: `linear-gradient(135deg, ${bandColor}, #17141f)` } : undefined} />
+            <div className="ss-meta-grid">
+              <label className="song-meta">Títol<input className="field-input compact-field" value={form.title} placeholder="Títol de la cançó" onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+              <label className="song-meta">Artista<input className="field-input compact-field" value={form.artist} onChange={(e) => setForm({ ...form, artist: e.target.value })} /></label>
+              <div className="song-meta-pair">
+                <label className="song-meta">BPM<input className="field-input compact-field" type="number" value={form.tempo} onChange={(e) => setForm({ ...form, tempo: e.target.value })} /></label>
+                <label className="song-meta">To<input className="field-input compact-field" placeholder="Am" value={form.songKey} onChange={(e) => setForm({ ...form, songKey: e.target.value })} /></label>
+                <label className="song-meta">Durada<input className="field-input compact-field" placeholder="3:45" value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} /></label>
+              </div>
             </div>
-            {hasChords(form.lyrics) && (
-              <div className="transpose-ctl">
-                Transposa
-                <button type="button" onClick={() => setSemitones((s) => s - 1)}>−</button>
-                <span className="transpose-val">{semitones > 0 ? "+" + semitones : semitones}</span>
-                <button type="button" onClick={() => setSemitones((s) => s + 1)}>+</button>
+          </div>
+          <label className="song-meta">Notes
+            <textarea className="field-input rider-textarea" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
+          </label>
+        </div>
+
+        {/* Instruments d'aquesta cançó */}
+        <div className="ss-card ss-top-card">
+          <div className="rider-block-title">Instruments que hi sonen</div>
+
+          {instruments.length > 0 && (
+            <div className="access-box-list">
+              {instruments.map((ins) => {
+                const icon = instrumentIconFor(instrumentBaseName(ins));
+                return (
+                  <button key={ins} type="button" className="access-chip active" onClick={() => removeInstrumentInstance(ins)} title="Elimina">
+                    {icon && <img src={icon} alt="" style={{ width: 14, height: 14, objectFit: "contain", marginRight: 5, verticalAlign: "-2px" }} />}
+                    {ins} ✕
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div style={{ marginTop: 4 }}>
+            <button type="button" className="btn-outline" onClick={() => setInsMenuOpen((o) => !o)}>
+              {insMenuOpen ? "Amaga la llista ▲" : "+ Afegeix un instrument…"}
+            </button>
+            {insMenuOpen && (
+              <div className="instr-panel">
+                <input
+                  className="field-input compact-field"
+                  placeholder="Cerca un instrument…"
+                  value={customIns}
+                  onChange={(e) => setCustomIns(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    if (filteredInsCategories.length === 0) {
+                      if (customIns.trim()) { addInstrumentInstance(customIns.trim()); setCustomIns(""); }
+                      return;
+                    }
+                    const flat = filteredInsCategories.flatMap((c) => c.items);
+                    const pick = flat.find((i) => normalize(i.name) === insQuery) || (flat.length === 1 ? flat[0] : null);
+                    if (pick) { addInstrumentInstance(pick.name); setCustomIns(""); }
+                  }}
+                />
+                {filteredInsCategories.map((c) => (
+                  <div key={c.name}>
+                    <div className="instr-cat-title">{c.name}</div>
+                    <div className="instr-grid">
+                      {c.items.map((i) => {
+                        const active = instruments.some((x) => instrumentBaseName(x).toLowerCase() === i.name.toLowerCase());
+                        return (
+                          <button key={i.name} type="button" className={"instr-pill" + (active ? " active" : "")}
+                            onClick={() => addInstrumentInstance(i.name)} title={active ? `Afegeix un altre ${i.name}` : `Afegeix ${i.name}`}>
+                            <InstrumentIcon name={i.name} icon={i.icon} />
+                            {i.name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+                {filteredInsCategories.length === 0 && customIns.trim() && (
+                  <button type="button" className="btn-ghost-sm" onClick={() => { addInstrumentInstance(customIns.trim()); setCustomIns(""); }}>
+                    + Afegeix «{customIns.trim()}»
+                  </button>
+                )}
               </div>
             )}
           </div>
-          {tab === "edita" ? (
-            <>
-              <textarea
-                className="field-input rider-textarea ss-lyrics"
-                placeholder={"Lletra amb acords entre claudàtors:\n[Am]Quan surt el [F]sol a la pla[C]ça…"}
-                value={form.lyrics}
-                onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
-                onPaste={(e) => {
-                  const pasted = e.clipboardData.getData("text");
-                  if (!pasted) return;
-                  const converted = convertChordLyrics(pasted);
-                  if (converted === pasted) return; // cap línia d'acords detectada: comportament normal
-                  e.preventDefault();
-                  const el = e.currentTarget;
-                  const start = el.selectionStart, end = el.selectionEnd;
-                  const newValue = form.lyrics.slice(0, start) + converted + form.lyrics.slice(end);
-                  setForm({ ...form, lyrics: newValue });
-                  const caret = start + converted.length;
-                  requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = caret; });
-                }}
-              />
-              <div className="t-dim" style={{ fontSize: 11 }}>Format ChordPro: acords entre [claudàtors], surten damunt de la lletra. Si enganxes lletra amb els acords en una línia a part, es detecten i s&apos;ajunten soles.</div>
-            </>
-          ) : (
-            <div className="ss-lyrics-view">
-              {form.lyrics.trim() ? <LyricsView lyrics={form.lyrics} semitones={semitones} /> : <div className="t-dim" style={{ fontSize: 13 }}>Sense lletra encara — escriu-la a Edita o prova l&apos;Autocompleta.</div>}
-            </div>
-          )}
         </div>
+      </div>
+
+      <div className="ss-body">
+        {/* Lletra i acords — només si hi ha algun instrument de veu (Veu/Cors) */}
+        {hasVoice && (
+          <div className="ss-main">
+            <div className="song-lyrics-head">
+              <div className="rider-block-title" style={{ margin: 0 }}>Lletra i acords</div>
+              <button type="button" className="btn-outline ss-expand-btn" onClick={() => setLyricsExpanded((v) => !v)}>
+                {lyricsExpanded ? "⤡ Redueix" : "⤢ Amplia"}
+              </button>
+            </div>
+            <textarea
+              className={"field-input rider-textarea ss-lyrics" + (lyricsExpanded ? "" : " ss-lyrics-compact")}
+              placeholder={"Lletra amb acords entre claudàtors:\n[Am]Quan surt el [F]sol a la pla[C]ça…"}
+              value={form.lyrics}
+              onChange={(e) => setForm({ ...form, lyrics: e.target.value })}
+              onPaste={(e) => {
+                const pasted = e.clipboardData.getData("text");
+                if (!pasted) return;
+                const converted = convertChordLyrics(pasted);
+                if (converted === pasted) return; // cap línia d'acords detectada: comportament normal
+                e.preventDefault();
+                const el = e.currentTarget;
+                const start = el.selectionStart, end = el.selectionEnd;
+                const newValue = form.lyrics.slice(0, start) + converted + form.lyrics.slice(end);
+                setForm({ ...form, lyrics: newValue });
+                const caret = start + converted.length;
+                requestAnimationFrame(() => { el.selectionStart = el.selectionEnd = caret; });
+              }}
+            />
+            <div className="t-dim" style={{ fontSize: 11 }}>Format ChordPro: acords entre [claudàtors], surten damunt de la lletra. Si enganxes lletra amb els acords en una línia a part, es detecten i s&apos;ajunten soles.</div>
+          </div>
+        )}
 
         {/* Columna lateral */}
         <div className="ss-side">
-          <div className="ss-card">
-            <div className="ss-cover-row">
-              <img className="ss-cover" src={form.coverUrl || bandLogo || undefined} alt=""
-                style={!form.coverUrl && !bandLogo ? { background: `linear-gradient(135deg, ${bandColor}, #17141f)` } : undefined} />
-              <div className="ss-meta-grid">
-                <label className="song-meta">Títol<input className="field-input compact-field" value={form.title} placeholder="Títol de la cançó" onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-                <label className="song-meta">Artista<input className="field-input compact-field" value={form.artist} onChange={(e) => setForm({ ...form, artist: e.target.value })} /></label>
-                <div className="song-meta-pair">
-                  <label className="song-meta">BPM<input className="field-input compact-field" type="number" value={form.tempo} onChange={(e) => setForm({ ...form, tempo: e.target.value })} /></label>
-                  <label className="song-meta">To<input className="field-input compact-field" placeholder="Am" value={form.songKey} onChange={(e) => setForm({ ...form, songKey: e.target.value })} /></label>
-                  <label className="song-meta">Durada<input className="field-input compact-field" placeholder="3:45" value={form.duration} onChange={(e) => setForm({ ...form, duration: e.target.value })} /></label>
-                </div>
-              </div>
-            </div>
-            <label className="song-meta">Notes
-              <textarea className="field-input rider-textarea" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
-            </label>
-          </div>
-
-          {/* Instruments d'aquesta cançó */}
-          <div className="ss-card">
-            <div className="rider-block-title">Instruments que hi sonen</div>
-
-            {instruments.length > 0 && (
-              <div className="access-box-list">
-                {instruments.map((ins) => {
-                  const icon = instrumentIconFor(instrumentBaseName(ins));
-                  return (
-                    <button key={ins} type="button" className="access-chip active" onClick={() => removeInstrumentInstance(ins)} title="Elimina">
-                      {icon && <img src={icon} alt="" style={{ width: 14, height: 14, objectFit: "contain", marginRight: 5, verticalAlign: "-2px" }} />}
-                      {ins} ✕
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-
-            <div style={{ marginTop: 4 }}>
-              <button type="button" className="btn-outline" onClick={() => setInsMenuOpen((o) => !o)}>
-                {insMenuOpen ? "Amaga la llista ▲" : "+ Afegeix un instrument…"}
-              </button>
-              {insMenuOpen && (
-                <div className="instr-panel">
-                  <input
-                    className="field-input compact-field"
-                    placeholder="Cerca un instrument…"
-                    value={customIns}
-                    onChange={(e) => setCustomIns(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
-                      e.preventDefault();
-                      if (filteredInsCategories.length === 0) {
-                        if (customIns.trim()) { addInstrumentInstance(customIns.trim()); setCustomIns(""); }
-                        return;
-                      }
-                      const flat = filteredInsCategories.flatMap((c) => c.items);
-                      const pick = flat.find((i) => normalize(i.name) === insQuery) || (flat.length === 1 ? flat[0] : null);
-                      if (pick) { addInstrumentInstance(pick.name); setCustomIns(""); }
-                    }}
-                  />
-                  {filteredInsCategories.map((c) => (
-                    <div key={c.name}>
-                      <div className="instr-cat-title">{c.name}</div>
-                      <div className="instr-grid">
-                        {c.items.map((i) => {
-                          const active = instruments.some((x) => instrumentBaseName(x).toLowerCase() === i.name.toLowerCase());
-                          return (
-                            <button key={i.name} type="button" className={"instr-pill" + (active ? " active" : "")}
-                              onClick={() => addInstrumentInstance(i.name)} title={active ? `Afegeix un altre ${i.name}` : `Afegeix ${i.name}`}>
-                              <InstrumentIcon name={i.name} icon={i.icon} />
-                              {i.name}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                  {filteredInsCategories.length === 0 && customIns.trim() && (
-                    <button type="button" className="btn-ghost-sm" onClick={() => { addInstrumentInstance(customIns.trim()); setCustomIns(""); }}>
-                      + Afegeix «{customIns.trim()}»
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-
           {/* Partitures */}
           <div className="ss-card">
             <div className="rider-block-title">Partitures i gravacions</div>
