@@ -66,6 +66,17 @@ function drawArcText(c: CanvasRenderingContext2D, text: string, cx: number, topY
   c.restore();
 }
 
+// Barreja un color hex amb negre — per obtenir un to fosc i discret del
+// mateix accent per a la resplendor de fons del mapa, que mai té d'anar
+// exactament del mateix color que els carrers (si no, es confonen l'un amb
+// l'altre i sembla un sol bassal de llum).
+function accentGlow(hex: string, towardBlack: number, alpha: number): string {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
+  const mix = (c: number) => Math.round(c * (1 - towardBlack));
+  return `rgba(${mix(r)}, ${mix(g)}, ${mix(b)}, ${alpha})`;
+}
+
 async function geocode(query: string): Promise<{ lat: number; lon: number } | null> {
   try {
     const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1`);
@@ -83,6 +94,10 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
   const [busy, setBusy] = useState(false);
   const [mapStatus, setMapStatus] = useState("carregant el mapa…");
   const [accent, setAccent] = useState(band?.color1 || ACCENTS[0]);
+  // Mode del text/traç del pòster: fosc (clar sobre transparent, per a
+  // fotos fosques) o clar (fosc sobre transparent, per a fotos clares) — el
+  // PNG en si sempre és transparent, només canvia el to que hi dibuixem.
+  const [dark, setDark] = useState(true);
   // Hora(es) que surten al pòster: comença amb la del concert (l'oficial,
   // marcada amb isOwn perquè sigui l'única amb l'estil gros i en neó) però
   // es pot editar i se n'hi poden afegir més abans/després (sense isOwn,
@@ -122,13 +137,18 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    const cream = "#f4efe4";
+    // Mode fosc: text clar (crema) amb ombra fosca — pensat per a fotos
+    // fosques. Mode clar: text fosc amb ombra clara — per a fotos clares.
+    // El PNG exportat sempre és transparent; només canvia aquest to.
+    const cream = dark ? "#f4efe4" : "#1c1730";
+    const creamRGB = dark ? "244,239,228" : "28,23,48";
+    const shadowRGB = dark ? "0,0,0" : "255,255,255";
 
     async function draw() {
       if (!ctx) return;
       ctx.clearRect(0, 0, W, H);
       ctx.textAlign = "center";
-      ctx.shadowColor = "rgba(0,0,0,0.55)";
+      ctx.shadowColor = `rgba(${shadowRGB},0.55)`;
       ctx.shadowBlur = 24;
 
       // Població, en una sola línia — títol principal del pòster. En
@@ -152,7 +172,7 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
       const monthArticle = /^[aeiouàéèíòóú]/i.test(monthName) ? "d'" : "de ";
       const dateText = `${dd} ${monthArticle}${monthName} ${yy}`;
       ctx.font = "italic 500 44px Inter, sans-serif";
-      ctx.fillStyle = "rgba(244,239,228,0.9)";
+      ctx.fillStyle = `rgba(${creamRGB},0.9)`;
       ctx.fillText(dateText, W / 2, ty + 40);
 
       // Horaris (l'oficial i els que s'hi hagin afegit per altres
@@ -188,7 +208,7 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
           } else {
             const line = [it.time ? `${it.time}h` : "", it.label].filter(Boolean).join(" · ");
             ctx.font = "600 30px Inter, sans-serif";
-            ctx.fillStyle = "rgba(244,239,228,0.65)";
+            ctx.fillStyle = `rgba(${creamRGB},0.65)`;
             ctx.fillText(line, x, y);
           }
         });
@@ -275,18 +295,25 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
               c.width = mapSize; c.height = mapSize;
               const bctx = c.getContext("2d");
               if (bctx) {
-                bctx.strokeStyle = accent;
-                bctx.lineCap = "round";
-                bctx.lineJoin = "round";
-                bctx.lineWidth = 2;
+                const path = new Path2D();
                 list.forEach((w) => {
-                  bctx.beginPath();
                   w.pts.forEach(([lon, lat], i) => {
                     const [x, y] = project(lon, lat);
-                    if (i === 0) bctx.moveTo(x, y); else bctx.lineTo(x, y);
+                    if (i === 0) path.moveTo(x, y); else path.lineTo(x, y);
                   });
-                  bctx.stroke();
                 });
+                bctx.lineCap = "round";
+                bctx.lineJoin = "round";
+                // Vora fosca fina per sota de cada carrer: sense això, en
+                // un centre urbà amb molts carrers junts, totes les línies
+                // (mateix color viu) es fonien visualment en un sol bassal
+                // de llum en comptes de diferenciar-se com a traços propis.
+                bctx.strokeStyle = "rgba(6,5,14,0.55)";
+                bctx.lineWidth = 3.2;
+                bctx.stroke(path);
+                bctx.strokeStyle = accent;
+                bctx.lineWidth = 1.6;
+                bctx.stroke(path);
               }
               return c;
             }
@@ -333,6 +360,20 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
             const minorLayer = paintLayer(baseMinor, 0.4);
             const majorLayer = paintLayer(baseMajor, 0.49);
 
+            // Resplendor de fons del mapa: un to fosc i discret del mateix
+            // accent (mai el color viu dels carrers) i amb poca opacitat,
+            // dibuixat per sota — així el mapa es llegeix com dues capes
+            // clarament diferenciades (carrers nítids per sobre d'un
+            // bassal de llum suau) en comptes d'un sol color confós.
+            ctx.save();
+            const bgGlow = ctx.createRadialGradient(mapCx, mapCy, 0, mapCx, mapCy, mapSize * 0.48);
+            bgGlow.addColorStop(0, accentGlow(accent, 0.4, 0.3));
+            bgGlow.addColorStop(0.55, accentGlow(accent, 0.4, 0.13));
+            bgGlow.addColorStop(1, "rgba(0,0,0,0)");
+            ctx.fillStyle = bgGlow;
+            ctx.fillRect(mapCx - mapSize, mapCy - mapSize, mapSize * 2, mapSize * 2);
+            ctx.restore();
+
             // Es dibuixen normalment (no en mode additiu) sobre el pòster:
             // les dues capes són transparents de veres allà on no hi ha
             // cap carrer, així que no calia sumar-les — i sumar-les feia
@@ -352,13 +393,14 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
         }
       }
       if (!drewMap) {
-        // Resguard: bassal de llum de l'accent que ja es dilueix sol.
+        // Resguard: bassal de llum (to fosc de l'accent, no el color viu)
+        // que ja es dilueix sol.
         ctx.save();
         const glow = ctx.createRadialGradient(mapCx, mapCy, 0, mapCx, mapCy, mapSize * 0.42);
-        glow.addColorStop(0, accent + "70");
-        glow.addColorStop(0.4, accent + "48");
-        glow.addColorStop(0.7, accent + "1c");
-        glow.addColorStop(1, "transparent");
+        glow.addColorStop(0, accentGlow(accent, 0.4, 0.32));
+        glow.addColorStop(0.4, accentGlow(accent, 0.4, 0.22));
+        glow.addColorStop(0.7, accentGlow(accent, 0.4, 0.09));
+        glow.addColorStop(1, "rgba(0,0,0,0)");
         ctx.fillStyle = glow;
         ctx.fillRect(mapCx - mapSize, mapCy - mapSize, mapSize * 2, mapSize * 2);
         ctx.restore();
@@ -398,7 +440,7 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
       // Peu
       ctx.shadowBlur = 24;
       ctx.font = "600 28px Inter, sans-serif";
-      ctx.fillStyle = "rgba(244,239,228,0.75)";
+      ctx.fillStyle = `rgba(${creamRGB},0.75)`;
       ctx.fillText("@escenari.app", W / 2, H - 70);
       ctx.shadowBlur = 0;
     }
@@ -413,7 +455,7 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
     // temps mai d'acabar la consulta d'Overpass (uns quants segons). Es
     // depèn només dels valors que realment afecten el dibuix.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [concert.id, concert.bandName, concert.date, concert.time, concert.venue, concert.city, band?.id, accent, scheduleItems]);
+  }, [concert.id, concert.bandName, concert.date, concert.time, concert.venue, concert.city, band?.id, accent, scheduleItems, dark]);
 
   async function toBlob(): Promise<Blob | null> {
     return new Promise((resolve) => {
@@ -492,10 +534,23 @@ export default function ConcertPosterModal({ concert, band, onClose }: { concert
               </div>
               <button type="button" className="link-btn" style={{ marginTop: 6 }} onClick={() => addScheduleItem("after")}>+ Afegeix després</button>
             </div>
-            <div className="share-month-accents">
-              {ACCENTS.map((a) => (
-                <button key={a} type="button" className={"share-accent-dot" + (accent === a ? " active" : "")} style={{ background: a }} onClick={() => setAccent(a)} aria-label={a} />
-              ))}
+            <div className="share-month-accents" style={{ justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                {ACCENTS.map((a) => (
+                  <button key={a} type="button" className={"share-accent-dot" + (accent === a ? " active" : "")} style={{ background: a }} onClick={() => setAccent(a)} aria-label={a} />
+                ))}
+              </div>
+              <button type="button" className={"perform-theme-switch" + (dark ? " dark" : "")}
+                title={dark ? "Text clar (per a fotos fosques) — clica per a text fosc" : "Text fosc (per a fotos clares) — clica per a text clar"}
+                aria-label="Canvia el to del pòster entre clar i fosc" onClick={() => setDark((v) => !v)}>
+                <span className="perform-theme-switch-icon">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                </span>
+                <span className="perform-theme-switch-icon">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+                </span>
+                <span className="perform-theme-switch-knob" />
+              </button>
             </div>
             <div className="share-month-actions">
               <button type="button" className="btn-outline" disabled={busy} onClick={handleDownload}>Descarrega PNG</button>

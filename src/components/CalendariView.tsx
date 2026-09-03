@@ -222,9 +222,6 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
       ? (bands.find((b) => b.id === calBandFilter[0])?.name || "1 grup")
       : calBandFilter.length + " grups";
 
-  // Mini calendari del mes (a la barra de la llegenda).
-  const miniCells = cells;
-
   const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
   const rsPreviewConcert = rsPreviewConcertId ? concerts.find((c) => c.id === rsPreviewConcertId) || null : null;
 
@@ -235,6 +232,18 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
       {/* Barra superior */}
       <div className="range-pills cal-view-pills">
         <div className="cal-view-pills-left">
+          {icsToken && (
+            <button
+              type="button" className="gcal-btn"
+              title="Afegeix tots els concerts (lloc, hora i grup) al teu Google Calendar — s'actualitza sol quan canviïn"
+              onClick={() => {
+                // Google necessita poder llegir el feed: cal el domini públic
+                // (amb localhost no pot). El format webcal:// és el que espera.
+                const feed = `webcal://${window.location.host}/api/ics/${icsToken}`;
+                window.open(`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(feed)}`, "_blank");
+              }}
+            >📅 Afegeix-ho tot a Google Calendar</button>
+          )}
           {selectedBandId ? null : (
           <div className="year-select-wrap">
             <button className="pill active" onClick={() => setCalBandFilterOpen((v) => !v)}>{calBandLabel} ▾</button>
@@ -267,18 +276,6 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
           <button className={"stats-tab" + (calViewMode === "year" ? " active" : "")} onClick={() => setCalViewMode("year")}>Any</button>
         </div>
         <div className="cal-view-pills-right">
-          {icsToken && (
-            <button
-              type="button" className="gcal-btn"
-              title="Afegeix tots els concerts (lloc, hora i grup) al teu Google Calendar — s'actualitza sol quan canviïn"
-              onClick={() => {
-                // Google necessita poder llegir el feed: cal el domini públic
-                // (amb localhost no pot). El format webcal:// és el que espera.
-                const feed = `webcal://${window.location.host}/api/ics/${icsToken}`;
-                window.open(`https://calendar.google.com/calendar/render?cid=${encodeURIComponent(feed)}`, "_blank");
-              }}
-            >📅 Afegeix-ho tot a Google Calendar</button>
-          )}
           {canCreate && <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} allowBolo={allowBolo} defaultDate={calSelectedDate || today} />}
         </div>
       </div>
@@ -301,26 +298,6 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
                 <span className="calx-legend-swatch" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>{KIND_META[k].label}</span>
               </button>
             ))}
-          </div>
-
-          <div className="calx-mini">
-            <div className="calx-mini-title">{capitalize(MONTH_FULL[mIdx])} {y}</div>
-            <div className="calx-mini-grid">
-              {WEEKDAY_SHORT.map((w) => <span key={w} className="calx-mini-wd">{w[0]}</span>)}
-              {miniCells.map((d, i) => {
-                if (!d) return <span key={"e" + i}></span>;
-                const dateStr = y + "-" + pad2(mIdx + 1) + "-" + pad2(d);
-                const has = (eventsByDate[dateStr] || []).length > 0;
-                return (
-                  <button
-                    key={dateStr}
-                    type="button"
-                    className={"calx-mini-day" + (dateStr === today ? " today" : "") + (dateStr === calSelectedDate ? " selected" : "") + (has ? " has" : "")}
-                    onClick={() => setCalSelectedDate(dateStr)}
-                  >{d}</button>
-                );
-              })}
-            </div>
           </div>
         </aside>
 

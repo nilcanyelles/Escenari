@@ -14,7 +14,7 @@ export const RS_LLOC_ICONS: Record<string, string> = {
   "parking": '<circle cx="12" cy="12" r="9.5"></circle><text x="12" y="16.3" text-anchor="middle" font-size="12.5" font-weight="700" font-family="Inter,sans-serif" stroke="none" fill="currentColor">P</text>',
 };
 
-export type LlocItem = { label: string; value: string; plates?: string; vehicleCount?: string };
+export type LlocItem = { label: string; value: string; plates?: string };
 export type ContactItem = { role: string; name: string; phone: string; company: string };
 export type ScheduleItem = { phase: string; start: string; end: string };
 export type HospitalitatItem = {
@@ -22,7 +22,10 @@ export type HospitalitatItem = {
   phone?: string; location?: string; parkingAvailable?: boolean; parkingPlates?: string;
   checkIn?: string; checkOut?: string; breakfastAvailable?: boolean; breakfastTime?: string;
 };
-export type TecnicItem = { label: string; value: string; included?: boolean };
+// "status" només s'usa per al camp especial "Contra rider": l'estat
+// d'aprovació, en un cicle de 3 (mai desat com a opció predeterminada, és
+// propi de cada concert — vegeu stripSectionForDefault).
+export type TecnicItem = { label: string; value: string; included?: boolean; status?: "aprovat" | "no-rebut" | "esperant-canvis" };
 
 export type RouteSheet = {
   lloc: LlocItem[];
@@ -48,6 +51,7 @@ export function defaultRouteSheet(c: { venue?: string; time?: string }, bandDefa
       { label: "Adreça", value: "" },
       { label: "Descàrrega", value: "" },
       { label: "Parking", value: "", plates: "" },
+      { label: "Número de vehicles", value: "", plates: "" },
     ],
     contacts: [{ role: "", name: "", phone: "", company: "" }],
     schedule: [
@@ -56,17 +60,21 @@ export function defaultRouteSheet(c: { venue?: string; time?: string }, bandDefa
       { phase: "Proves de so", start: "", end: "" },
       { phase: "Concert", start: c.time || "", end: "" },
     ],
+    // "included" es queda sense definir (ni sí ni no) fins que es cliqui
+    // explícitament un dels dos botons (tick/creu) — no ha d'aparèixer cap
+    // opció ja activada o desactivada per defecte.
     hospitalitat: [
-      { label: "Dietes", value: "", included: true },
-      { label: "Catering", value: "", included: true },
-      { label: "Camerino", value: "", included: true },
-      { label: "Allotjament", value: "", included: true, phone: "", location: "", parkingAvailable: true, parkingPlates: "", checkIn: "", checkOut: "", breakfastAvailable: true, breakfastTime: "" },
+      { label: "Dietes", value: "" },
+      { label: "Catering", value: "" },
+      { label: "Camerino", value: "" },
+      { label: "Allotjament", value: "", phone: "", location: "", parkingPlates: "", checkIn: "", checkOut: "", breakfastTime: "" },
     ],
     tecnic: [
       { label: "Mesures escenari", value: "" },
       { label: "Tarimes", value: "" },
       { label: "Contra rider", value: "" },
-      { label: "Pantalla LED", value: "", included: true },
+      { label: "Backline", value: "" },
+      { label: "Pantalla LED", value: "" },
     ],
   };
   if (bandDefault) {
@@ -109,7 +117,7 @@ export function stripSectionForDefault<K extends keyof RouteSheet>(section: K, i
 export function rsBlankItem(section: keyof RouteSheet) {
   if (section === "contacts") return { role: "", name: "", phone: "", company: "" };
   if (section === "schedule") return { phase: "", start: "", end: "" };
-  if (section === "hospitalitat") return { label: "", value: "", phone: "", location: "", parkingAvailable: true, parkingPlates: "", checkIn: "", checkOut: "", breakfastAvailable: true, breakfastTime: "" };
+  if (section === "hospitalitat") return { label: "", value: "", phone: "", location: "", parkingPlates: "", checkIn: "", checkOut: "", breakfastTime: "" };
   return { label: "", value: "" };
 }
 
@@ -143,6 +151,19 @@ export function normalizeRouteSheet(rs: RouteSheet | null | undefined, c: { venu
     return true;
   });
   if (!seenPantallaLed) out.tecnic = out.tecnic.concat([def.tecnic[def.tecnic.length - 1]]);
+
+  // Camps nous que un full de ruta ja desat abans de la seva existència no
+  // té: s'afegeixen (un cop) al final, mai duplicats.
+  const hasVehicleCount = out.lloc.some((it) => it.label && it.label.trim().toLowerCase() === "número de vehicles");
+  if (!hasVehicleCount) {
+    const def2 = def.lloc.find((it) => it.label.trim().toLowerCase() === "número de vehicles");
+    if (def2) out.lloc = out.lloc.concat([def2]);
+  }
+  const hasBackline = out.tecnic.some((it) => it.label && it.label.trim().toLowerCase() === "backline");
+  if (!hasBackline) {
+    const def3 = def.tecnic.find((it) => it.label.trim().toLowerCase() === "backline");
+    if (def3) out.tecnic = out.tecnic.concat([def3]);
+  }
 
   return out;
 }

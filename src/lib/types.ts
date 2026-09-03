@@ -77,8 +77,14 @@ export type Concert = {
   id: string;
   date: string;
   time: string;
+  // Hora exacta (HH:MM), diferent de "time" (tram aproximat del dia) —
+  // opcional; si és buida, no compta al percentatge d'Informació general.
+  exactTime: string;
   venue: string;
   city: string;
+  // Carrer, número i població del recinte — s'empleix sol en triar un
+  // recinte a la cerca; Població ja no és un camp propi de la UI.
+  address: string;
   festaEntitat: string;
   bandId: string;
   bandName: string;
@@ -88,6 +94,12 @@ export type Concert = {
   attendance: Record<string, "yes" | "no">;
   substitutes: Record<string, string>;
   noSubstitute: Record<string, boolean>;
+  // Membres exclosos de la convocatòria d'aquest concert (name -> true):
+  // no s'eliminen del grup, es desactiven només per a aquest bolo.
+  convocatoriaExcluded: Record<string, boolean>;
+  // Contacte principal d'aquest concert (organitzador/promotor) — a la
+  // pestanya "Informació general", diferent dels contactes del full de ruta.
+  contact: { email: string; name: string; phone: string; company: string };
   routeSheet: unknown;
   payouts?: Record<string, number>;
   // Si l'agència assumeix les despeses del bolo (el seu % es calcula sobre
@@ -110,6 +122,13 @@ export type Concert = {
   contract?: ContractData | null;
   contractToken?: string;
 };
+
+// El contacte ve d'una columna jsonb que pot faltar o tenir només algunes
+// claus (concerts antics, migració nova) — sempre torna les 4 fetes.
+export function normalizeContact(c: unknown): Concert["contact"] {
+  const o = (c && typeof c === "object" ? c : {}) as Partial<Concert["contact"]>;
+  return { email: o.email || "", name: o.name || "", phone: o.phone || "", company: o.company || "" };
+}
 
 export type Invoice = {
   id: string;

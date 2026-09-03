@@ -18,6 +18,55 @@ export function addDays(dateStr: string, n: number): string {
   return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
 }
 
+// Hora aproximada del concert: la casella de la pestanya Informació general
+// és una bombolla que fa cicle entre aquests 5 moments del dia en comptes
+// d'un selector d'hora exacta — però per sota segueix desant una hora real
+// (representativa del tram) perquè tota la resta de l'app (ICS, contractes,
+// factures, ordenació...) continuï funcionant sense tocar-hi res.
+export const TIME_PERIODS = ["Matí", "Migdia", "Tarda", "Vespre", "Matinada"] as const;
+const TIME_PERIOD_REPRESENTATIVE: Record<string, string> = {
+  "Matí": "09:00", "Migdia": "13:00", "Tarda": "17:00", "Vespre": "20:30", "Matinada": "02:00",
+};
+// Article/preposició correctes en català per a cada tram ("al matí", "a la tarda"...).
+const TIME_PERIOD_PHRASE: Record<string, string> = {
+  "Matí": "al matí", "Migdia": "al migdia", "Tarda": "a la tarda", "Vespre": "al vespre", "Matinada": "a la matinada",
+};
+
+// Tram del dia a què pertany una hora HH:MM (o "" si no n'hi ha).
+export function timePeriodFor(time: string): string | null {
+  if (!/^\d{2}:\d{2}/.test(time || "")) return null;
+  const h = parseInt(time.slice(0, 2), 10);
+  if (h >= 6 && h < 12) return "Matí";
+  if (h >= 12 && h < 15) return "Migdia";
+  if (h >= 15 && h < 19) return "Tarda";
+  if (h >= 19 || h === 0) return "Vespre";
+  return "Matinada";
+}
+
+// Hora representativa del següent tram del cicle (Matí → Migdia → Tarda →
+// Vespre → Matinada → Matí…), a partir de l'hora actual (o buida).
+export function nextTimePeriodValue(time: string): string {
+  const cur = timePeriodFor(time);
+  const idx = cur ? TIME_PERIODS.indexOf(cur as typeof TIME_PERIODS[number]) : -1;
+  const next = TIME_PERIODS[(idx + 1) % TIME_PERIODS.length];
+  return TIME_PERIOD_REPRESENTATIVE[next];
+}
+
+// Text per a mostrar l'hora: el tram del dia si en sap un ("Vespre"), la
+// pròpia hora si no encaixa en cap tram, o buit.
+export function formatConcertTime(time: string): string {
+  if (!time) return "";
+  return timePeriodFor(time) || time;
+}
+
+// Frase natural ("al vespre", "a les 20:30h"...) per encaixar dins de
+// textos com "el concert és ${formatConcertTimePhrase(time)}".
+export function formatConcertTimePhrase(time: string): string {
+  if (!time) return "";
+  const period = timePeriodFor(time);
+  return period ? TIME_PERIOD_PHRASE[period] : `a les ${time}h`;
+}
+
 export function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }

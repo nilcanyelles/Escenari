@@ -7,7 +7,7 @@ import {
   type RouteSheet, type LlocItem, type HospitalitatItem, type TecnicItem, type RouteSheetDefaults,
   normalizeRouteSheet, rsBlankItem, rsIsComplete, rsCompletionPercent, stripSectionForDefault, RS_SECTION_ICONS,
 } from "@/lib/route-sheet";
-import { saveRouteSheetAction, searchVenuesAction } from "@/app/(app)/concerts/actions";
+import { saveRouteSheetAction, searchVenuesAction, searchVenuesGoogleAction, getPlaceDetailsAction } from "@/app/(app)/concerts/actions";
 import { saveDefaultRouteSheetSectionAction } from "@/app/(app)/grup/actions";
 
 type Section = "lloc" | "contacts" | "schedule" | "hospitalitat" | "tecnic";
@@ -47,6 +47,32 @@ function TimePairInput({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
+// Sí/No amb dos botonets separats (tick i creu) en comptes d'un sol
+// interruptor — cap dels dos surt marcat fins que se'n cliqui un: mai
+// activat o desactivat per defecte, sinó "encara per decidir".
+function TickCrossButtons({ value, onChange }: { value: boolean | undefined; onChange: (v: boolean) => void }) {
+  return (
+    <div className="rs-tick-cross">
+      <button type="button" className={"rs-tick-cross-btn yes" + (value === true ? " active" : "")} title="Sí" onClick={() => onChange(true)}>
+        <ToggleIcon yes={true} />
+      </button>
+      <button type="button" className={"rs-tick-cross-btn no" + (value === false ? " active" : "")} title="No" onClick={() => onChange(false)}>
+        <ToggleIcon yes={false} />
+      </button>
+    </div>
+  );
+}
+
+// Estat d'aprovació del contrarider: un botó que fa cicle entre les 3
+// opcions a cada clic — sense estat inicial (abans del primer clic, "Sense
+// revisar"), mai ja aprovat o similar per defecte.
+const CONTRA_STATUS_CYCLE = ["aprovat", "no-rebut", "esperant-canvis"] as const;
+const CONTRA_STATUS_LABELS: Record<string, string> = { aprovat: "Aprovat", "no-rebut": "No rebut", "esperant-canvis": "Esperant canvis" };
+function nextContraStatus(cur?: string): typeof CONTRA_STATUS_CYCLE[number] {
+  const idx = CONTRA_STATUS_CYCLE.indexOf(cur as typeof CONTRA_STATUS_CYCLE[number]);
+  return CONTRA_STATUS_CYCLE[(idx + 1) % CONTRA_STATUS_CYCLE.length];
+}
+
 export default function RouteSheetEditor({ concert, venue, city, onVenueCityChange, vehicles = [], bandDefaultRouteSheet = null, onCompleteChange, onPercentChange, onSaved }: {
   concert: Concert;
   vehicles?: Vehicle[];
@@ -61,7 +87,7 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   // l'altra pestanya a l'instant, sense recarregar res.
   venue: string;
   city: string;
-  onVenueCityChange: (v: { name: string; city?: string }) => void;
+  onVenueCityChange: (v: { name: string; city?: string; street?: string; housenumber?: string }) => void;
   onCompleteChange?: (complete: boolean) => void;
   onPercentChange?: (percent: number) => void;
   onSaved?: () => void;
@@ -91,14 +117,23 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     return JSON.stringify(stripSectionForDefault(section, rsf[section])) !== sectionBaselineRef.current[section];
   }
 
-  // Camps omplerts / camps a omplir de cada secció (mateix criteri que el
-  // percentatge global del full de ruta).
+  // Camps omplerts / camps a omplir de cada secció. Contactes i horaris
+  // compten 1 unitat per fila (no una per subcamp): un contacte compta com
+  // a fet quan hi ha totes les seves dades, una fase quan hi ha alguna
+  // hora — així el comptador reflecteix "quantes files", no "quants
+  // camps solts".
   function sectionStats(section: Section): { filled: number; total: number } {
     let total = 0, filled = 0;
     const check = (v: unknown) => { total++; if (v && String(v).trim()) filled++; };
     if (section === "lloc") rsf.lloc.forEach((it) => check(it.value));
-    else if (section === "contacts") rsf.contacts.forEach((it) => { check(it.role); check(it.name); check(it.phone); check(it.company); });
-    else if (section === "schedule") rsf.schedule.forEach((it) => { check(it.start); check(it.end); });
+    else if (section === "contacts") rsf.contacts.forEach((it) => {
+      total++;
+      if (it.role.trim() && it.name.trim() && it.phone.trim() && it.company.trim()) filled++;
+    });
+    else if (section === "schedule") rsf.schedule.forEach((it) => {
+      total++;
+      if (it.start.trim() || it.end.trim()) filled++;
+    });
     else if (section === "hospitalitat") rsf.hospitalitat.forEach((it) => check(it.value));
     else rsf.tecnic.forEach((it) => { if (!(it.label && it.label.trim().toLowerCase() === "pantalla led")) check(it.value); });
     return { filled, total };
@@ -132,8 +167,9 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   // / sala" a Informació (mateixa API, mateix desplegable).
   const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
   const [venueSearch, setVenueSearch] = useState("");
-  const [venueResults, setVenueResults] = useState<{ description: string; name: string; city: string; placeId: string }[]>([]);
+  const [venueResults, setVenueResults] = useState<{ description: string; placeId: string }[]>([]);
   const [venueSearching, setVenueSearching] = useState(false);
+  const [venueResolving, setVenueResolving] = useState<string | null>(null);
   const venueSearchTimer = useRef<number | null>(null);
   useEffect(() => {
     if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current);
@@ -141,12 +177,23 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     if (q.length < 2) { setVenueResults([]); setVenueSearching(false); return; }
     setVenueSearching(true);
     venueSearchTimer.current = window.setTimeout(async () => {
-      const results = await searchVenuesAction(q);
+      const results = await searchVenuesGoogleAction(q);
       setVenueResults(results);
       setVenueSearching(false);
     }, 300);
     return () => { if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current); };
   }, [venueSearch]);
+
+  // Triar una predicció de l'autocompletat de Google en demana els detalls
+  // (nom, població, carrer i número) abans d'omplir el Recinte.
+  async function selectVenue(placeId: string) {
+    setVenueResolving(placeId);
+    const details = await getPlaceDetailsAction(placeId);
+    setVenueResolving(null);
+    setVenueDropdownOpen(false);
+    if (!details) return;
+    onVenueCityChange(details);
+  }
 
   // Cerca d'adreces per al camp "Adreça" — mateixa API (Photon), que ja
   // retorna tant adreces com punts d'interès (comerços, escoles...), sense
@@ -154,7 +201,7 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   // lliure.
   const [addressDropdownOpen, setAddressDropdownOpen] = useState(false);
   const [addressSearch, setAddressSearch] = useState("");
-  const [addressResults, setAddressResults] = useState<{ description: string; name: string; city: string; placeId: string }[]>([]);
+  const [addressResults, setAddressResults] = useState<{ description: string; name: string; city: string; street: string; housenumber: string; placeId: string }[]>([]);
   const [addressSearching, setAddressSearching] = useState(false);
   const addressSearchTimer = useRef<number | null>(null);
   useEffect(() => {
@@ -169,6 +216,9 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     }, 300);
     return () => { if (addressSearchTimer.current) window.clearTimeout(addressSearchTimer.current); };
   }, [addressSearch]);
+
+  // Desplegable de xips de vehicles per al camp "Número de vehicles".
+  const [vehicleDropdownOpen, setVehicleDropdownOpen] = useState(false);
 
   function updateSection<K extends Section>(section: K, updater: (items: RouteSheet[K]) => RouteSheet[K]) {
     setRsf((prev) => ({ ...prev, [section]: updater(prev[section]) }));
@@ -237,11 +287,13 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
 
   function renderFieldRow(section: "lloc" | "tecnic", it: LlocItem | TecnicItem, i: number) {
     const isPantallaLed = section === "tecnic" && it.label && it.label.trim().toLowerCase() === "pantalla led";
+    const isContrarider = section === "tecnic" && it.label && it.label.trim().toLowerCase() === "contra rider";
     // El camp "Recinte" és el mateix que "Ubicació / sala" a Informació —
     // no un camp de text lliure com la resta, sinó la mateixa cerca de
     // recintes, en aquesta mateixa fila (no se n'afegeix cap de nova).
     const isRecinte = section === "lloc" && it.label && it.label.trim().toLowerCase() === "recinte";
     const isAdreça = section === "lloc" && it.label && it.label.trim().toLowerCase() === "adreça";
+    const isVehicleCount = section === "lloc" && it.label && it.label.trim().toLowerCase() === "número de vehicles";
     return (
       <div className="rs-field-row" {...dragHandlers(section, i)}>
         <DragHandle onDragStart={() => setDragInfo({ section, index: i })} />
@@ -249,10 +301,8 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Camp" value={it.label}
               onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, label: e.target.value } : x) as never)} />
-            <button type="button" className={"rs-toggle-pill " + ((it as TecnicItem).included !== false ? "yes" : "no")} title="Clica per canviar"
-              onClick={() => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, included: (x as TecnicItem).included === false } : x) as never)}>
-              <ToggleIcon yes={(it as TecnicItem).included !== false} />
-            </button>
+            <TickCrossButtons value={(it as TecnicItem).included}
+              onChange={(v) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, included: v } : x) as never)} />
           </div>
         ) : (
           <input className="field-input" type="text" placeholder="Camp (p.ex. Adreça)" value={it.label}
@@ -261,6 +311,51 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
         {isPantallaLed ? (
           <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Mida (p.ex. 3x2m)" value={it.value}
             onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, value: e.target.value } : x) as never)} />
+        ) : isContrarider ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+            <button type="button"
+              className={"rs-status-btn" + ((it as TecnicItem).status ? " rs-status-" + (it as TecnicItem).status : "")}
+              title="Clica per canviar l'estat"
+              onClick={() => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, status: nextContraStatus((x as TecnicItem).status) } : x) as never)}>
+              {(it as TecnicItem).status ? CONTRA_STATUS_LABELS[(it as TecnicItem).status as string] : "Sense revisar"}
+            </button>
+            <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Notes" value={it.value}
+              onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, value: e.target.value } : x) as never)} />
+          </div>
+        ) : isVehicleCount ? (
+          <div style={{ position: "relative" }}>
+            <button type="button" className={"rs-vehicle-dropdown-btn" + ((it as LlocItem).plates ? "" : " placeholder")}
+              onClick={() => setVehicleDropdownOpen((v) => !v)}>
+              {(() => {
+                const plates = ((it as LlocItem).plates || "").split(",").map((p) => p.trim()).filter(Boolean);
+                return plates.length ? `${plates.length} vehicle${plates.length > 1 ? "s" : ""} seleccionat${plates.length > 1 ? "s" : ""}` : "Selecciona vehicles…";
+              })()}
+            </button>
+            {vehicleDropdownOpen && (
+              <>
+                <div className="year-picker-overlay" onClick={() => setVehicleDropdownOpen(false)}></div>
+                <div className="year-dropdown cf-band-dropdown rs-vehicle-dropdown-panel" onClick={(e) => e.stopPropagation()}>
+                  {vehicles.filter((v) => v.plate).length === 0 ? (
+                    <div className="cf-band-noresults">El grup no té cap vehicle registrat</div>
+                  ) : vehicles.filter((v) => v.plate).map((v) => {
+                    const currentPlates = ((it as LlocItem).plates || "").split(",").map((p) => p.trim()).filter(Boolean);
+                    const selected = currentPlates.includes(v.plate);
+                    const label = [[v.type, v.brand, v.color].filter(Boolean).join(" "), v.owner, v.plate].filter(Boolean).join(" · ");
+                    return (
+                      <button key={v.plate} type="button" className={"rs-vehicle-chip" + (selected ? " active" : "")}
+                        onClick={() => {
+                          const set = new Set(currentPlates);
+                          if (selected) set.delete(v.plate); else set.add(v.plate);
+                          const next = Array.from(set);
+                          updateSection("lloc", (arr) => arr.map((x, xi) => xi === i ? { ...x, plates: next.join(", "), value: next.length ? `${next.length} vehicle${next.length > 1 ? "s" : ""}` : "" } : x) as never);
+                        }}
+                      >{label}</button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
         ) : isRecinte ? (
           <div style={{ position: "relative" }}>
             <input
@@ -278,8 +373,8 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
                   ) : venueSearching ? (
                     <div className="cf-band-noresults">Cercant…</div>
                   ) : venueResults.length ? venueResults.map((v) => (
-                    <button key={v.placeId} type="button" className={"year-option" + (v.name === venue ? " active" : "")}
-                      onClick={() => { onVenueCityChange({ name: v.name, city: v.city }); setVenueDropdownOpen(false); }}>{v.description}</button>
+                    <button key={v.placeId} type="button" className="year-option" disabled={venueResolving === v.placeId}
+                      onClick={() => selectVenue(v.placeId)}>{venueResolving === v.placeId ? "Carregant…" : v.description}</button>
                   )) : <div className="cf-band-noresults">Cap recinte coincideix</div>}
                 </div>
               </>
@@ -326,62 +421,6 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     return items.map((it, i) => <div key={i}>{renderFieldRow(section, it, i)}</div>);
   }
 
-  // Línia de "Vehicles autoritzats" (comptador + xips de vehicles del grup),
-  // sempre a l'alçada de la fila de "Parking", alineada amb la resta de
-  // camps (mateixa columna de valor).
-  function vehicleFieldsLine(parkingIdx: number) {
-    const it = rsf.lloc[parkingIdx];
-    const currentPlates = (it.plates || "").split(",").map((p) => p.trim()).filter(Boolean);
-    return (
-      <div className="rs-attached-row">
-        <div className="rs-parking-fields">
-          <input className="field-input rs-vehicle-count-input" type="text" inputMode="numeric" placeholder="Vehicles autoritzats" value={it.vehicleCount || ""}
-            onChange={(e) => updateSection("lloc", (arr) => arr.map((x, xi) => xi === parkingIdx ? { ...x, vehicleCount: e.target.value.replace(/\D/g, "") } : x))} />
-          {vehicles.length > 0 && (
-            <div className="rs-vehicle-chips">
-              {vehicles.filter((v) => v.plate).map((v) => {
-                const selected = currentPlates.includes(v.plate);
-                return (
-                  <button
-                    key={v.plate} type="button" className={"rs-vehicle-chip" + (selected ? " active" : "")}
-                    onClick={() => {
-                      const set = new Set(currentPlates);
-                      if (selected) set.delete(v.plate); else set.add(v.plate);
-                      updateSection("lloc", (arr) => arr.map((x, xi) => xi === parkingIdx ? { ...x, plates: Array.from(set).join(", ") } : x));
-                    }}
-                  >{[[v.type, v.brand, v.color].filter(Boolean).join(" "), v.owner, v.plate].filter(Boolean).join(" · ")}</button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Files de la secció Lloc: cadascun en la seva pròpia línia, un sota
-  // l'altre, en ordre — "Parking" sempre l'últim (amb la línia de "Vehicles
-  // autoritzats" enganxada just a sota) encara que a les dades hi sigui en
-  // una altra posició.
-  function llocRows() {
-    const items = rsf.lloc;
-    const order = items.map((_, i) => i).sort((a, b) => {
-      const pa = items[a].label && items[a].label.trim().toLowerCase() === "parking" ? 1 : 0;
-      const pb = items[b].label && items[b].label.trim().toLowerCase() === "parking" ? 1 : 0;
-      return pa - pb;
-    });
-    return order.map((i) => {
-      const it = items[i];
-      const isParking = it.label && it.label.trim().toLowerCase() === "parking";
-      return (
-        <div key={i}>
-          {renderFieldRow("lloc", it, i)}
-          {isParking && vehicleFieldsLine(i)}
-        </div>
-      );
-    });
-  }
-
   // ---- Contacts ----
   const contactRows = rsf.contacts.map((ct, i) => (
     <div key={i} className="rs-contact-row" {...dragHandlers("contacts", i)}>
@@ -421,49 +460,36 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     const isHotel = it.label && it.label.trim().toLowerCase() === "allotjament";
     if (!isHotel) {
       const isFixedToggle = it.label && FIXED_TOGGLE_LABELS.indexOf(it.label.trim().toLowerCase()) !== -1;
+      // Mateixa estructura per als camps fixos (Dietes, Catering, Camerino)
+      // i els que s'afegeixen a mà — només canvia si l'etiqueta és text
+      // fix o editable, perquè les caselles quedin alineades entre elles.
       regularHospRows.push(
         <div key={i} className="rs-field-row" {...dragHandlers("hospitalitat", i)}>
           <DragHandle onDragStart={() => setDragInfo({ section: "hospitalitat", index: i })} />
-          {isFixedToggle ? (
-            <div style={{ gridColumn: "2 / span 2", display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-              <button type="button" className={"rs-toggle-pill rs-toggle-pill-fixed " + (it.included !== false ? "yes" : "no")}
-                title="Clica per canviar" onClick={() => updateHosp(i, { included: it.included === false })}>
-                <span>{it.label}</span>
-                <ToggleIcon yes={it.included !== false} />
-              </button>
-              <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Detalls (opcional)" value={it.value}
-                onChange={(e) => updateHosp(i, { value: e.target.value })} />
-            </div>
-          ) : (
-            <>
-              <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Camp (p.ex. Dietes)" value={it.label}
-                  onChange={(e) => updateHosp(i, { label: e.target.value })} />
-                <button type="button" className={"rs-toggle-pill " + (it.included !== false ? "yes" : "no")} title="Clica per canviar"
-                  onClick={() => updateHosp(i, { included: it.included === false })}>
-                  <ToggleIcon yes={it.included !== false} />
-                </button>
-              </div>
-              <input className="field-input" type="text" placeholder="Detalls (opcional)" value={it.value}
-                onChange={(e) => updateHosp(i, { value: e.target.value })} />
-            </>
-          )}
+          <div className="rs-hosp-label-cell">
+            {isFixedToggle ? (
+              <span className="rs-hosp-fixed-label">{it.label}</span>
+            ) : (
+              <input className="field-input" type="text" placeholder="Camp (p.ex. Dietes)" value={it.label}
+                onChange={(e) => updateHosp(i, { label: e.target.value })} />
+            )}
+            <TickCrossButtons value={it.included} onChange={(v) => updateHosp(i, { included: v })} />
+          </div>
+          <input className="field-input" type="text" placeholder="Detalls (opcional)" value={it.value}
+            onChange={(e) => updateHosp(i, { value: e.target.value })} />
           <button type="button" className="rs-mini-btn danger" title="Elimina" onClick={() => removeItem("hospitalitat", i)}><XIcon /></button>
         </div>
       );
       return;
     }
-    const included = it.included !== false;
-    const parkingAvailable = it.parkingAvailable !== false;
-    const breakfastAvailable = it.breakfastAvailable !== false;
+    const included = it.included === true;
+    const parkingAvailable = it.parkingAvailable === true;
+    const breakfastAvailable = it.breakfastAvailable === true;
     hotelBlock = (
       <div key={i} className="rs-hotel-subgroup">
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <button type="button" className={"rs-toggle-pill rs-toggle-pill-fixed " + (included ? "yes" : "no")} title="Clica per canviar"
-            onClick={() => updateHosp(i, { included: it.included === false })}>
-            <span>{it.label}</span>
-            <ToggleIcon yes={included} />
-          </button>
+          <span className="rs-hosp-fixed-label" style={{ flex: "none" }}>{it.label}</span>
+          <TickCrossButtons value={it.included} onChange={(v) => updateHosp(i, { included: v })} />
           <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Nom de l'allotjament" value={it.value}
             onChange={(e) => updateHosp(i, { value: e.target.value })} />
         </div>
@@ -476,11 +502,8 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
                 onChange={(e) => updateHosp(i, { location: e.target.value })} />
             </div>
             <div className="rs-hotel-parking-row">
-              <button type="button" className={"rs-toggle-pill " + (parkingAvailable ? "yes" : "no")} title="Clica per canviar"
-                onClick={() => updateHosp(i, { parkingAvailable: it.parkingAvailable === false })}>
-                <span>Pàrquing</span>
-                <ToggleIcon yes={parkingAvailable} />
-              </button>
+              <span className="rs-hosp-fixed-label" style={{ flex: "none" }}>Pàrquing</span>
+              <TickCrossButtons value={it.parkingAvailable} onChange={(v) => updateHosp(i, { parkingAvailable: v })} />
               <input className="field-input rs-parking-count" type="text" placeholder="Matrícules" value={it.parkingPlates || ""}
                 onChange={(e) => updateHosp(i, { parkingPlates: e.target.value })} />
             </div>
@@ -495,11 +518,8 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
               </div>
             </div>
             <div className="rs-hotel-parking-row">
-              <button type="button" className={"rs-toggle-pill " + (breakfastAvailable ? "yes" : "no")} title="Clica per canviar"
-                onClick={() => updateHosp(i, { breakfastAvailable: it.breakfastAvailable === false })}>
-                <span>Esmorzar</span>
-                <ToggleIcon yes={breakfastAvailable} />
-              </button>
+              <span className="rs-hosp-fixed-label" style={{ flex: "none" }}>Esmorzar</span>
+              <TickCrossButtons value={it.breakfastAvailable} onChange={(v) => updateHosp(i, { breakfastAvailable: v })} />
               {breakfastAvailable && <TimePairInput value={it.breakfastTime || ""} onChange={(v) => updateHosp(i, { breakfastTime: v })} />}
             </div>
           </>
@@ -513,7 +533,7 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   // Per defecte s'obre la primera secció incompleta; la resta, plegades.
   const sections: { key: Section; title: string; stats: { filled: number; total: number }; body: React.ReactNode; addLabel: string }[] = [
     { key: "lloc", title: "Lloc", stats: sectionStats("lloc"), addLabel: "+ Afegeix camp",
-      body: <div className="rs-repeater" data-rs-section="lloc">{llocRows()}</div> },
+      body: <div className="rs-repeater" data-rs-section="lloc">{fieldRows("lloc", rsf.lloc)}</div> },
     { key: "contacts", title: "Contactes", stats: sectionStats("contacts"), addLabel: "+ Afegeix contacte",
       body: <div className="rs-repeater" data-rs-section="contacts">{contactRows}</div> },
     { key: "schedule", title: "Horaris", stats: sectionStats("schedule"), addLabel: "+ Afegeix fase",

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails } from "@/lib/types";
-import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, WEEKDAY_SHORT, pad2, MONTH_FULL } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, WEEKDAY_SHORT, pad2, MONTH_FULL, timePeriodFor, nextTimePeriodValue, formatConcertTime, formatConcertTimePhrase } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { rsCompletionPercent } from "@/lib/route-sheet";
 import { normalize } from "@/lib/text";
@@ -15,7 +15,7 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyAssumesExpensesAction, setAgencyPctAction, searchCitiesAction, searchVenuesAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyAssumesExpensesAction, setAgencyPctAction, searchVenuesGoogleAction, getPlaceDetailsAction, reverseGeocodeAction, repeatConcertAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import type { Checklist } from "@/lib/checklists";
@@ -33,6 +33,7 @@ import ContractPanel from "@/components/ContractPanel";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
 import ConcertPosterModal from "@/components/ConcertPosterModal";
+import { KIND_META } from "@/components/CalendariView";
 
 const STATUS_CYCLE = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
@@ -54,15 +55,49 @@ function progressColor(percent: number, alpha = 1): string {
 export function infoCompletion(c: Concert): { percent: number; missing: string[] } {
   const checks: [string, boolean][] = [
     ["Data", !!c.date],
-    ["Hora", !!c.time],
-    ["Població", !!c.city.trim()],
-    ["Ubicació", !!c.venue.trim() && c.venue !== "Sala per determinar"],
+    ["Hora", !!c.exactTime],
+    ["Adreça", !!c.address.trim()],
+    ["Recinte", !!c.venue.trim() && c.venue !== "Sala per determinar"],
     ["Festa/entitat", !!(c.festaEntitat || "").trim()],
     ["Import", c.amount > 0],
     ["Estat confirmat", c.status === "confirmat"],
   ];
   const filled = checks.filter(([, ok]) => ok).length;
   return { percent: Math.round((filled / checks.length) * 100), missing: checks.filter(([, ok]) => !ok).map(([label]) => label) };
+}
+
+// Icona pròpia per a cada tram del dia — un sol que va pujant i baixant
+// per l'horitzó a mesura que avança el cicle, i la lluna per a la matinada.
+function TimePeriodIcon({ period }: { period: string }) {
+  const common = { width: 15, height: 15, viewBox: "0 0 24 24", fill: "none", stroke: "currentColor", strokeWidth: 2, strokeLinecap: "round" as const, strokeLinejoin: "round" as const };
+  if (period === "Matí") return (
+    <svg {...common}><path d="M17 18a5 5 0 0 0-10 0"></path><line x1="12" y1="2" x2="12" y2="9"></line><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line><line x1="1" y1="18" x2="3" y2="18"></line><line x1="21" y1="18" x2="23" y2="18"></line><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line><line x1="23" y1="22" x2="1" y2="22"></line><polyline points="8 6 12 2 16 6"></polyline></svg>
+  );
+  if (period === "Migdia") return (
+    <svg {...common}><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+  );
+  if (period === "Tarda") return (
+    <svg {...common}><circle cx="9" cy="9" r="3.2"></circle><line x1="9" y1="2.5" x2="9" y2="4"></line><line x1="3.9" y1="3.9" x2="4.9" y2="4.9"></line><line x1="2.5" y1="9" x2="4" y2="9"></line><path d="M5.5 20h11.5a3.7 3.7 0 0 0 .4-7.38A5.5 5.5 0 0 0 6.9 14.7 3.2 3.2 0 0 0 5.5 20z"></path></svg>
+  );
+  if (period === "Vespre") return (
+    <svg {...common}><path d="M17 18a5 5 0 0 0-10 0"></path><line x1="12" y1="9" x2="12" y2="2"></line><line x1="4.22" y1="10.22" x2="5.64" y2="11.64"></line><line x1="1" y1="18" x2="3" y2="18"></line><line x1="21" y1="18" x2="23" y2="18"></line><line x1="18.36" y1="11.64" x2="19.78" y2="10.22"></line><line x1="23" y1="22" x2="1" y2="22"></line><polyline points="16 5 12 9 8 5"></polyline></svg>
+  );
+  // Matinada (i estat inicial sense hora encara triada).
+  return <svg {...common}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>;
+}
+
+// Bombola de "Hora aproximada": cada clic fa cicle Matí → Migdia → Tarda →
+// Vespre → Matinada → Matí… Per sota es desa una hora real representativa
+// del tram (perquè ICS, contractes, factures i ordenació no s'hagin de
+// tocar), però el que es veu i s'edita aquí és només el tram del dia.
+function TimePeriodBubble({ time, onChange }: { time: string; onChange: (v: string) => void }) {
+  const period = timePeriodFor(time);
+  return (
+    <button type="button" className="cd-time-bubble" onClick={() => onChange(nextTimePeriodValue(time))}>
+      <TimePeriodIcon period={period || "Matinada"} />
+      <span>{period || "Sense hora"}</span>
+    </button>
+  );
 }
 
 function Meter({ label, percent, missing }: { label: string; percent: number; missing: string[] }) {
@@ -80,6 +115,45 @@ function Meter({ label, percent, missing }: { label: string; percent: number; mi
         <div className="cd-meter-tip">
           <div className="cd-meter-tip-title">Falta:</div>
           {missing.map((m) => <div key={m} className="cd-meter-tip-row">· {m}</div>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Barra de la convocatòria a la capçalera: en comptes d'un sol percentatge,
+// dos trams (sí en verd, no en vermell) sobre el total de membres — el
+// tram restant (sense marcar) es veu com a fons neutre. Els exclosos de la
+// convocatòria d'aquest concert no compten enlloc (ni al total).
+function AttendanceMeter({ people, attendance, excluded }: { people: { name: string }[]; attendance: Record<string, string>; excluded: Record<string, boolean> }) {
+  const [open, setOpen] = useState(false);
+  const active = people.filter((p) => !excluded[p.name]);
+  const yes = active.filter((p) => attendance[p.name] === "yes");
+  const no = active.filter((p) => attendance[p.name] === "no");
+  const total = active.length;
+  const yesPct = total ? (yes.length / total) * 100 : 0;
+  const noPct = total ? (no.length / total) * 100 : 0;
+  const pending = active.filter((p) => attendance[p.name] !== "yes" && attendance[p.name] !== "no");
+  return (
+    <div className="cd-meter" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div className="cd-meter-head">
+        <span>Assistència</span>
+        <span>
+          <span style={{ color: "oklch(0.72 0.15 155)" }}>{yes.length} sí</span>
+          {no.length > 0 && <span style={{ color: "var(--red)" }}> · {no.length} no</span>}
+          {yes.length === 0 && no.length === 0 && <span className="t-dim"> —</span>}
+        </span>
+      </div>
+      <div className="cd-meter-track cd-att-meter-track">
+        <div className="cd-meter-fill" style={{ width: yesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
+        <div className="cd-meter-fill" style={{ width: noPct + "%", background: "var(--red)" }}></div>
+      </div>
+      {open && total > 0 && (
+        <div className="cd-meter-tip">
+          <div className="cd-meter-tip-title">Assistència:</div>
+          {yes.map((p) => <div key={p.name} className="cd-meter-tip-row" style={{ color: "oklch(0.72 0.15 155)" }}>✓ {p.name}</div>)}
+          {no.map((p) => <div key={p.name} className="cd-meter-tip-row" style={{ color: "var(--red)" }}>✕ {p.name}</div>)}
+          {pending.map((p) => <div key={p.name} className="cd-meter-tip-row">· {p.name} (pendent)</div>)}
         </div>
       )}
     </div>
@@ -180,7 +254,8 @@ export default function ConcertDetailView({
 }) {
   const router = useRouter();
   const [cf, setCf] = useState({
-    date: concert.date, time: concert.time, venue: concert.venue, city: concert.city,
+    date: concert.date, time: concert.time, exactTime: concert.exactTime || "", venue: concert.venue, city: concert.city,
+    address: concert.address || "",
     festaEntitat: concert.festaEntitat || "", amount: String(concert.amount), status: concert.status as string,
   });
   // Calendari propi (mateix estil que el de crear concert) al costat del
@@ -190,10 +265,31 @@ export default function ConcertDetailView({
   const [attendance, setAttendance] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutes] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
   const [noSubstitute, setNoSubstitute] = useState<Record<string, boolean>>({ ...(concert.noSubstitute || {}) });
+  // Membres exclosos de la convocatòria d'aquest concert (name -> true):
+  // no s'eliminen del grup, es desactiven només per a aquest bolo.
+  const [convocatoriaExcluded, setConvocatoriaExcluded] = useState<Record<string, boolean>>({ ...(concert.convocatoriaExcluded || {}) });
+  // Contacte principal d'aquest concert (organitzador/promotor).
+  const [contact, setContact] = useState<Concert["contact"]>({ ...(concert.contact || { email: "", name: "", phone: "", company: "" }) });
   const [saving, setSaving] = useState(false);
   const [nudging, setNudging] = useState(false);
   const [nudgeResult, setNudgeResult] = useState<string | null>(null);
   const [kind, setKind] = useState<string>(concert.kind || "bolo");
+  // Repetició d'assajos: no és cap dada del concert (cada ocurrència creada
+  // és un concert independent i propi), és només l'acció puntual de
+  // generar-los fins a la data triada.
+  const [repeatFreq, setRepeatFreq] = useState<"cap" | "setmanal" | "quinzenal" | "mensual">("cap");
+  const [repeatUntil, setRepeatUntil] = useState("");
+  const [repeating, setRepeating] = useState(false);
+  const [repeatResult, setRepeatResult] = useState<string | null>(null);
+  async function handleRepeat() {
+    if (repeatFreq === "cap" || !repeatUntil) return;
+    setRepeating(true);
+    const { created } = await repeatConcertAction(concert.id, repeatFreq, repeatUntil);
+    setRepeating(false);
+    setRepeatResult(created > 0 ? `${created} assajos creats ✓` : "Cap de nou (data massa a prop?)");
+    window.setTimeout(() => setRepeatResult(null), 3000);
+    if (created > 0) router.refresh();
+  }
   const [rsPreviewOpen, setRsPreviewOpen] = useState(false);
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
   const [posterOpen, setPosterOpen] = useState(false);
@@ -366,7 +462,7 @@ export default function ConcertDetailView({
   const venueColor = bandColor("venue:" + (cf.venue || "?"));
   const sc = statusColors(cf.status);
 
-  const liveConcert: Concert = { ...concert, ...cf, amount: parseInt(cf.amount, 10) || 0, status: cf.status as Concert["status"], attendance: attendance as Concert["attendance"], substitutes, noSubstitute };
+  const liveConcert: Concert = { ...concert, ...cf, amount: parseInt(cf.amount, 10) || 0, status: cf.status as Concert["status"], attendance: attendance as Concert["attendance"], substitutes, noSubstitute, convocatoriaExcluded, contact };
   const info = infoCompletion(liveConcert);
   const rsPercent = rsCompletionPercent(concert);
   const rsMissing = rsMissingList(concert);
@@ -380,16 +476,16 @@ export default function ConcertDetailView({
   const crew = band?.crew || [];
   const backups = band?.backups || [];
 
-  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute) {
+  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact) {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(async () => {
       setSaving(true);
       await saveConcertAction({
         id: concert.id,
         bandName: concert.bandName,
-        date: next.date, time: next.time, venue: next.venue, city: next.city,
+        date: next.date, time: next.time, exactTime: next.exactTime, venue: next.venue, city: next.city, address: next.address,
         festaEntitat: next.festaEntitat, amount: parseInt(next.amount, 10) || 0, status: next.status,
-        attendance: att, substitutes: subs, noSubstitute: noSubs,
+        attendance: att, substitutes: subs, noSubstitute: noSubs, convocatoriaExcluded: excl, contact: cont,
         skipDefaults: true,
       });
       setSaving(false);
@@ -410,9 +506,27 @@ export default function ConcertDetailView({
 
   // Triar un recinte (des d'Informació o des del Full de ruta — el mateix
   // camp, en un sol canvi perquè no es trepitgin entre ells) actualitza
-  // sempre la població si el recinte en sap una.
-  function commitVenue(v: { name: string; city?: string }) {
-    const next = { ...cf, venue: v.name, ...(v.city ? { city: v.city } : {}) };
+  // sempre la població si el recinte en sap una, i empleix l'adreça
+  // (carrer, número i població) si en sap el detall. Molts recintes no
+  // tenen número de carrer etiquetat ells mateixos (només un punt dins la
+  // ciutat) — en aquest cas es completa amb una geocodificació inversa de
+  // les seves coordenades, que sí que troba l'adreça etiquetada més propera.
+  async function commitVenue(v: { name: string; city?: string; street?: string; housenumber?: string; lat?: number | null; lon?: number | null }) {
+    let street = v.street || "", housenumber = v.housenumber || "", city = v.city;
+    if (!housenumber && v.lat != null && v.lon != null) {
+      const rev = await reverseGeocodeAction(v.lat, v.lon);
+      if (rev) {
+        if (rev.street) street = rev.street;
+        if (rev.housenumber) housenumber = rev.housenumber;
+        if (!city && rev.city) city = rev.city;
+      }
+    }
+    const addressParts = [[street, housenumber].filter(Boolean).join(" "), city].filter(Boolean);
+    const next = {
+      ...cf, venue: v.name,
+      ...(city ? { city } : {}),
+      ...(addressParts.length ? { address: addressParts.join(", ") } : {}),
+    };
     setCf(next);
     schedulePersist(next);
   }
@@ -432,31 +546,17 @@ export default function ConcertDetailView({
     setPickerYM(d.getFullYear() + "-" + pad2(d.getMonth() + 1));
   }
 
-  // Població i ubicació validades: només es pot desar una població/recinte
-  // real, triat de la llista que retorna la cerca — mai text lliure sense
-  // triar.
-  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
-  const [cityResults, setCityResults] = useState<{ description: string; placeId: string }[]>([]);
-  const [citySearching, setCitySearching] = useState(false);
-  const citySearchTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current);
-    const q = citySearch.trim();
-    if (q.length < 2) { setCityResults([]); setCitySearching(false); return; }
-    setCitySearching(true);
-    citySearchTimer.current = window.setTimeout(async () => {
-      const results = await searchCitiesAction(q);
-      setCityResults(results);
-      setCitySearching(false);
-    }, 300);
-    return () => { if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current); };
-  }, [citySearch]);
+  // Ubicació validada: només es pot desar un recinte real, triat de la
+  // llista que retorna la cerca — mai text lliure sense triar. La població
+  // ja no té camp propi (queda dins l'Adreça), però es continua guardant
+  // internament (el recinte triat la sap) per a tot el que en depèn arreu
+  // de l'app.
 
   const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
   const [venueSearch, setVenueSearch] = useState("");
-  const [venueResults, setVenueResults] = useState<{ description: string; name: string; city: string; placeId: string }[]>([]);
+  const [venueResults, setVenueResults] = useState<{ description: string; placeId: string }[]>([]);
   const [venueSearching, setVenueSearching] = useState(false);
+  const [venueResolving, setVenueResolving] = useState<string | null>(null);
   const venueSearchTimer = useRef<number | null>(null);
   useEffect(() => {
     if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current);
@@ -464,12 +564,23 @@ export default function ConcertDetailView({
     if (q.length < 2) { setVenueResults([]); setVenueSearching(false); return; }
     setVenueSearching(true);
     venueSearchTimer.current = window.setTimeout(async () => {
-      const results = await searchVenuesAction(q);
+      const results = await searchVenuesGoogleAction(q);
       setVenueResults(results);
       setVenueSearching(false);
     }, 300);
     return () => { if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current); };
   }, [venueSearch]);
+
+  // Triar una predicció de l'autocompletat de Google en demana els detalls
+  // (nom, població, carrer i número) abans d'omplir el Recinte i l'Adreça.
+  async function selectVenue(placeId: string) {
+    setVenueResolving(placeId);
+    const details = await getPlaceDetailsAction(placeId);
+    setVenueResolving(null);
+    setVenueDropdownOpen(false);
+    if (!details) return;
+    await commitVenue(details);
+  }
 
   function setAttendanceFor(name: string, val: "yes" | "no" | null) {
     const att = { ...attendance };
@@ -486,6 +597,22 @@ export default function ConcertDetailView({
     if (sub) delete noSubs[name];
     setNoSubstitute(noSubs);
     schedulePersist(cf, attendance, subs, noSubs);
+  }
+
+  // Treu (o torna a afegir) un membre de la convocatòria d'aquest concert
+  // en concret — mai del grup: només es desactiva visualment i queda fora
+  // del recompte de la capçalera per a aquest bolo.
+  function setExcludedFor(name: string, excluded: boolean) {
+    const excl = { ...convocatoriaExcluded };
+    if (excluded) excl[name] = true; else delete excl[name];
+    setConvocatoriaExcluded(excl);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, excl);
+  }
+
+  function setContactField(field: keyof Concert["contact"], v: string) {
+    const next = { ...contact, [field]: v };
+    setContact(next);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, next);
   }
 
   // ---- Repartiment ----
@@ -745,17 +872,18 @@ export default function ConcertDetailView({
       {/* Pòster: capçalera tipogràfica del concert */}
       <div className="cd-poster">
         <div className="cd-poster-glow" aria-hidden="true"></div>
-        <div className="cd-poster-kicker">
+        <div className="cd-poster-kicker">{concert.bandName}</div>
+        <div className="cd-poster-subtitle">
           {cf.festaEntitat || (kind === "bolo" ? "concert" : kind === "reunio" ? "reunió" : kind)}
         </div>
-        <div className="cd-poster-title">{concert.bandName}</div>
-        <div className="cd-poster-date">{capitalize(formatDateFull(cf.date))}{cf.time ? ` — ${cf.time}h` : ""}</div>
-        {(cf.venue || cf.city) && (
+        {cf.city && <div className="cd-poster-title">{cf.city.split(",")[0]}</div>}
+        {cf.venue && (
           <div className="cd-poster-place">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-            {[cf.venue, cf.city.split(",")[0]].filter(Boolean).join(" · ")}
+            {cf.venue}
           </div>
         )}
+        <div className="cd-poster-date">{capitalize(formatDateFull(cf.date))}{cf.time ? ` — ${formatConcertTime(cf.time)}` : ""}</div>
         <div className="cd-poster-foot">
           <button
             type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
@@ -765,6 +893,9 @@ export default function ConcertDetailView({
           <div className="cd-meters">
             <Meter label="Informació" percent={info.percent} missing={info.missing} />
             <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} />
+            {(members.length > 0 || crew.length > 0) && (
+              <AttendanceMeter people={[...members, ...crew]} attendance={attendance} excluded={convocatoriaExcluded} />
+            )}
           </div>
           <button type="button" className="btn-outline cd-poster-share" onClick={() => setPosterOpen(true)}
             title="Genera un pòster transparent per a Instagram amb el mapa i les dades del concert">📸 Pòster IG</button>
@@ -773,16 +904,29 @@ export default function ConcertDetailView({
 
       {/* Subpestanyes */}
       <div className="stats-tabs cd-tabs">
-        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Assistència"], ["facturacio", "Despeses i facturació"]] as const).map(([k, label]) => (
+        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Convocatòria"], ["facturacio", "Despeses i facturació"]] as const).map(([k, label]) => (
           <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
 
       {/* Informació */}
       {tab === "info" && (<>
+      <div className="panel cd-section" id="cd-contact">
+        <div className="panel-title cd-section-title">Contacte</div>
+        <div className="cd-contact-row">
+          <input className="field-input form-field" type="text" placeholder="Nom" value={contact.name} onChange={(e) => setContactField("name", e.target.value)} />
+          <input className="field-input form-field" type="text" placeholder="Telèfon" value={contact.phone} onChange={(e) => setContactField("phone", e.target.value)} />
+          <input className="field-input form-field" type="email" placeholder="Correu" value={contact.email} onChange={(e) => setContactField("email", e.target.value)} />
+          <input className="field-input form-field" type="text" placeholder="Empresa" value={contact.company} onChange={(e) => setContactField("company", e.target.value)} />
+        </div>
+      </div>
       <div className="panel cd-section" id="cd-info">
-        <div className="panel-title cd-section-title">Informació</div>
+        <div className="panel-title cd-section-title">Informació general</div>
         <div className="cd-info-grid">
+          <div className="cd-field">
+            <label className="form-label">Títol</label>
+            <input className="field-input form-field" value={cf.festaEntitat} onChange={(e) => setField("festaEntitat", e.target.value)} placeholder="Festa major, ajuntament…" />
+          </div>
           <div className="cd-field" style={{ position: "relative" }}>
             <label className="form-label">Data</label>
             <div style={{ position: "relative" }}>
@@ -827,16 +971,18 @@ export default function ConcertDetailView({
               </>
             )}
           </div>
-          <div className="cd-field">
-            <label className="form-label">Hora</label>
-            <input type="time" className="field-input form-field" value={cf.time} onChange={(e) => setField("time", e.target.value)} />
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Títol</label>
-            <input className="field-input form-field" value={cf.festaEntitat} onChange={(e) => setField("festaEntitat", e.target.value)} placeholder="Festa major, ajuntament…" />
+          <div className="cd-field cd-time-pair-field">
+            <div className="cd-time-pair-labels">
+              <label className="form-label">Hora aproximada</label>
+              <label className="form-label">Hora exacta</label>
+            </div>
+            <div className="cd-time-pair-row">
+              <TimePeriodBubble time={cf.time} onChange={(v) => setField("time", v)} />
+              <input type="time" className="field-input form-field" value={cf.exactTime} onChange={(e) => setField("exactTime", e.target.value)} />
+            </div>
           </div>
           <div className="cd-field" style={{ position: "relative" }}>
-            <label className="form-label">Ubicació / sala</label>
+            <label className="form-label">Recinte</label>
             <input
               className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca un recinte…"
               value={venueDropdownOpen ? venueSearch : cf.venue}
@@ -851,43 +997,20 @@ export default function ConcertDetailView({
                     <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
                   ) : venueSearching ? (
                     <div className="cf-band-noresults">Cercant…</div>
-                  ) : venueResults.length ? [...venueResults].sort((a, b) => {
-                      // Si ja hi ha població triada, primer els recintes que hi són a dins.
-                      if (!cf.city.trim()) return 0;
-                      const aIn = a.city && normalize(cf.city).includes(normalize(a.city)) ? 0 : 1;
-                      const bIn = b.city && normalize(cf.city).includes(normalize(b.city)) ? 0 : 1;
-                      return aIn - bIn;
-                    }).map((v) => (
-                    <button key={v.placeId} type="button" className={"year-option" + (v.name === cf.venue ? " active" : "")}
-                      onClick={() => { commitVenue(v); setVenueDropdownOpen(false); }}>{v.description}</button>
+                  ) : venueResults.length ? venueResults.map((v) => (
+                    <button key={v.placeId} type="button" className="year-option" disabled={venueResolving === v.placeId}
+                      onClick={() => selectVenue(v.placeId)}>{venueResolving === v.placeId ? "Carregant…" : v.description}</button>
                   )) : <div className="cf-band-noresults">Cap recinte coincideix</div>}
                 </div>
               </>
             )}
           </div>
-          <div className="cd-field" style={{ position: "relative" }}>
-            <label className="form-label">Població</label>
+          <div className="cd-field">
+            <label className="form-label">Adreça</label>
             <input
-              className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca una població…"
-              value={cityDropdownOpen ? citySearch : cf.city}
-              onFocus={() => { setCitySearch(cf.city); setCityDropdownOpen(true); }}
-              onChange={(e) => setCitySearch(e.target.value)}
+              className="field-input form-field" type="text" placeholder="S'empleix en triar un recinte…"
+              value={cf.address} onChange={(e) => setField("address", e.target.value)}
             />
-            {cityDropdownOpen && (
-              <>
-                <div className="year-picker-overlay" onClick={() => { if (!citySearch.trim() && cf.city) setField("city", ""); setCityDropdownOpen(false); }}></div>
-                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
-                  {citySearch.trim().length < 2 ? (
-                    <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
-                  ) : citySearching ? (
-                    <div className="cf-band-noresults">Cercant…</div>
-                  ) : cityResults.length ? cityResults.map((c) => (
-                    <button key={c.placeId} type="button" className={"year-option" + (c.description === cf.city ? " active" : "")}
-                      onClick={() => { setField("city", c.description); setCityDropdownOpen(false); }}>{c.description}</button>
-                  )) : <div className="cf-band-noresults">Cap població coincideix</div>}
-                </div>
-              </>
-            )}
           </div>
           <div className="cd-field">
             <label className="form-label">Import (sense IVA)</label>
@@ -895,21 +1018,40 @@ export default function ConcertDetailView({
           </div>
           <div className="cd-field">
             <label className="form-label">Tipus d&apos;esdeveniment</label>
-            <select
-              className="field-input form-field" value={kind}
-              onChange={async (e) => {
-                const v = e.target.value as "bolo" | "assaig" | "reunio" | "altre";
+            <button
+              type="button" className="cd-kind-bubble" style={{ background: KIND_META[kind]?.bg, color: KIND_META[kind]?.color }}
+              onClick={async () => {
+                const order = ["bolo", "assaig", "reunio", "altre"];
+                const v = order[(order.indexOf(kind) + 1) % order.length] as "bolo" | "assaig" | "reunio" | "altre";
                 setKind(v);
                 await setConcertKindAction(concert.id, v);
                 router.refresh();
               }}
             >
-              <option value="bolo">Bolo</option>
-              <option value="assaig">Assaig</option>
-              <option value="reunio">Reunió</option>
-              <option value="altre">Altre</option>
-            </select>
+              {KIND_META[kind]?.label || kind}
+            </button>
           </div>
+          {kind === "assaig" && (
+            <div className="cd-field cd-repeat-field">
+              <label className="form-label">Es repeteix</label>
+              <div className="cd-repeat-row">
+                <select className="field-input form-field" value={repeatFreq} onChange={(e) => setRepeatFreq(e.target.value as typeof repeatFreq)}>
+                  <option value="cap">No es repeteix</option>
+                  <option value="setmanal">Cada setmana</option>
+                  <option value="quinzenal">Cada 2 setmanes</option>
+                  <option value="mensual">Cada mes</option>
+                </select>
+                {repeatFreq !== "cap" && (
+                  <>
+                    <input type="date" className="field-input form-field" placeholder="Fins a" min={cf.date} value={repeatUntil} onChange={(e) => setRepeatUntil(e.target.value)} />
+                    <button type="button" className="btn-outline" disabled={repeating || !repeatUntil} onClick={handleRepeat}>
+                      {repeating ? "Creant…" : repeatResult || "Repeteix"}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -925,7 +1067,7 @@ export default function ConcertDetailView({
       {tab === "assistencia" && (
       <div className="panel cd-section" id="cd-assistencia">
         <div className="panel-header-row cd-section-title">
-          <div className="panel-title">Assistència</div>
+          <div className="panel-title">Convocatòria</div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             {linkedMembers.some((lm) => attendance[lm.memberName] !== "yes" && attendance[lm.memberName] !== "no") && (
               <button
@@ -953,8 +1095,9 @@ export default function ConcertDetailView({
               const att = attendance[m.name];
               const req = requestByMember[m.name];
               const inss = instrumentsFor(m);
+              const excluded = !!convocatoriaExcluded[m.name];
               return (
-                <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
+                <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
                   <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                   <div className="cd-att-main">
                     <div className="member-name">
@@ -968,11 +1111,21 @@ export default function ConcertDetailView({
                       })}
                     </div>
                   </div>
-                  <div className="cd-att-controls">
-                    <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
-                    <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
-                  </div>
-                  {att === "no" && (
+                  {!excluded && (
+                    <div className="cd-att-controls">
+                      <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
+                      <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
+                    </div>
+                  )}
+                  <button type="button" className="cd-att-exclude-btn" title={excluded ? "Torna a la convocatòria" : "Treu de la convocatòria d'aquest bolo"}
+                    onClick={() => setExcludedFor(m.name, !excluded)}>
+                    {excluded ? (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    )}
+                  </button>
+                  {!excluded && att === "no" && (
                     <div className="cd-att-sub">
                       <select
                         className="field-input compact-field"
@@ -1023,8 +1176,9 @@ export default function ConcertDetailView({
               {crew.map((m) => {
                 const linked = linkedByName[m.name];
                 const att = attendance[m.name];
+                const excluded = !!convocatoriaExcluded[m.name];
                 return (
-                  <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
+                  <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
                     <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                     <div className="cd-att-main">
                       <div className="member-name">
@@ -1033,11 +1187,21 @@ export default function ConcertDetailView({
                       </div>
                       {m.role && <div className="member-instruments"><span className="member-instrument-chip">{m.role}</span></div>}
                     </div>
-                    <div className="cd-att-controls">
-                      <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
-                      <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
-                    </div>
-                    {att === "no" && (
+                    {!excluded && (
+                      <div className="cd-att-controls">
+                        <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
+                        <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
+                      </div>
+                    )}
+                    <button type="button" className="cd-att-exclude-btn" title={excluded ? "Torna a la convocatòria" : "Treu de la convocatòria d'aquest bolo"}
+                      onClick={() => setExcludedFor(m.name, !excluded)}>
+                      {excluded ? (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      )}
+                    </button>
+                    {!excluded && att === "no" && (
                       <div className="cd-att-sub">
                         <input
                           className="field-input compact-field"
@@ -1065,13 +1229,21 @@ export default function ConcertDetailView({
                 Qui no tingui compte se&apos;l crea en un moment i queda vinculat al grup.
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" className="btn-outline" disabled={attBusy} onClick={copyAttLink}>
-                {attCopied ? "Copiat ✓" : attBusy ? "Creant…" : "Copia l'enllaç"}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" className="btn-save cd-send-convocatoria-btn" disabled={attBusy} onClick={waAttLink}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                {attBusy ? "Creant…" : "Enviar convocatòria"}
               </button>
-              <button type="button" className="btn-outline cd-wa-btn" disabled={attBusy} onClick={waAttLink}>WhatsApp</button>
+              <button type="button" className="btn-outline cd-copy-link-btn" disabled={attBusy} onClick={copyAttLink}>
+                {attCopied ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                )}
+                {attCopied ? "Copiat ✓" : "Copia l'enllaç"}
+              </button>
               {attToken && (
-                <button type="button" className="btn-outline" onClick={() => window.open(`/conf/${attToken}`, "_blank")}>Obre</button>
+                <button type="button" className="link-btn" onClick={() => window.open(`/conf/${attToken}`, "_blank")}>Obre</button>
               )}
             </div>
           </div>
@@ -1615,6 +1787,9 @@ export default function ConcertDetailView({
                   <option value={14}>14 dies</option>
                   <option value={30}>30 dies</option>
                   <option value={60}>60 dies</option>
+                  <option value={Math.max(1, Math.min(90, Math.ceil((new Date(concert.date + "T00:00:00").getTime() - Date.now()) / 86400000)))}>
+                    Fins al dia de l&apos;actuació
+                  </option>
                 </select>
               </div>
             </div>

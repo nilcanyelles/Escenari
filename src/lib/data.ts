@@ -1,6 +1,7 @@
 import { db } from "./db";
 import { visibleBandIds } from "./current-user";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact } from "./types";
+import { normalizeContact } from "./types";
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
@@ -54,8 +55,10 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     id: r.id,
     date: toDateStr(r.date),
     time: r.time,
+    exactTime: r.exact_time || "",
     venue: r.venue,
     city: r.city,
+    address: r.address || "",
     festaEntitat: r.festa_entitat,
     bandId: r.band_id,
     bandName: r.band_name,
@@ -65,6 +68,8 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     attendance: r.attendance,
     substitutes: r.substitutes,
     noSubstitute: r.no_substitute,
+    convocatoriaExcluded: r.convocatoria_excluded || {},
+    contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,
     payouts: r.payouts || {},
     agencyAssumesExpenses: r.agency_assumes_expenses !== false,

@@ -10,6 +10,7 @@ import {
 } from "@/lib/resum-helpers";
 import type { Transaction } from "@/lib/finance";
 import FinancePanel from "@/components/FinancePanel";
+import MunicipalityMap from "@/components/MunicipalityMap";
 
 const NBSP = " ";
 
@@ -129,11 +130,18 @@ function MiniDonut3({ part1, part2, part3, label1, label2, label3, color1, color
   );
 }
 
-function RankList({ title, rows, fmt }: { title: string; rows: { label: string; value: number; color?: string }[]; fmt: (n: number) => string }) {
+function RankList({ title, rows, fmt, titleExtra }: { title: string; rows: { label: string; value: number; color?: string }[]; fmt: (n: number) => string; titleExtra?: React.ReactNode }) {
   const max = Math.max(1, ...rows.map((r) => r.value));
   return (
     <div className="panel">
-      <div className="panel-title" style={{ marginBottom: 12 }}>{title}</div>
+      {titleExtra ? (
+        <div className="panel-header-row">
+          <div className="panel-title">{title}</div>
+          {titleExtra}
+        </div>
+      ) : (
+        <div className="panel-title" style={{ marginBottom: 12 }}>{title}</div>
+      )}
       {rows.length === 0 ? (
         <div className="t-dim" style={{ fontSize: 13 }}>Sense dades en aquest període.</div>
       ) : (
@@ -159,6 +167,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
   const [range, setRange] = useState<"year" | "all">("year");
   const [year, setYear] = useState(currentYear);
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
+  const [showMuniMap, setShowMuniMap] = useState(false);
 
   const yearSet: Record<number, boolean> = { [currentYear]: true };
   concerts.forEach((c) => { yearSet[parseInt(c.date.slice(0, 4), 10)] = true; });
@@ -167,6 +176,11 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
 
   const inPeriod = (date: string) => range === "all" || date.slice(0, 4) === String(year);
   const pool = concerts.filter((c) => inPeriod(c.date) && c.status !== "cancel·lat");
+  // Estadístiques de "Concerts": només bolos de veritat — assajos, reunions
+  // i altres tipus d'esdeveniment no hi compten (la pestanya "Diners" sí
+  // que els inclou, perquè un pagament és un pagament independentment del
+  // tipus d'esdeveniment que el va generar).
+  const boloConcerts = concerts.filter((c) => c.kind !== "assaig" && c.kind !== "reunio" && c.kind !== "altre");
 
   const concertsById: Record<string, Concert> = {};
   concerts.forEach((c) => { concertsById[c.id] = c; });
@@ -191,7 +205,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
     const yrs = years.slice().sort((a, b) => a - b);
     if (tab === "concerts") {
       chartTitle = "Concerts anuals";
-      const yagg = computeYearAgg(concerts, yrs, today);
+      const yagg = computeYearAgg(boloConcerts, yrs, today);
       const yMax = Math.max(1, ...yrs.map((yy) => yagg[yy].count));
       mainBars = yrs.map((yy) => {
         const pastPct = Math.round((yagg[yy].pastCount / yMax) * 100);
@@ -217,7 +231,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
     const months = Array.from({ length: 12 }, (_, m) => m);
     if (tab === "concerts") {
       chartTitle = "Concerts per mes";
-      const agg = computeMonthAgg(concerts, year, today);
+      const agg = computeMonthAgg(boloConcerts, year, today);
       const maxCount = Math.max(1, ...months.map((mm) => agg[mm].count));
       mainBars = months.map((mm) => {
         const totalPct = Math.round((agg[mm].count / maxCount) * 100);
@@ -247,21 +261,23 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
   let kpis: React.ReactNode, ranks: React.ReactNode, donut: React.ReactNode;
 
   if (tab === "concerts") {
-    const done = pool.filter((c) => c.status !== "pendent" && c.date < today).length;
-    const pending = pool.filter((c) => c.status === "pendent" || c.status === "reservat").length;
-    const future = pool.length - done - pending;
-    const cancelled = concerts.filter((c) => inPeriod(c.date) && c.status === "cancel·lat").length;
-    const confirmRate = pool.length + cancelled > 0 ? Math.round((pool.length / (pool.length + cancelled)) * 100) : 0;
+    const concertsPool = pool.filter((c) => c.kind !== "assaig" && c.kind !== "reunio" && c.kind !== "altre");
+    const done = concertsPool.filter((c) => c.status !== "pendent" && c.date < today).length;
+    const pending = concertsPool.filter((c) => c.status === "pendent" || c.status === "reservat").length;
+    const future = concertsPool.length - done - pending;
+    const cancelled = boloConcerts.filter((c) => inPeriod(c.date) && c.status === "cancel·lat").length;
+    const confirmRate = concertsPool.length + cancelled > 0 ? Math.round((concertsPool.length / (concertsPool.length + cancelled)) * 100) : 0;
 
     const byCity: Record<string, number> = {};
     const byBand: Record<string, number> = {};
-    pool.forEach((c) => {
+    concertsPool.forEach((c) => {
       const city = (c.city || "").split(",")[0].trim();
       if (city) byCity[city] = (byCity[city] || 0) + 1;
       byBand[c.bandId] = (byBand[c.bandId] || 0) + 1;
     });
-    const topCities = Object.entries(byCity).sort((a, b) => b[1] - a[1]).slice(0, 6)
-      .map(([label, value]) => ({ label, value }));
+    const cityEntries = Object.entries(byCity).sort((a, b) => b[1] - a[1]);
+    const topCities = cityEntries.slice(0, 6).map(([label, value]) => ({ label, value }));
+    const allCities = cityEntries.map(([name, count]) => ({ name, count }));
     const bandRows = Object.entries(byBand).sort((a, b) => b[1] - a[1]).slice(0, 6)
       .map(([id, value]) => ({ label: bands.find((b) => b.id === id)?.name || "—", value, color: bandColor(id).color }));
 
@@ -275,17 +291,43 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
     );
     kpis = (
       <div className="kpi-grid kpi-grid-4">
-        <div className="card card-centered"><div className="card-title">Total concerts</div><div className="card-value">{pool.length}</div></div>
+        <div className="card card-centered"><div className="card-title">Total concerts</div><div className="card-value">{concertsPool.length}</div></div>
         <div className="card card-centered"><div className="card-title">Realitzats</div><div className="card-value">{done}</div></div>
         <div className="card card-centered"><div className="card-title">Pendents de confirmar</div><div className="card-value">{pending}</div></div>
         <div className="card card-centered"><div className="card-title">Taxa de confirmació</div><div className="card-value">{confirmRate}%</div></div>
       </div>
     );
     ranks = (
-      <div className="chart-grid">
-        <RankList title="Concerts per grup" rows={bandRows} fmt={(n) => String(n)} />
-        <RankList title="Poblacions més repetides" rows={topCities} fmt={(n) => String(n)} />
-      </div>
+      <>
+        <div className="chart-grid">
+          <RankList title="Concerts per grup" rows={bandRows} fmt={(n) => String(n)} />
+          <RankList
+            title="Poblacions més repetides"
+            rows={topCities}
+            fmt={(n) => String(n)}
+            titleExtra={
+              <button type="button" className="panel-icon-btn" title="Veure mapa de municipis" aria-label="Veure mapa de municipis" onClick={() => setShowMuniMap(true)}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
+                  <path d="M21 15l-5-5L5 21"></path>
+                </svg>
+              </button>
+            }
+          />
+        </div>
+        {showMuniMap && (
+          <div className="modal-overlay" onClick={() => setShowMuniMap(false)}>
+            <div className="modal muni-map-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-head">
+                <div className="modal-title">Mapa de municipis</div>
+                <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setShowMuniMap(false)}>✕</button>
+              </div>
+              <MunicipalityMap cities={allCities} />
+            </div>
+          </div>
+        )}
+      </>
     );
   } else {
     let paid = 0, pendingRev = 0, overdue = 0;

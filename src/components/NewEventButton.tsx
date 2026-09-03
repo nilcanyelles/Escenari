@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
 import { saveConcertAction, createEventAction } from "@/app/(app)/concerts/actions";
-import { personPhotoDataUri } from "@/lib/tags";
+import { personPhotoDataUri, bandPhotoDataUri } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 
 const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon: string; desc: string }[] = [
@@ -26,7 +26,7 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
   defaultDate?: string;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<"closed" | "kind" | "quick">("closed");
+  const [step, setStep] = useState<"closed" | "kind" | "quick" | "bolo-band">("closed");
   const [kind, setKind] = useState<"assaig" | "reunio" | "altre">("assaig");
   const [bandId, setBandId] = useState(selectedBandId || bands[0]?.id || "");
   const [title, setTitle] = useState("");
@@ -61,17 +61,27 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
     return Array.from(seen.values()).slice(0, 30);
   }, [concerts, bandId]);
 
+  // Crea el bolo amb el grup triat a "bandId" — es fa servir tant si es crea
+  // de seguida (grup ja decidit) com des del pas d'escollir grup.
+  async function createBolo() {
+    setBusy(true);
+    const created = await saveConcertAction({
+      id: null, bandName: band?.name || "", date: defaultDate || new Date().toISOString().slice(0, 10),
+      time: "", venue: "", city: "", festaEntitat: "", amount: 0, status: "pendent",
+      attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
+    });
+    setBusy(false);
+    setStep("closed");
+    if (created) router.push(`/concerts/${created.id}`);
+  }
+
   async function chooseKind(k: "bolo" | "assaig" | "reunio" | "altre") {
     if (k === "bolo") {
-      setBusy(true);
-      const created = await saveConcertAction({
-        id: null, bandName: band?.name || "", date: defaultDate || new Date().toISOString().slice(0, 10),
-        time: "", venue: "", city: "", festaEntitat: "", amount: 0, status: "pendent",
-        attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
-      });
-      setBusy(false);
-      setStep("closed");
-      if (created) router.push(`/concerts/${created.id}`);
+      // Amb més d'un grup i cap de preseleccionat, primer cal triar a
+      // quin — abans es creava sempre al grup que ja estava actiu, sense
+      // poder-ho canviar.
+      if (!selectedBandId && bands.length > 1) { setStep("bolo-band"); return; }
+      await createBolo();
       return;
     }
     setKind(k);
@@ -120,6 +130,35 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
         </div>
       )}
 
+      {step === "bolo-band" && portal(
+        <div className="modal-overlay" onClick={() => setStep("closed")}>
+          <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">Quin grup?</div>
+              <button className="cf-head-close" onClick={() => setStep("closed")}>✕</button>
+            </div>
+            <div className="modal-form" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="form-label">Grup</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                  {bands.map((b) => (
+                    <button key={b.id} type="button" className={"band-chip" + (bandId === b.id ? " active" : "")} onClick={() => setBandId(b.id)}>
+                      <img src={b.logo || bandPhotoDataUri(b)} alt="" />
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div className="modal-actions">
+                <div className="spacer"></div>
+                <button className="btn-outline" onClick={() => setStep("kind")}>← Enrere</button>
+                <button className="btn-save" disabled={busy || !bandId} onClick={createBolo}>{busy ? "Creant…" : "Crea"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {step === "quick" && portal(
         <div className="modal-overlay" onClick={() => setStep("closed")}>
           <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
@@ -131,10 +170,15 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
               {!selectedBandId && bands.length > 1 && (
                 <div>
                   <label className="form-label">Grup</label>
-                  <select className="field-input form-field" value={bandId}
-                    onChange={(e) => { setBandId(e.target.value); const b = bands.find((x) => x.id === e.target.value); setInvited(new Set((b?.members || []).map((m) => m.name))); }}>
-                    {bands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                    {bands.map((b) => (
+                      <button key={b.id} type="button" className={"band-chip" + (bandId === b.id ? " active" : "")}
+                        onClick={() => { setBandId(b.id); setInvited(new Set((b.members || []).map((m) => m.name))); }}>
+                        <img src={b.logo || bandPhotoDataUri(b)} alt="" />
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div>

@@ -18,7 +18,7 @@ export default async function ConfirmPage({ params, searchParams }: {
   const pool = db();
 
   const concert = (await pool.query(
-    `select c.id, c.date, c.time, c.city, c.venue, c.festa_entitat, c.kind, c.attendance, c.band_id, c.workspace_id,
+    `select c.id, c.date, c.time, c.exact_time, c.city, c.venue, c.address, c.festa_entitat, c.kind, c.attendance, c.band_id, c.workspace_id,
             b.name as band_name, b.logo, b.color1, b.color2, b.members, b.crew
      from concerts c join bands b on b.id = c.band_id
      where c.att_token=$1 and c.status <> 'cancel·lat'`,
@@ -57,8 +57,10 @@ export default async function ConfirmPage({ params, searchParams }: {
       event={{
         date: typeof concert.date === "string" ? concert.date.slice(0, 10) : concert.date.toISOString().slice(0, 10),
         time: concert.time || "",
+        exactTime: concert.exact_time || "",
         city: concert.city || "",
         venue: concert.venue || "",
+        address: concert.address || "",
         festaEntitat: concert.festa_entitat || "",
         kind: concert.kind || "bolo",
         bandName: concert.band_name,

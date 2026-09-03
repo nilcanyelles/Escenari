@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { normalizeContact } from "./types";
 
 export type ArtistBand = {
   id: string;
@@ -161,8 +162,10 @@ export async function getArtistConcertsFull(clerkUserId: string): Promise<import
     id: r.id,
     date: toDateStr(r.date),
     time: r.time,
+    exactTime: r.exact_time || "",
     venue: r.venue,
     city: r.city,
+    address: r.address || "",
     festaEntitat: r.festa_entitat,
     bandId: r.band_id,
     bandName: r.band_name,
@@ -172,6 +175,8 @@ export async function getArtistConcertsFull(clerkUserId: string): Promise<import
     attendance: r.attendance,
     substitutes: r.substitutes,
     noSubstitute: r.no_substitute,
+    convocatoriaExcluded: r.convocatoria_excluded || {},
+    contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,
     payouts: r.payouts || {},
     riderId: r.rider_id || null,

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { respondConfAction } from "@/app/conf/actions";
 import { personPhotoDataUri } from "@/lib/tags";
-import { formatDateFull, capitalize } from "@/lib/format";
+import { formatDateFull, capitalize, formatConcertTimePhrase } from "@/lib/format";
 
 const KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", reunio: "Reunió", altre: "Esdeveniment" };
 
@@ -19,7 +19,7 @@ type ConfMember = {
 
 export default function ConfirmView({ token, event, members, signedIn, viewerIsManager = false, preselect }: {
   token: string;
-  event: { date: string; time: string; city: string; venue: string; festaEntitat: string; kind: string; bandName: string; logo: string; color1: string; color2: string };
+  event: { date: string; time: string; exactTime: string; city: string; venue: string; address: string; festaEntitat: string; kind: string; bandName: string; logo: string; color1: string; color2: string };
   members: ConfMember[];
   signedIn: boolean;
   viewerIsManager?: boolean;
@@ -49,7 +49,8 @@ export default function ConfirmView({ token, event, members, signedIn, viewerIsM
     router.refresh();
   }
 
-  const place = [event.venue, event.city ? event.city.split(",")[0] : ""].filter(Boolean).join(" · ");
+  const place = [event.venue, event.address, event.city ? event.city.split(",")[0] : ""].filter(Boolean).join(" · ");
+  const timeLabel = event.exactTime ? `${event.exactTime}h` : formatConcertTimePhrase(event.time);
 
   return (
     <div className="cfm-page" style={{ ["--c1" as string]: c1, ["--c2" as string]: c2 }}>
@@ -58,7 +59,7 @@ export default function ConfirmView({ token, event, members, signedIn, viewerIsM
           {event.logo && <img className="cfm-logo" src={event.logo} alt="" />}
           <div className="cfm-kind">{KIND_LABELS[event.kind] || "Esdeveniment"}{event.festaEntitat ? ` · ${event.festaEntitat}` : ""}</div>
           <div className="cfm-band">{event.bandName}</div>
-          <div className="cfm-when">{capitalize(formatDateFull(event.date))}{event.time ? ` — ${event.time}h` : ""}</div>
+          <div className="cfm-when">{capitalize(formatDateFull(event.date))}{timeLabel ? ` — ${timeLabel}` : ""}</div>
           {place && <div className="cfm-place">📍 {place}</div>}
         </div>
 

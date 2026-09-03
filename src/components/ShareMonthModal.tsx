@@ -273,9 +273,11 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
   // cap límit superior — no depèn del mes/any triats amb les fletxes (que
   // només tenen sentit per "1 mes"). Només els confirmats hi surten com a
   // opció: els pendents/reservats encara podrien no tirar endavant, i un
-  // cancel·lat òbviament tampoc hi pinta res.
+  // cancel·lat òbviament tampoc hi pinta res. Tampoc hi surten assajos,
+  // reunions ni altres tipus d'esdeveniment — només bolos de veritat.
   const monthConcerts = concerts
     .filter((c) => {
+      if (c.kind === "assaig" || c.kind === "reunio" || c.kind === "altre") return false;
       if (c.status !== "confirmat") return false;
       if (period === "all") return true;
       if (period === "upcoming") return c.date >= today;
@@ -323,81 +325,34 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
-    // ---- Mode pòster: PNG transparent per posar sobre una foto a Instagram ----
-    if (mode === "poster") {
-      ctx.clearRect(0, 0, W, H);
-      const upcoming = concerts
-        .filter((c) => c.date >= today && c.status !== "cancel·lat")
-        .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
-        .slice(0, 6);
-      const cream = "#f4efe4";
-      ctx.textAlign = "center";
-      ctx.shadowColor = "rgba(0,0,0,0.55)";
-      ctx.shadowBlur = 26;
+    ctx.clearRect(0, 0, W, H);
 
-      // Títol gran apilat (estil cartell)
-      const title = bands.length === 1 ? bands[0].name.toUpperCase() : "PROPERS\nCONCERTS";
-      const lines = title.includes("\n") ? title.split("\n") : title.split(" ").length > 1 && title.length > 14 ? [title.split(" ")[0], title.split(" ").slice(1).join(" ")] : [title];
-      ctx.fillStyle = cream;
-      let ty = 260;
-      lines.forEach((ln) => {
-        let size = 150;
-        ctx.font = `700 ${size}px 'Space Grotesk', sans-serif`;
-        while (ctx.measureText(ln).width > W - 120 && size > 60) {
-          size -= 6;
-          ctx.font = `700 ${size}px 'Space Grotesk', sans-serif`;
-        }
-        ctx.fillText(ln, W / 2, ty);
-        ty += size * 0.98;
-      });
-
-      // Molt d'espai buit al mig per a la foto de fons…
-
-      // Llista de dates a baix
-      ctx.font = "italic 500 34px Inter, sans-serif";
-      ctx.fillStyle = "rgba(244, 239, 228, 0.85)";
-      ctx.fillText("els pròxims concerts:", W / 2, H - 150 - upcoming.length * 54 - 40);
-      ctx.font = "600 38px Inter, sans-serif";
-      ctx.fillStyle = cream;
-      upcoming.forEach((c, i) => {
-        const [, mm, dd] = c.date.split("-");
-        const line = `${dd}.${mm}${c.time ? ` — ${c.time}h` : ""}${c.city ? ` — ${c.city.split(",")[0]}` : ""}`;
-        ctx.fillText(line, W / 2, H - 150 - (upcoming.length - 1 - i) * 54);
-      });
-      if (upcoming.length === 0) {
-        ctx.font = "500 34px Inter, sans-serif";
-        ctx.fillText("nous concerts ben aviat", W / 2, H - 190);
+    // Fons: "Fons transparent" deixa el mateix disseny sense la capa
+    // opaca de sota (perquè es pugui posar sobre una foto pròpia) — el
+    // halo de colors de les cantonades es dibuixa igualment als dos casos,
+    // ja que ell sol ja es dilueix cap a la transparència. Amb "Fons negre"
+    // i mode mapa, negre gairebé pur amb línies blanques (estil pòster de
+    // mapa de carrers monocrom); a la resta, el degradat fosc de sempre.
+    if (mode === "story") {
+      if (effectiveViewMode === "mapa") {
+        ctx.fillStyle = "#050505";
+        ctx.fillRect(0, 0, W, H);
+      } else {
+        const bg = ctx.createLinearGradient(0, 0, W, H);
+        bg.addColorStop(0, "#0b0a14");
+        bg.addColorStop(1, "#12101f");
+        ctx.fillStyle = bg;
+        ctx.fillRect(0, 0, W, H);
       }
-
-      // Peu
-      ctx.font = "600 27px Inter, sans-serif";
-      ctx.fillStyle = "rgba(244, 239, 228, 0.75)";
-      ctx.fillText("@escenari.app", W / 2, H - 60);
-      ctx.shadowBlur = 0;
-      return;
-    }
-
-    // Fons: al mode mapa, negre gairebé pur amb línies blanques (estil
-    // pòster de mapa de carrers monocrom); a la resta, el degradat fosc de
-    // sempre amb un halo del color d'accent.
-    if (effectiveViewMode === "mapa") {
-      ctx.fillStyle = "#050505";
-      ctx.fillRect(0, 0, W, H);
-    } else {
-      const bg = ctx.createLinearGradient(0, 0, W, H);
-      bg.addColorStop(0, "#0b0a14");
-      bg.addColorStop(1, "#12101f");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
     }
 
     const halo = ctx.createRadialGradient(W * 0.8, H * 0.12, 60, W * 0.8, H * 0.12, 720);
-    halo.addColorStop(0, accent + (effectiveViewMode === "mapa" ? "16" : "40"));
+    halo.addColorStop(0, accent + "40");
     halo.addColorStop(1, "transparent");
     ctx.fillStyle = halo;
     ctx.fillRect(0, 0, W, H);
     const halo2 = ctx.createRadialGradient(W * 0.1, H * 0.9, 60, W * 0.1, H * 0.9, 800);
-    halo2.addColorStop(0, accent + (effectiveViewMode === "mapa" ? "0f" : "26"));
+    halo2.addColorStop(0, accent + "26");
     halo2.addColorStop(1, "transparent");
     ctx.fillStyle = halo2;
     ctx.fillRect(0, 0, W, H);
@@ -1172,10 +1127,34 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
     // Llista de concerts: hi surten TOTS, mai es retalla — si no caben amb
     // l'espaiat còmode es reparteixen en més columnes i s'encongeixen fins
     // que hi càpiguen.
-    if (posterConcerts.length) {
+    // "Propers concerts" pot travessar mesos diferents — en comptes d'una
+    // data ambigua a cada fila (dd.mm), s'agrupen per mes: una capçalera
+    // amb el nom del mes i, a sota, tots els seus bolos només amb el dia
+    // (com ja fa "1 mes", que no necessita repetir-lo). Un mes sencer
+    // (capçalera + els seus bolos) es reparteix entre columnes com un sol
+    // bloc — mai en parteix cap a mig grup.
+    type PosterListItem = { header: string } | { c: Concert };
+    const todayYear = parseInt(today.slice(0, 4), 10);
+    const monthGroups: PosterListItem[][] = [];
+    if (period === "upcoming") {
+      let lastYm = "";
+      posterConcerts.forEach((c) => {
+        const ym = c.date.slice(0, 7);
+        if (ym !== lastYm) {
+          const [yy, mm] = ym.split("-").map(Number);
+          monthGroups.push([{ header: MONTH_FULL[mm - 1] + (yy !== todayYear ? ` ${yy}` : "") }]);
+          lastYm = ym;
+        }
+        monthGroups[monthGroups.length - 1].push({ c });
+      });
+    } else {
+      posterConcerts.forEach((c) => monthGroups.push([{ c }]));
+    }
+    const total = monthGroups.reduce((n, g) => n + g.length, 0);
+
+    if (total) {
       const listTop = gridTop + 60 + numRows * rowH + 50;
 
-      const total = posterConcerts.length;
       const availableH = H - listTop - 60 - 90;
       const comfortRowGap = 88;
       const minRowGap = 30;
@@ -1187,16 +1166,35 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
       const colW = (W - 144 - colGap * (cols - 1)) / cols;
       const compact = rowGap < 70;
 
+      // Reparteix els grups (mesos sencers, o un concert solt quan no n'hi
+      // ha) entre columnes: un grup passa a la columna següent si no hi
+      // cap sencer i la columna actual ja té alguna cosa — mai el parteix.
+      const displayItems: PosterListItem[] = [];
+      const itemCol: number[] = [];
+      const itemRow: number[] = [];
+      let col = 0, rowInCol = 0;
+      monthGroups.forEach((group) => {
+        if (rowInCol > 0 && rowInCol + group.length > rowsPerCol && col < cols - 1) { col++; rowInCol = 0; }
+        group.forEach((it) => { displayItems.push(it); itemCol.push(col); itemRow.push(rowInCol); rowInCol++; });
+      });
+
       for (let i = 0; i < total; i++) {
-        const c = posterConcerts[i];
-        const col = Math.floor(i / rowsPerCol);
-        const rowInCol = i % rowsPerCol;
-        const x0 = 72 + col * (colW + colGap);
-        const yy = listTop + 60 + rowInCol * rowGap;
-        // Amb un sol mes n'hi ha prou amb el dia; amb un període més ampli
-        // (on els concerts poden ser de mesos diferents) cal el mes també,
-        // que si no la data surt ambigua.
-        const dateLabel = period === "1m" ? c.date.slice(8, 10) : `${c.date.slice(8, 10)}.${c.date.slice(5, 7)}`;
+        const item = displayItems[i];
+        const x0 = 72 + itemCol[i] * (colW + colGap);
+        const yy = listTop + 60 + itemRow[i] * rowGap;
+
+        if ("header" in item) {
+          ctx.textAlign = "left";
+          ctx.fillStyle = accent;
+          ctx.font = `700 ${Math.max(15, Math.min(26, rowGap - 12))}px 'Space Grotesk', sans-serif`;
+          ctx.fillText(item.header.toUpperCase(), x0, yy);
+          continue;
+        }
+        const c = item.c;
+        // Amb un sol mes (o dins d'un grup ja titulat amb el mes) n'hi ha
+        // prou amb el dia; amb un període ampli sense agrupar cal el mes
+        // també, que si no la data surt ambigua.
+        const dateLabel = (period === "1m" || period === "upcoming") ? c.date.slice(8, 10) : `${c.date.slice(8, 10)}.${c.date.slice(5, 7)}`;
         const isTba = tbaIds.has(c.id);
         const place = isTba ? "TBA" : (c.city || c.venue || "").split(",")[0];
         const festa = isTba ? "" : c.festaEntitat;
@@ -1234,7 +1232,7 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
           ctx.font = `700 ${dateFont}px 'Space Grotesk', sans-serif`;
           ctx.textAlign = "left";
           ctx.fillText(dateLabel, x0, yy);
-          const dateW = ctx.measureText(period === "1m" ? "00" : "00.00").width + 14;
+          const dateW = ctx.measureText((period === "1m" || period === "upcoming") ? "00" : "00.00").width + 14;
 
           // Població, en negreta i sempre sencera.
           ctx.font = `700 ${placeFont}px 'Space Grotesk', sans-serif`;
@@ -1313,16 +1311,9 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
           </div>
           <div className="share-month-controls">
             <div className="stats-tabs" style={{ alignSelf: "flex-start" }}>
-              <button className={"stats-tab" + (mode === "story" ? " active" : "")} onClick={() => setMode("story")}>Story del mes</button>
-              <button className={"stats-tab" + (mode === "poster" ? " active" : "")} onClick={() => setMode("poster")}>Pòster transparent</button>
+              <button className={"stats-tab" + (mode === "story" ? " active" : "")} onClick={() => setMode("story")}>Fons negre</button>
+              <button className={"stats-tab" + (mode === "poster" ? " active" : "")} onClick={() => setMode("poster")}>Fons transparent</button>
             </div>
-            {mode === "poster" && (
-              <div className="t-dim" style={{ fontSize: 12.5 }}>
-                PNG amb fons transparent: posa&apos;l sobre una foto vostra a Instagram. Títol gran + els pròxims concerts (data, hora i lloc).
-              </div>
-            )}
-            {mode === "story" && (
-            <>
             <div className="stats-tabs share-month-period-tabs" style={{ alignSelf: "flex-start" }}>
               {PERIOD_OPTIONS.map((p) => (
                 <button key={p} className={"stats-tab" + (period === p ? " active" : "")} onClick={() => setPeriod(p)}>{PERIOD_LABELS[p]}</button>
@@ -1393,8 +1384,6 @@ export default function ShareMonthModal({ bands, concerts, today, onClose }: { b
                   );
                 })}
               </div>
-            )}
-            </>
             )}
             <div className="share-month-actions">
               <button type="button" className="btn-outline" disabled={busy} onClick={handleDownload}>Descarrega PNG</button>

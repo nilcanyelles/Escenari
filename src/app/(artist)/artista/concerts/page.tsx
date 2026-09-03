@@ -35,8 +35,6 @@ export default async function ArtistConcertsPage() {
     <ConcertsView
       bands={bands}
       concerts={scoped}
-      invoices={[]}
-      companyInfo={{ ivaRate: 21, irpfRate: 0 } as never}
       selectedBandId={bandId}
       viewer="artist"
       canCreate={canCreate}
