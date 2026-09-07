@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { respondConfAction } from "@/app/conf/actions";
 import { personPhotoDataUri } from "@/lib/tags";
-import { formatDateFull, capitalize, formatConcertTimePhrase } from "@/lib/format";
-
-const KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", reunio: "Reunió", altre: "Esdeveniment" };
+import { formatDateFull, capitalize, formatConcertTime } from "@/lib/format";
+import type { Concert, Band } from "@/lib/types";
+import DiaBody from "@/components/DiaBody";
 
 type ConfMember = {
   name: string;
@@ -17,13 +17,18 @@ type ConfMember = {
   answer: "yes" | "no" | "";
 };
 
-export default function ConfirmView({ token, event, members, signedIn, viewerIsManager = false, preselect }: {
+export default function ConfirmView({ token, event, members, viewerIsManager = false, preselect, diaConcert, diaBand }: {
   token: string;
   event: { date: string; time: string; exactTime: string; city: string; venue: string; address: string; festaEntitat: string; kind: string; bandName: string; logo: string; color1: string; color2: string };
   members: ConfMember[];
-  signedIn: boolean;
   viewerIsManager?: boolean;
   preselect: string;
+  // Vista del dia de bolo (horaris, contactes, qui ve, allotjament) — es
+  // mostra a sota del pòster, perquè en compartir l'enllaç per WhatsApp
+  // qui el rep vegi tots els detalls del dia, no només el formulari
+  // d'assistència.
+  diaConcert: Concert;
+  diaBand: Band | null;
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<string>(() =>
@@ -36,7 +41,6 @@ export default function ConfirmView({ token, event, members, signedIn, viewerIsM
   const sel = members.find((m) => m.name === selected) || null;
   const c1 = event.color1 || "#8b7bff";
   const c2 = event.color2 || "#5f4bcc";
-  const returnUrl = (name: string) => `/conf/${token}?sel=${encodeURIComponent(name)}`;
 
   async function respond(answer: "yes" | "no") {
     if (!sel) return;
@@ -49,18 +53,34 @@ export default function ConfirmView({ token, event, members, signedIn, viewerIsM
     router.refresh();
   }
 
-  const place = [event.venue, event.address, event.city ? event.city.split(",")[0] : ""].filter(Boolean).join(" · ");
-  const timeLabel = event.exactTime ? `${event.exactTime}h` : formatConcertTimePhrase(event.time);
+  const place = [event.venue, event.address].filter(Boolean).join(" · ");
+  const mapsQuery = encodeURIComponent([event.venue, event.address, event.city].filter(Boolean).join(", "));
 
   return (
-    <div className="cfm-page" style={{ ["--c1" as string]: c1, ["--c2" as string]: c2 }}>
+    <div className="cfm-page" style={{ ["--c1" as string]: c1, ["--c2" as string]: c2, ["--band-accent" as string]: c1 }}>
       <div className="cfm-card">
-        <div className="cfm-hero">
-          {event.logo && <img className="cfm-logo" src={event.logo} alt="" />}
-          <div className="cfm-kind">{KIND_LABELS[event.kind] || "Esdeveniment"}{event.festaEntitat ? ` · ${event.festaEntitat}` : ""}</div>
-          <div className="cfm-band">{event.bandName}</div>
-          <div className="cfm-when">{capitalize(formatDateFull(event.date))}{timeLabel ? ` — ${timeLabel}` : ""}</div>
-          {place && <div className="cfm-place">📍 {place}</div>}
+        <div className="cd-poster">
+          <div className="cd-poster-glow" aria-hidden="true"></div>
+          {event.logo && <img className="cfm-poster-logo" src={event.logo} alt="" />}
+          <div className="cd-poster-kicker">{event.bandName}</div>
+          <div className="cd-poster-subtitle">
+            {event.festaEntitat || (event.kind === "bolo" ? "concert" : event.kind === "reunio" ? "reunió" : event.kind)}
+          </div>
+          {event.city && <div className="cd-poster-title">{event.city.split(",")[0]}</div>}
+          {place && (
+            <a
+              className="cd-poster-place" href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`}
+              target="_blank" rel="noreferrer" title="Obre la ubicació a Google Maps"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              {place}
+            </a>
+          )}
+          <div className="cd-poster-date">{capitalize(formatDateFull(event.date))}{event.time ? ` — ${formatConcertTime(event.time)}` : ""}</div>
+        </div>
+
+        <div className="dia" style={{ padding: 0, margin: 0, maxWidth: "none" }}>
+          <DiaBody concert={diaConcert} band={diaBand} />
         </div>
 
         <div className="cfm-question">Qui ets? Marca&apos;t i confirma si hi seràs.</div>
@@ -95,29 +115,8 @@ export default function ConfirmView({ token, event, members, signedIn, viewerIsM
               <div className={"cfm-done " + done}>
                 {done === "yes" ? `Gràcies, ${sel.name.split(" ")[0]}! Has confirmat que hi seràs. 🎉` : `Anotat: ${sel.name.split(" ")[0]} no hi serà.`}
               </div>
-            ) : sel.linked && !sel.isMe && !signedIn ? (
-              <>
-                <div className="cfm-note">{sel.name} ja té compte d&apos;Escenari. Inicia-hi sessió per confirmar.</div>
-                <a className="btn-save cfm-cta" href={`/sign-in?redirect_url=${encodeURIComponent(returnUrl(sel.name))}`}>Inicia sessió</a>
-              </>
-            ) : sel.linked && !sel.isMe && signedIn ? (
-              <div className="cfm-note">Aquest perfil està vinculat a un altre compte — només {sel.name} pot respondre-hi.</div>
-            ) : !signedIn ? (
-              <>
-                <div className="cfm-note">
-                  Per confirmar com a <strong>{sel.name}</strong>, crea el teu compte d&apos;Escenari (30 segons).
-                  Quedarà vinculat a aquest grup i podràs confirmar tots els bolos des de la teva pàgina.
-                </div>
-                <div className="cfm-cta-row">
-                  <a className="btn-save cfm-cta" href={`/sign-up?redirect_url=${encodeURIComponent(returnUrl(sel.name))}`}>Crea el compte</a>
-                  <a className="btn-outline cfm-cta" href={`/sign-in?redirect_url=${encodeURIComponent(returnUrl(sel.name))}`}>Ja en tinc un</a>
-                </div>
-              </>
             ) : (
               <>
-                {!sel.linked && !sel.isMe && (
-                  <div className="cfm-note">En respondre, el teu compte quedarà vinculat com a <strong>{sel.name}</strong> en aquest grup.</div>
-                )}
                 {sel.answer && (
                   <div className="cfm-note">
                     {sel.answer === "yes" ? "Ja constes com a confirmat — pots canviar-ho." : "Ja constes com a no assistent — pots canviar-ho."}
@@ -133,7 +132,10 @@ export default function ConfirmView({ token, event, members, signedIn, viewerIsM
           </div>
         )}
 
-        <div className="cfm-footer">escenari.app</div>
+        <div className="cfm-footer">
+          <img className="brand-mark" src="/logo-mark.png" alt="" />
+          <span className="brand-name">ESCENARI</span>
+        </div>
       </div>
     </div>
   );

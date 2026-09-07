@@ -55,7 +55,7 @@ export default async function SuplenciesPage() {
                 <div className="artist-gig-main">
                   <div className="artist-gig-title">{s.venue || "Ubicació per determinar"}{s.city ? ` · ${s.city}` : ""}</div>
                   <div className="artist-gig-meta">
-                    {s.instruments.length ? `Es busca: ${s.instruments.join(", ")}` : "Es busca suplent"}
+                    {s.role ? `Es busca: ${s.role}` : s.instruments.length ? `Es busca: ${s.instruments.join(", ")}` : "Es busca suplent"}
                     {s.note ? ` · ${s.note}` : ""}
                   </div>
                 </div>

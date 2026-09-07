@@ -7,6 +7,44 @@ export function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+
+// Etiqueta relativa curta per a un dia (Avui, Demà, Demà passat, o "d'aquí
+// a X dies" a partir de 3) — pensada per a "el proper concert és...".
+export function relativeDayLabel(dateStr: string, today: string): string {
+  const [y1, m1, d1] = dateStr.split("-").map(Number);
+  const [y2, m2, d2] = today.split("-").map(Number);
+  if (!y1 || !y2) return dateStr;
+  const diff = Math.round((new Date(y1, m1 - 1, d1).getTime() - new Date(y2, m2 - 1, d2).getTime()) / 86400000);
+  if (diff <= 0) return "Avui";
+  if (diff === 1) return "Demà";
+  if (diff === 2) return "Demà passat";
+  return `D'aquí a ${diff} dies`;
+}
+
+// No es guarda cap durada ni hora de fi del concert, així que se n'assumeix
+// una de prudent (4h des de l'inici) abans de donar-lo per acabat del tot —
+// sense això, un concert que just acaba de començar (per exemple un de
+// matinada, a l'hora exacta del seu propi dia) ja es donava per "realitzat"
+// en el mateix instant que començava.
+const CONCERT_ASSUMED_DURATION_MS = 4 * 60 * 60 * 1000;
+
+// Es dona per acabat del tot aquest concert? Es fa servir només per
+// distingir "realitzat" de "confirmat/pendent" — mai per triar sota quin
+// dia es mostra un concert (que sempre és la data guardada tal qual).
+// La data guardada és la nit a la qual pertany el concert, no
+// necessàriament el dia real del rellotge: una hora de matinada (00:00-
+// 05:59) passa de veritat l'endemà del dia guardat (un concert guardat com
+// a "6/9, 02:00" té lloc realment la matinada del 7/9).
+export function isConcertOver(date: string, time: string): boolean {
+  const [y, m, d] = date.split("-").map(Number);
+  if (!y || !m || !d) return false;
+  const [hh, mm] = (time || "").split(":").map(Number);
+  const h = Number.isFinite(hh) ? hh : 0;
+  const dayOffset = h < 6 ? 1 : 0;
+  const dt = new Date(y, m - 1, d + dayOffset, h, Number.isFinite(mm) ? mm : 0);
+  return dt.getTime() + CONCERT_ASSUMED_DURATION_MS <= Date.now();
+}
+
 export function today(): string {
   const d = new Date();
   return d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate());
@@ -78,6 +116,13 @@ export function monthWithPrep(monthFull: string): string {
 export function formatDate(dateStr: string): string {
   const p = dateStr.split("-").map(Number);
   return p[2] + " " + MONTH_ABBR[p[1] - 1] + " " + p[0];
+}
+
+// Com formatDate, però sense l'any — per a llistes de "propers" on ja se
+// sobreentén (com la de Proper concert a Inici).
+export function formatDateShort(dateStr: string): string {
+  const p = dateStr.split("-").map(Number);
+  return p[2] + " " + MONTH_ABBR[p[1] - 1];
 }
 
 export function formatDateFull(dateStr: string): string {

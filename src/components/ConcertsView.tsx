@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, Concert } from "@/lib/types";
-import { formatDate, statusColors } from "@/lib/format";
+import type { Band, Concert, Contact } from "@/lib/types";
+import { formatDate, statusColors, isConcertOver } from "@/lib/format";
 import { KIND_META } from "@/components/CalendariView";
 import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
@@ -60,7 +60,7 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, detailBase = "/concerts", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; detailBase?: string; today: string }) {
+export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, detailBase = "/concerts", contacts = [], today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; detailBase?: string; contacts?: Contact[]; today: string }) {
   const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
@@ -118,8 +118,12 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     (tagFilter === "tots" || (c.tags && c.tags.indexOf(tagFilter) !== -1)) &&
     (!searchL || normalize(c.bandName).includes(searchL) || normalize(c.venue).includes(searchL) || normalize(c.city).includes(searchL) || normalize(c.festaEntitat || "").includes(searchL))
   );
-  const upcomingList = list.filter((c) => c.date >= today).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-  const pastList = list.filter((c) => c.date < today).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  // "Realitzat" mira si el concert ja s'ha acabat del tot (data i hora
+  // exactes, amb un marge prudent — vegeu isConcertOver) — no es dona per
+  // fet només perquè ja hagi començat, ni perquè el calendari ja hagi
+  // passat del seu dia efectiu (per a un concert de matinada).
+  const upcomingList = list.filter((c) => !isConcertOver(c.date, c.time)).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  const pastList = list.filter((c) => isConcertOver(c.date, c.time)).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 
   const tagOpts = uniqueTags(concerts);
 
@@ -259,7 +263,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>}
-        {canCreate && <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
+        {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
       </div>
 
       {importOpen && (
@@ -341,6 +345,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           concert={rsModalConcert}
           onClose={() => setRsModalConcertId(null)}
           onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(rsModalConcert.id); }}
+          contacts={contacts}
         />
       )}
       {rsPreviewConcert && (

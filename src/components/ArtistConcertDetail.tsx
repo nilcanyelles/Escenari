@@ -126,7 +126,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
             <div className="cd-material-actions" style={{ marginTop: canSetlists ? 10 : 0, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
               <span className="t-strong" style={{ fontSize: 13.5 }}>{selectedSetlist.name}</span>
               <span className="t-dim" style={{ fontSize: 12 }}>{selectedSetlist.songs.filter((x) => x.title.trim()).length} cançons</span>
-              <button type="button" className="btn-outline stage-mode-btn" onClick={() => router.push(`/escenari-mode/${selectedSetlist.id}`)}>▶ Escenari</button>
+              <button type="button" className="btn-outline stage-mode-btn" onClick={() => router.push(`/escenari-mode/${selectedSetlist.id}?concert=${concert.id}`)}>▶ Escenari</button>
               <button type="button" className="btn-outline" onClick={() => window.open(`/m/${selectedSetlist.publicToken}`, "_blank")}>Obre / PDF</button>
             </div>
           ) : (

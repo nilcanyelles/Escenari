@@ -1,5 +1,5 @@
 import AgendaView from "@/components/AgendaView";
-import { getBands, getConcerts, getInvoices } from "@/lib/data";
+import { getBands, getConcerts, getInvoices, getContacts } from "@/lib/data";
 import { db } from "@/lib/db";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
@@ -9,8 +9,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AgendaPage() {
   const { workspaceId } = await requireManager();
-  const [bands, concerts, invoices, selectedRaw] = await Promise.all([
-    getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getSelectedBandId(),
+  const [bands, concerts, invoices, contacts, selectedRaw] = await Promise.all([
+    getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getContacts(workspaceId), getSelectedBandId(),
   ]);
   const bandId = resolveBandScope(bands, selectedRaw);
   const scoped = scopeConcerts(concerts, bandId);
@@ -21,6 +21,7 @@ export default async function AgendaPage() {
       concerts={scoped}
       invoices={scopeInvoices(invoices, concerts, bandId)}
       icsToken={icsToken}
+      contacts={contacts}
       selectedBandId={bandId}
       today={today()}
     />

@@ -1,16 +1,55 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { LyricsView } from "@/components/SongsPanel";
 import { instrumentIconFor } from "@/lib/tags";
 import PdfViewer from "@/components/PdfViewer";
+import { setSetlistHighlightsAction } from "@/app/(app)/concerts/actions";
 
 // "Gralla dolça 1" -> "Gralla dolça" (per buscar la icona de l'instrument
 // sense l'índex de la instància).
 function scoreIconName(instrument: string): string {
   return instrument.replace(/\s+\d+$/, "").trim();
+}
+
+function StarIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill={filled ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+    </svg>
+  );
+}
+
+// Fila de la llista de cançons (menú inicial i barra lateral): igual a
+// totes dues, amb l'estrella de destacar a mà dreta del títol quan hi ha
+// un concert d'origen (Concert.setlistHighlights) i permís per tocar-la.
+// L'animació de "puja a dalt" la porta el pare (perform-list ref + FLIP),
+// per això registra la seva pròpia fila amb `rowRef`.
+function SongListRow({ song, originalIndex, active, disabled, disabledTitle, highlighted, canHighlight, onToggleStar, onClick, rowRef }: {
+  song: PerformSong; originalIndex: number; active?: boolean; disabled?: boolean; disabledTitle?: string; highlighted: boolean;
+  canHighlight: boolean; onToggleStar: (title: string) => void; onClick: () => void;
+  rowRef: (el: HTMLDivElement | null) => void;
+}) {
+  return (
+    <div ref={rowRef} className="perform-list-row">
+      <button type="button" className={"perform-list-item" + (active ? " active" : "") + (disabled ? " perform-list-item-disabled" : "")} disabled={disabled} title={disabled ? disabledTitle : undefined} onClick={onClick}>
+        <span className="perform-list-num">{originalIndex + 1}</span>
+        <span className={highlighted ? "perform-list-title-on" : undefined}>{song.title}</span>
+        <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{song.duration}</span>
+      </button>
+      {canHighlight && (
+        <button
+          type="button" className={"perform-star-btn" + (highlighted ? " on" : "")}
+          title={highlighted ? "Treu-la de destacades" : "Destaca aquesta cançó"}
+          onClick={(e) => { e.stopPropagation(); onToggleStar(song.title); }}
+        >
+          <StarIcon filled={highlighted} />
+        </button>
+      )}
+    </div>
+  );
 }
 
 export type PerformTrack = { id: string; name: string };
@@ -46,7 +85,12 @@ function fmtTime(secs: number): string {
   return `${m}:${s}`;
 }
 
-export default function PerformView({ name, bandName, songs, backHref, skipIntro = false }: { name: string; bandName: string; songs: PerformSong[]; backHref: string; skipIntro?: boolean }) {
+export default function PerformView({
+  name, bandName, songs, backHref, skipIntro = false, concertId = null, initialHighlights = {}, canHighlight = false,
+}: {
+  name: string; bandName: string; songs: PerformSong[]; backHref: string; skipIntro?: boolean;
+  concertId?: string | null; initialHighlights?: Record<string, boolean>; canHighlight?: boolean;
+}) {
   // Menú inicial: nom de la setlist, bombolles per triar la veu que
   // seguiràs, i la llista de cançons — clicar-ne una hi entra directament
   // amb aquella veu ja preseleccionada (si hi és disponible). Amb una sola
@@ -64,6 +108,56 @@ export default function PerformView({ name, bandName, songs, backHref, skipIntro
     }));
     return list;
   }, [songs]);
+
+  // Cançons destacades d'aquest assaig/concert (no toquen l'ordre real de
+  // la setlist — go()/idx segueixen l'ordre original — només l'ordre en
+  // què es MOSTREN al menú de tria, perquè les destacades quedin a dalt.
+  const [highlights, setHighlights] = useState<Record<string, boolean>>(initialHighlights);
+  const prevRectsRef = useRef<Map<string, DOMRect>>(new Map());
+  const rowElsRef = useRef<Map<string, HTMLDivElement>>(new Map());
+  function registerRow(title: string) {
+    return (el: HTMLDivElement | null) => { if (el) rowElsRef.current.set(title, el); else rowElsRef.current.delete(title); };
+  }
+  async function toggleHighlight(title: string) {
+    // FLIP: es capturen les posicions ABANS de reordenar (canvi de
+    // highlights), i a l'efecte de sota es comparen amb les d'un cop ja
+    // reordenat — la diferència és l'animació de "puja a dalt".
+    const rects = new Map<string, DOMRect>();
+    rowElsRef.current.forEach((el, t) => rects.set(t, el.getBoundingClientRect()));
+    prevRectsRef.current = rects;
+    const next = { ...highlights };
+    if (next[title]) delete next[title]; else next[title] = true;
+    setHighlights(next);
+    if (concertId) await setSetlistHighlightsAction(concertId, next);
+  }
+  const orderedSongs = useMemo(() => {
+    return songs
+      .map((s, i) => ({ s, i }))
+      .sort((a, b) => {
+        const ah = !!highlights[a.s.title], bh = !!highlights[b.s.title];
+        if (ah !== bh) return ah ? -1 : 1;
+        return a.i - b.i;
+      });
+  }, [songs, highlights]);
+  useLayoutEffect(() => {
+    const prev = prevRectsRef.current;
+    if (prev.size === 0) return;
+    rowElsRef.current.forEach((el, title) => {
+      const before = prev.get(title);
+      if (!before) return;
+      const after = el.getBoundingClientRect();
+      const delta = before.top - after.top;
+      if (Math.abs(delta) < 1) return;
+      el.style.transition = "none";
+      el.style.transform = `translateY(${delta}px)`;
+      requestAnimationFrame(() => {
+        el.style.transition = "transform 0.32s cubic-bezier(.2,.8,.2,1)";
+        el.style.transform = "";
+      });
+    });
+    prevRectsRef.current = new Map();
+  }, [orderedSongs]);
+
   const [idx, setIdx] = useState(0);
   const [semitones, setSemitones] = useState(0);
   const [autoScroll, setAutoScroll] = useState(false);
@@ -455,12 +549,14 @@ export default function PerformView({ name, bandName, songs, backHref, skipIntro
           <div className="perform-intro-section">
             <div className="perform-intro-label">Cançons</div>
             <div className="perform-intro-songs">
-              {songs.map((s, i) => {
+              {orderedSongs.map(({ s, i }) => {
                 const missing = !!pickedInstrument && findScoreMatch(s.scores, pickedInstrument) < 0;
                 return (
-                  <button key={i} type="button" className={"perform-list-item" + (missing ? " perform-list-item-disabled" : "")}
-                    disabled={missing}
-                    title={missing ? `Aquesta cançó no té partitura de ${pickedInstrument}` : undefined}
+                  <SongListRow
+                    key={s.title} song={s} originalIndex={i} disabled={missing}
+                    disabledTitle={missing ? `Aquesta cançó no té partitura de ${pickedInstrument}` : undefined}
+                    highlighted={!!highlights[s.title]} canHighlight={canHighlight}
+                    onToggleStar={toggleHighlight} rowRef={registerRow(s.title)}
                     onClick={() => {
                       // Si ja hi érem (la cançó per defecte, idx 0), canviar
                       // l'índex al mateix valor no torna a disparar l'efecte
@@ -469,10 +565,8 @@ export default function PerformView({ name, bandName, songs, backHref, skipIntro
                       else pendingInstrumentRef.current = pickedInstrument;
                       setIdx(i);
                       setShowIntro(false);
-                    }}>
-                    <span className="perform-list-num">{i + 1}</span> {s.title}
-                    <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{s.duration}</span>
-                  </button>
+                    }}
+                  />
                 );
               })}
             </div>
@@ -604,12 +698,13 @@ export default function PerformView({ name, bandName, songs, backHref, skipIntro
               <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setListOpen(false)}>✕</button>
             </div>
             <div className="perform-sidebar-list">
-              {songs.map((s, i) => (
-                <button key={i} type="button" className={"perform-list-item" + (i === idx ? " active" : "")}
-                  onClick={() => { if (scoreOpen && curScore) pendingInstrumentRef.current = curScore.instrument; setIdx(i); setListOpen(false); setAutoScroll(false); if (scrollRef.current) scrollRef.current.scrollTop = 0; }}>
-                  <span className="perform-list-num">{i + 1}</span> {s.title}
-                  <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{s.duration}</span>
-                </button>
+              {orderedSongs.map(({ s, i }) => (
+                <SongListRow
+                  key={s.title} song={s} originalIndex={i} active={i === idx}
+                  highlighted={!!highlights[s.title]} canHighlight={canHighlight}
+                  onToggleStar={toggleHighlight} rowRef={registerRow(s.title)}
+                  onClick={() => { if (scoreOpen && curScore) pendingInstrumentRef.current = curScore.instrument; setIdx(i); setListOpen(false); setAutoScroll(false); if (scrollRef.current) scrollRef.current.scrollTop = 0; }}
+                />
               ))}
             </div>
           </div>

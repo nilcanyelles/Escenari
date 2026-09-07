@@ -14,6 +14,9 @@ export type BackupRequest = {
   concertId: string;
   memberName: string;
   instruments: string[];
+  // Càrrec buscat quan és una cerca per a algú de la crew (no músic) —
+  // s'utilitza l'un o l'altre, mai tots dos alhora.
+  role: string;
   note: string;
   status: "oberta" | "coberta" | "cancel·lada";
   createdAt: string;
@@ -71,7 +74,10 @@ export async function getLinkedMembersForBands(bandIds: string[]): Promise<Recor
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  // Un Date d'una columna "date" de Postgres representa mitjanit LOCAL
+  // d'aquell dia — amb toISOString() (que sempre passa a UTC) es podia
+  // desplaçar un dia enrere segons la zona horària del servidor.
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
 export async function getBackupRequests(workspaceId: string, opts?: { bandId?: string; concertId?: string }): Promise<BackupRequest[]> {
@@ -98,6 +104,7 @@ export async function getBackupRequests(workspaceId: string, opts?: { bandId?: s
     concertId: r.concert_id,
     memberName: r.member_name,
     instruments: r.instruments || [],
+    role: r.role || "",
     note: r.note,
     status: r.status,
     createdAt: toDateStr(r.created_at),

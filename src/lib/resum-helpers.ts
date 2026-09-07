@@ -1,4 +1,5 @@
 import type { Concert } from "./types";
+import { isConcertOver } from "./format";
 
 export type MonthAggEntry = { count: number; pastCount: number; futureCount: number; pendingCount: number };
 export type InvoiceRecord = { date: string; amount: number; state: string };
@@ -12,7 +13,7 @@ export function computeMonthAgg(concerts: Concert[], yearFilter: number, today: 
     const m2 = parseInt(c.date.slice(5, 7), 10) - 1;
     agg[m2].count += 1;
     if (c.status === "pendent" || c.status === "reservat") agg[m2].pendingCount += 1;
-    else if (c.date < today) agg[m2].pastCount += 1;
+    else if (isConcertOver(c.date, c.time)) agg[m2].pastCount += 1;
     else agg[m2].futureCount += 1;
   });
   return agg;
@@ -26,7 +27,7 @@ export function computeYearAgg(concerts: Concert[], years: number[], today: stri
     if (!(y in agg) || c.status === "cancel·lat") return;
     agg[y].count += 1;
     if (c.status === "pendent" || c.status === "reservat") agg[y].pendingCount += 1;
-    else if (c.date < today) agg[y].pastCount += 1;
+    else if (isConcertOver(c.date, c.time)) agg[y].pastCount += 1;
     else agg[y].futureCount += 1;
   });
   return agg;

@@ -1,11 +1,13 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import type { Concert } from "@/lib/types";
 import {
   type RouteSheet, type LlocItem, type ContactItem, type HospitalitatItem, type TecnicItem,
-  normalizeRouteSheet, rsIsComplete, formatPhoneDisplay, rsFormatDuration, RS_SECTION_ICONS, RS_LLOC_ICONS,
+  normalizeRouteSheet, rsIsComplete, withLiveAddress, withLiveConcertStart, formatPhoneDisplay, rsFormatDuration, RS_SECTION_ICONS, RS_LLOC_ICONS,
 } from "@/lib/route-sheet";
 import { capitalize, formatDateFull } from "@/lib/format";
+import { getAgencyNameAction } from "@/app/(app)/concerts/actions";
 
 const RS_LABEL_COLOR = "oklch(0.15 0.01 258)";
 const RS_VALUE_COLOR = "oklch(0.42 0.01 258)";
@@ -31,7 +33,7 @@ function SectionTitle({ title }: { title: string }) {
 }
 function Box({ title, children, flexStyle }: { title: string; children: React.ReactNode; flexStyle?: React.CSSProperties }) {
   return (
-    <div style={{ background: "oklch(0.97 0.004 258)", border: "1px solid oklch(0.88 0.005 258)", borderRadius: 10, padding: "14px 16px", flex: "1 1 0", minWidth: 0, ...flexStyle }}>
+    <div style={{ background: "oklch(0.97 0.004 258)", border: "1px solid oklch(0.88 0.005 258)", borderRadius: 10, padding: "11px 14px", flex: "1 1 0", minWidth: 0, ...flexStyle }}>
       <SectionTitle title={title} />
       <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 12 }}>{children}</div>
     </div>
@@ -64,23 +66,45 @@ function contactActions(ct: ContactItem) {
   );
 }
 
+function MapLinkBtn({ href, title, iconPath }: { href: string; title: string; iconPath: string }) {
+  return (
+    <a href={href} target="_blank" rel="noopener" title={title} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: 6, background: "oklch(0.68 0.19 290 / 0.14)", color: "oklch(0.55 0.19 290)", flex: "none" }}>
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: iconPath }} />
+    </a>
+  );
+}
+
 function LlocLine({ item }: { item: LlocItem }) {
   const label = item.label, value = item.value;
   const isParking = label && label.trim().toLowerCase() === "parking";
+  const isAdreça = label && label.trim().toLowerCase() === "adreça";
   const plateList = isParking && item.plates ? item.plates.split(/[,;\n]+/).map((p) => p.trim()).filter((p) => p) : [];
-  if (!value && !plateList.length) return null;
+  // L'enllaç ara és una casella pròpia ("link"), separada dels detalls de
+  // text lliure ("value") — abans era tot junt a "value", així que un full
+  // de ruta antic on encara hi hagi un enllaç aparcat allà (mai migrat) es
+  // continua mostrant igual (com a enllaç, no com a text).
+  const legacyValueIsLink = !item.link && !!value && /^https?:\/\//i.test(value.trim());
+  const link = item.link && item.link.trim() ? item.link.trim() : legacyValueIsLink ? value.trim() : "";
+  const shownValue = legacyValueIsLink ? "" : value;
+  if (!shownValue && !link && !plateList.length) return null;
   const iconPath = RS_LLOC_ICONS[(label || "").trim().toLowerCase()];
-  const isLink = value && /^https?:\/\//i.test(value.trim());
+  // L'adreça no és un enllaç guardat com Descàrrega/Parking — Maps
+  // s'obté sempre a partir del propi text.
+  const mapsHref = isAdreça && shownValue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shownValue)}` : "";
+  const primaryHref = isAdreça ? mapsHref : (shownValue ? link : "");
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
       <span style={{ color: RS_LABEL_COLOR, fontWeight: 600, minWidth: 66, flex: "none" }}>{label}</span>
-      {iconPath && isLink ? (
-        <a href={value} target="_blank" rel="noopener" title={label + " — obre a Google Maps"} style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 24, height: 24, borderRadius: 6, background: "oklch(0.68 0.19 290 / 0.14)", color: "oklch(0.55 0.19 290)", flex: "none" }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: iconPath }} />
-        </a>
-      ) : (
-        <span style={{ color: RS_VALUE_COLOR }}>{value || ""}</span>
+      {shownValue && (
+        primaryHref ? (
+          <a href={primaryHref} target="_blank" rel="noopener" style={{ color: RS_VALUE_COLOR }}>{shownValue}</a>
+        ) : (
+          <span style={{ color: RS_VALUE_COLOR }}>{shownValue}</span>
+        )
       )}
+      {/* Sense text de detalls però amb enllaç: la pròpia icona del camp
+          (caixa, pàrquing…) fa de botó per obrir-lo. */}
+      {!shownValue && iconPath && link && <MapLinkBtn href={link} title={label + " — obre a Google Maps"} iconPath={iconPath} />}
       {plateList.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 1, color: RS_VALUE_COLOR }}>
           {plateList.map((p, i) => <span key={i}>{p}</span>)}
@@ -107,8 +131,14 @@ function HotelLine({ it }: { it: HospitalitatItem }) {
     );
   }
   if (it.location) {
+    // El camp guarda l'adreça en text (carrer, número, ciutat), no un
+    // enllaç fet — es construeix aquí, tret que ja hi hagi un enllaç
+    // (dades antigues d'abans que el camp fos només adreça).
+    const locationHref = /^https?:\/\//i.test(it.location.trim())
+      ? it.location.trim()
+      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.location)}`;
     icons.push(
-      <a key="loc" href={it.location} target="_blank" rel="noopener" title="Ubicació de l'allotjament" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 19, height: 19, borderRadius: 5, background: "oklch(0.68 0.19 290 / 0.14)", color: "oklch(0.55 0.19 290)", flex: "none", marginLeft: 3, verticalAlign: "middle" }}>
+      <a key="loc" href={locationHref} target="_blank" rel="noopener" title="Ubicació de l'allotjament" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 19, height: 19, borderRadius: 5, background: "oklch(0.68 0.19 290 / 0.14)", color: "oklch(0.55 0.19 290)", flex: "none", marginLeft: 3, verticalAlign: "middle" }}>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
       </a>
     );
@@ -158,7 +188,19 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
   const rs: RouteSheet = normalizeRouteSheet(concert.routeSheet as RouteSheet | null, concert);
   const complete = rsIsComplete(concert);
 
-  const llocLines = rs.lloc.map((f, i) => <LlocLine key={i} item={f} />);
+  // Nom de l'agència pel peu de pàgina — no arriba per props (aquest
+  // component s'obre des de moltes vistes, de gestor i d'artista), es
+  // demana un cop en muntar.
+  const [agencyName, setAgencyName] = useState("");
+  useEffect(() => { getAgencyNameAction().then(setAgencyName).catch(() => {}); }, []);
+  const footerParts = [
+    "Escenari",
+    concert.bandName,
+    agencyName && agencyName.trim().toLowerCase() !== "escenari" ? agencyName : "",
+    concert.date.split("-")[0],
+  ].filter(Boolean);
+
+  const llocLines = withLiveAddress(rs.lloc, concert.address).map((f, i) => <LlocLine key={i} item={f} />);
   const contacts = rs.contacts.filter((ct) => ct.role || ct.name);
   const contactsHtml = contacts.length ? (
     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 6, rowGap: 8 }}>
@@ -183,25 +225,25 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
   const hospLines = rs.hospitalitat.map((f, i) => <HotelLine key={i} it={f} />).filter((n) => n !== null);
   const tecLines = rs.tecnic.map((f, i) => <TecnicLine key={i} it={f} />);
 
-  const phases = rs.schedule.filter((ph) => ph.phase && (ph.start || ph.end));
+  const phases = withLiveConcertStart(rs.schedule, concert.exactTime).filter((ph) => ph.phase && (ph.start || ph.end));
 
   const cityLen = (concert.city || "").length;
   const citySize = cityLen > 20 ? 18 : cityLen > 16 ? 22 : cityLen > 13 ? 26 : cityLen > 10 ? 30 : cityLen > 7 ? 34 : 38;
 
   return (
-    <div id="rs-doc-print" className="rs-doc" style={{ fontFamily: "Inter,system-ui,sans-serif", color: "oklch(0.2 0.01 258)", background: "oklch(0.995 0.002 258)", padding: "0.6in 0.55in", display: "flex", flexDirection: "column" }}>
+    <div id="rs-doc-print" className="rs-doc" style={{ fontFamily: "Inter,system-ui,sans-serif", color: "oklch(0.2 0.01 258)", background: "oklch(0.995 0.002 258)", padding: "0.4in 0.5in", display: "flex", flexDirection: "column" }}>
       {!complete && (
-        <div style={{ margin: "-0.6in -0.55in 16px -0.55in", background: "oklch(0.78 0.15 80 / 0.5)", color: "oklch(0.28 0.06 80)", padding: "14px 0.55in", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
+        <div style={{ margin: "-0.4in -0.5in 14px -0.5in", background: "oklch(0.78 0.15 80 / 0.5)", color: "oklch(0.28 0.06 80)", padding: "12px 0.5in", display: "flex", alignItems: "center", justifyContent: "center", gap: 10 }}>
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 22h14"></path><path d="M5 2h14"></path><path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path><path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path></svg>
           <span style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 15, letterSpacing: "0.08em" }}>INACABAT</span>
         </div>
       )}
 
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 18, marginBottom: 18, borderBottom: "2px solid oklch(0.2 0.01 258)", gap: 16 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", paddingBottom: 14, marginBottom: 14, borderBottom: "2px solid oklch(0.2 0.01 258)", gap: 16 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 10, minWidth: 0 }}>
             <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: citySize, textTransform: "uppercase", whiteSpace: "nowrap", flex: "none" }}>{concert.city}</div>
-            <div style={{ fontSize: 14, color: "oklch(0.45 0.01 258)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{concert.venue}</div>
+            <div style={{ fontSize: 14, color: "oklch(0.45 0.01 258)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", minWidth: 0 }}>{concert.festaEntitat}</div>
           </div>
           <div style={{ fontFamily: "'Space Grotesk',sans-serif", fontWeight: 700, fontSize: 19, color: "oklch(0.2 0.01 258)", marginTop: 6 }}>{concert.bandName}</div>
           <div style={{ fontSize: 12, color: "oklch(0.4 0.01 258)", marginTop: 2 }}>{capitalize(formatDateFull(concert.date))}</div>
@@ -212,14 +254,14 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
       </div>
 
       {(llocLines.some(Boolean) || contactsHtml) && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 11 }}>
           {llocLines.some(Boolean) && <Box title="Lloc" flexStyle={{ flex: "4 1 0" }}>{llocLines}</Box>}
           {contactsHtml && <Box title="Contactes" flexStyle={{ flex: "6 1 0" }}>{contactsHtml}</Box>}
         </div>
       )}
 
       {phases.length > 0 && (
-        <div style={{ background: "oklch(0.97 0.004 258)", border: "1px solid oklch(0.88 0.005 258)", borderRadius: 10, padding: "14px 16px", marginBottom: 14 }}>
+        <div style={{ background: "oklch(0.97 0.004 258)", border: "1px solid oklch(0.88 0.005 258)", borderRadius: 10, padding: "11px 14px", marginBottom: 11 }}>
           <SectionTitle title="Horaris" />
           <table style={{ width: "100%", borderCollapse: "collapse" }}>
             <thead>
@@ -239,10 +281,10 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
                 const plainColor: React.CSSProperties = isConcert ? {} : { color: RS_VALUE_COLOR };
                 return (
                   <tr key={i} style={{ borderBottom: "1px solid oklch(0.88 0.005 258)" }}>
-                    <td style={{ padding: "9px 0", fontSize: 12.5, ...strong, ...accent }}>{ph.phase}</td>
-                    <td style={{ padding: "9px 0", fontSize: 12.5, ...strong, ...plainColor }}>{ph.start}</td>
-                    <td style={{ padding: "9px 0", fontSize: 12.5, ...strong, ...plainColor }}>{ph.end}</td>
-                    <td style={{ padding: "9px 0", fontSize: 12.5, color: RS_VALUE_COLOR, ...strong }}>{dur}</td>
+                    <td style={{ padding: "7px 0", fontSize: 12.5, ...strong, ...accent }}>{ph.phase}</td>
+                    <td style={{ padding: "7px 0", fontSize: 12.5, ...strong, ...plainColor }}>{ph.start}</td>
+                    <td style={{ padding: "7px 0", fontSize: 12.5, ...strong, ...plainColor }}>{ph.end}</td>
+                    <td style={{ padding: "7px 0", fontSize: 12.5, color: RS_VALUE_COLOR, ...strong }}>{dur}</td>
                   </tr>
                 );
               })}
@@ -252,14 +294,14 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
       )}
 
       {(hospLines.length > 0 || tecLines.some(Boolean)) && (
-        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 14, marginBottom: 11 }}>
           {hospLines.length > 0 && <Box title="Hospitalitat">{hospLines}</Box>}
           {tecLines.some(Boolean) && <Box title="Detalls tècnics">{tecLines}</Box>}
         </div>
       )}
 
       <div style={{ marginTop: "auto", paddingTop: 12, borderTop: "1px solid oklch(0.88 0.005 258)", fontSize: 10, color: "oklch(0.5 0.01 258)", textAlign: "center" }}>
-        Escenari · {concert.date.split("-")[0]}
+        {footerParts.join(" · ")}
       </div>
     </div>
   );

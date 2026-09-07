@@ -77,12 +77,12 @@ export async function uploadBandImageAction(formData: FormData): Promise<{ ok: b
   return { ok: true, url };
 }
 
-export async function saveBandAppearanceAction(bandId: string, input: { name: string; color1: string; color2: string; tags: string[]; socialLinks?: SocialLinks }) {
+export async function saveBandAppearanceAction(bandId: string, input: { name: string; color1: string; color2: string; tags: string[] }) {
   const { workspaceId } = await requireManagerAction();
   const name = (input.name || "").trim();
   await db().query(
-    "update bands set name=coalesce(nullif($1,''), name), color1=$2, color2=$3, tags=$4, social_links=$5 where id=$6 and workspace_id=$7",
-    [name, input.color1 || "", input.color2 || "", JSON.stringify(input.tags || []), JSON.stringify(input.socialLinks || {}), bandId, workspaceId]
+    "update bands set name=coalesce(nullif($1,''), name), color1=$2, color2=$3, tags=$4 where id=$5 and workspace_id=$6",
+    [name, input.color1 || "", input.color2 || "", JSON.stringify(input.tags || []), bandId, workspaceId]
   );
   if (name) await db().query("update concerts set band_name=$1 where band_id=$2 and workspace_id=$3", [name, bandId, workspaceId]);
   revalidatePath("/grup");
@@ -206,20 +206,23 @@ export async function saveDefaultRouteSheetSectionAction(bandId: string, section
   revalidatePath("/grup");
 }
 
-// Publica una cerca de suplent per a un concert (visible a la borsa de músics).
+// Publica una cerca de suplent per a un concert (visible a la borsa de
+// músics/crew). Per a músics es passen "instruments" (què ha de saber
+// tocar); per a crew, "role" (el càrrec que fa falta) — mai tots dos alhora.
 export async function publishBackupRequestAction(input: {
   bandId: string;
   concertId: string;
   memberName: string;
-  instruments: string[];
+  instruments?: string[];
+  role?: string;
   note: string;
 }) {
   const { workspaceId } = await requireManagerAction();
   const id = "br" + Date.now();
   await db().query(
-    `insert into backup_requests (id, workspace_id, band_id, concert_id, member_name, instruments, note)
-     values ($1,$2,$3,$4,$5,$6,$7)`,
-    [id, workspaceId, input.bandId, input.concertId, input.memberName, JSON.stringify(input.instruments || []), input.note || ""]
+    `insert into backup_requests (id, workspace_id, band_id, concert_id, member_name, instruments, role, note)
+     values ($1,$2,$3,$4,$5,$6,$7,$8)`,
+    [id, workspaceId, input.bandId, input.concertId, input.memberName, JSON.stringify(input.instruments || []), input.role || "", input.note || ""]
   );
   revalidatePath("/grup");
   revalidatePath("/suplencies");
@@ -243,7 +246,7 @@ export async function respondBackupApplicationAction(requestId: string, clerkUse
   const { workspaceId } = await requireManagerAction();
   const pool = db();
   const req = (await pool.query(
-    "select band_id, concert_id, member_name from backup_requests where id=$1 and workspace_id=$2",
+    "select band_id, concert_id, member_name, role from backup_requests where id=$1 and workspace_id=$2",
     [requestId, workspaceId]
   )).rows[0];
   if (!req) throw new Error("Cerca no trobada");
@@ -260,9 +263,9 @@ export async function respondBackupApplicationAction(requestId: string, clerkUse
     )).rows[0];
     if (prof?.name) {
       const band = (await pool.query("select backups from bands where id=$1 and workspace_id=$2", [req.band_id, workspaceId])).rows[0];
-      const backups: { name: string; instruments: string[]; phone: string; email: string }[] = band?.backups || [];
+      const backups: { name: string; instruments: string[]; phone: string; email: string; role?: string }[] = band?.backups || [];
       if (band && !backups.some((b) => normalize(b.name) === normalize(prof.name))) {
-        backups.push({ name: prof.name, instruments: prof.instruments || [], phone: prof.phone || "", email: prof.email || "" });
+        backups.push({ name: prof.name, instruments: prof.instruments || [], phone: prof.phone || "", email: prof.email || "", role: req.role || "" });
         await pool.query("update bands set backups=$1 where id=$2", [JSON.stringify(backups), req.band_id]);
       }
       if (req.member_name) {

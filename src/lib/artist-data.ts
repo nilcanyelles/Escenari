@@ -44,7 +44,10 @@ export type PendingInvitation = {
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  // Un Date d'una columna "date" de Postgres representa mitjanit LOCAL
+  // d'aquell dia — amb toISOString() (que sempre passa a UTC) es podia
+  // desplaçar un dia enrere segons la zona horària del servidor.
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
 export async function getArtistBands(clerkUserId: string): Promise<ArtistBand[]> {
@@ -176,12 +179,16 @@ export async function getArtistConcertsFull(clerkUserId: string): Promise<import
     substitutes: r.substitutes,
     noSubstitute: r.no_substitute,
     convocatoriaExcluded: r.convocatoria_excluded || {},
+    setlistHighlights: r.setlist_highlights || {},
     contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,
     payouts: r.payouts || {},
     riderId: r.rider_id || null,
     setlistId: r.setlist_id || null,
     kind: r.kind || "bolo",
+    canAnnounce: r.can_announce === "yes" || r.can_announce === "no" ? r.can_announce : "",
+    announceAfter: r.announce_after || "",
+    ticketType: r.ticket_type === "pagament" ? "pagament" : r.ticket_type === "gratuit" ? "gratuit" : "",
     invited: r.invited || [],
   }));
 }
@@ -202,6 +209,7 @@ export type OpenBackupSearch = {
   bandLogo: string;
   color1: string;
   instruments: string[];
+  role: string;
   note: string;
   myApplicationStatus: "pendent" | "acceptada" | "rebutjada" | null;
   isMine: boolean;
@@ -210,7 +218,7 @@ export type OpenBackupSearch = {
 // Borsa de suplències: cerques obertes de qualsevol grup d'Escenari.
 export async function getOpenBackupSearches(clerkUserId: string): Promise<OpenBackupSearch[]> {
   const { rows } = await db().query(
-    `select br.id, br.instruments, br.note, br.member_name,
+    `select br.id, br.instruments, br.role, br.note, br.member_name,
             c.date, c.city, c.venue,
             b.id as band_id, b.name as band_name, b.logo, b.color1,
             ba.status as my_status,
@@ -233,6 +241,7 @@ export async function getOpenBackupSearches(clerkUserId: string): Promise<OpenBa
     bandLogo: r.logo,
     color1: r.color1,
     instruments: r.instruments || [],
+    role: r.role || "",
     note: r.note || "",
     myApplicationStatus: r.my_status || null,
     isMine: !!r.is_mine,

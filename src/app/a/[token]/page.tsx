@@ -6,7 +6,10 @@ export const dynamic = "force-dynamic";
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  // Un Date d'una columna "date" de Postgres representa mitjanit LOCAL
+  // d'aquell dia — amb toISOString() (que sempre passa a UTC) es podia
+  // desplaçar un dia enrere segons la zona horària del servidor.
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
 // Pàgina pública d'aprovació d'un rider: la persona externa el revisa,

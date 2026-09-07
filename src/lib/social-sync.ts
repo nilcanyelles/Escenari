@@ -1,8 +1,8 @@
 import { db } from "./db";
 import type { SocialLinks, SocialPlatform, SocialStats, SocialTracking } from "./types";
 import { SOCIAL_PLATFORMS, SOCIAL_STAT_KEYS, isTracked, previousMonthValue, type SocialSnapshot } from "./social-history";
-import { fetchYoutubeStats, fetchSpotifyFollowers, fetchSpotifyMonthlyListeners, youtubeConfigured, spotifyConfigured } from "./social-stats";
-import { fetchInstagramProfile, fetchTiktokProfile, refreshTokens, type OAuthPlatform, type OAuthTokens } from "./social-oauth";
+import { fetchYoutubeStats, fetchSpotifyMonthlyListeners, fetchInstagramFollowers, fetchTiktokFollowers } from "./social-stats";
+import { refreshTokens, type OAuthPlatform, type OAuthTokens } from "./social-oauth";
 
 // Comptes connectats, instantànies diàries i el refresc de totes les xifres
 // d'un grup (el mateix camí que fan servir la pàgina de xarxes, la
@@ -105,53 +105,46 @@ export type RefreshResult = {
 // Llegeix totes les xifres que es poden llegir soles de les xarxes amb
 // seguiment actiu, les desa al grup i en guarda la instantània d'avui
 // (encara que no s'hagi pogut llegir res: així les xifres manuals també
-// deixen rastre mes a mes).
+// deixen rastre mes a mes). Cap clau d'API ni compte connectat: per a les
+// 4 xarxes, només es visita l'enllaç desat i es llegeix el que hi surt a
+// la pàgina pública — si la plataforma bloqueja la petició o en canvia el
+// format, la xifra es queda com estava (o es pot escriure a mà).
 export async function refreshBandSocialStats(bandId: string): Promise<RefreshResult> {
   const row = (await db().query("select social_links, social_stats, social_tracking from bands where id=$1", [bandId])).rows[0];
   if (!row) throw new Error("Grup no trobat");
   const links: SocialLinks = row.social_links || {};
   const tracking: SocialTracking = row.social_tracking || {};
   const next: SocialStats = { ...(row.social_stats || {}) };
-  const accounts = await getSocialAccounts(bandId);
   const updated: SocialPlatform[] = [];
   const errors: Partial<Record<SocialPlatform, string>> = {};
 
   for (const p of SOCIAL_PLATFORMS) {
-    const acc = accounts.find((a) => a.platform === p);
-    if (!isTracked(p, tracking, links, !!acc)) continue;
+    if (!isTracked(p, tracking, links)) continue;
+    const link = links[p];
+    if (!link) continue;
     try {
       if (p === "youtube") {
-        if (!links.youtube) continue;
-        if (!youtubeConfigured()) { errors.youtube = "Falta YOUTUBE_API_KEY al servidor"; continue; }
-        const r = await fetchYoutubeStats(links.youtube);
+        const r = await fetchYoutubeStats(link);
         if (!r) { errors.youtube = "No s'ha pogut llegir el canal (comprova l'enllaç)"; continue; }
         if (r.views != null) next.youtubeViews = r.views;
         if (r.subscribers != null) next.youtubeSubscribers = r.subscribers;
-        updated.push("youtube");
+        if (r.views != null || r.subscribers != null) updated.push("youtube");
+        else errors.youtube = "No s'ha trobat cap xifra a la pàgina del canal";
       } else if (p === "spotify") {
-        if (!links.spotify) continue;
-        let any = false;
-        if (spotifyConfigured()) {
-          const f = await fetchSpotifyFollowers(links.spotify);
-          if (f != null) { next.spotifyFollowers = f; any = true; }
-        } else {
-          errors.spotify = "Falten SPOTIFY_CLIENT_ID/SECRET al servidor (seguidors)";
-        }
-        const ml = await fetchSpotifyMonthlyListeners(links.spotify);
-        if (ml != null) { next.spotifyMonthlyListeners = ml; any = true; }
-        if (any) updated.push("spotify");
-        else if (!errors.spotify) errors.spotify = "No s'ha pogut llegir l'artista (comprova l'enllaç)";
+        const ml = await fetchSpotifyMonthlyListeners(link);
+        if (ml == null) { errors.spotify = "No s'ha pogut llegir els oients mensuals (comprova l'enllaç)"; continue; }
+        next.spotifyMonthlyListeners = ml;
+        updated.push("spotify");
+      } else if (p === "instagram") {
+        const f = await fetchInstagramFollowers(link);
+        if (f == null) { errors.instagram = "No s'ha pogut llegir el perfil (comprova l'enllaç)"; continue; }
+        next.instagramFollowers = f;
+        updated.push("instagram");
       } else {
-        // Instagram i TikTok: només amb el compte connectat; si no, manual.
-        if (!acc) continue;
-        const fresh = await ensureFreshAccount(bandId, acc);
-        const prof = p === "instagram" ? await fetchInstagramProfile(fresh.accessToken) : await fetchTiktokProfile(fresh.accessToken);
-        if (!prof || prof.followers == null) { errors[p] = "El compte connectat no respon — torna a connectar-lo"; continue; }
-        if (p === "instagram") next.instagramFollowers = prof.followers; else next.tiktokFollowers = prof.followers;
-        if (prof.username && prof.username !== fresh.username) {
-          await db().query("update band_social_accounts set username=$1 where band_id=$2 and platform=$3", [prof.username, bandId, p]);
-        }
-        updated.push(p);
+        const f = await fetchTiktokFollowers(link);
+        if (f == null) { errors.tiktok = "No s'ha pogut llegir el perfil (comprova l'enllaç)"; continue; }
+        next.tiktokFollowers = f;
+        updated.push("tiktok");
       }
     } catch (e) {
       errors[p] = e instanceof Error ? e.message : String(e);

@@ -3,9 +3,11 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Concert } from "@/lib/types";
-import { requireManagerAction } from "@/lib/current-user";
+import { requireManagerAction, getProfile } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
+import { getCompanyInfo } from "@/lib/data";
+import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonReverseGeocode } from "@/lib/geo-search";
 
 export type SaveConcertInput = {
   id: string | null;
@@ -24,6 +26,9 @@ export type SaveConcertInput = {
   noSubstitute: Record<string, boolean>;
   convocatoriaExcluded?: Record<string, boolean>;
   contact?: { email: string; name: string; phone: string; company: string };
+  canAnnounce?: "yes" | "no" | "";
+  announceAfter?: string;
+  ticketType?: "gratuit" | "pagament" | "";
   skipDefaults?: boolean;
 };
 
@@ -83,23 +88,36 @@ export async function saveConcertAction(data: SaveConcertInput) {
   const contact = data.contact || { email: "", name: "", phone: "", company: "" };
   const exactTime = data.exactTime || "";
   const address = data.address || "";
+  const canAnnounce = data.canAnnounce === "yes" || data.canAnnounce === "no" ? data.canAnnounce : "";
+  const announceAfter = data.announceAfter || "";
+  const ticketType = data.ticketType === "pagament" ? "pagament" : data.ticketType === "gratuit" ? "gratuit" : "";
   await pool.query(
-    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, convocatoria_excluded, contact, workspace_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, convocatoria_excluded, contact, can_announce, announce_after, ticket_type, workspace_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      on conflict (id) do update set
        date=$2, time=$3, exact_time=$4, venue=$5, city=$6, address=$7, festa_entitat=$8, band_id=$9, band_name=$10, tags=$11, status=$12, amount=$13,
-       attendance=$14, substitutes=$15, no_substitute=$16, convocatoria_excluded=$17, contact=$18
+       attendance=$14, substitutes=$15, no_substitute=$16, convocatoria_excluded=$17, contact=$18, can_announce=$19, announce_after=$20, ticket_type=$21
      where concerts.workspace_id = excluded.workspace_id`,
     [
       id, data.date, data.time, exactTime, venue, city, address, (data.festaEntitat || "").trim(),
       bandRow ? bandRow.id : null, bandRow ? bandRow.name : "", JSON.stringify(bandRow?.tags || []), data.status, Math.round(data.amount) || 0,
       JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.noSubstitute || {}),
-      JSON.stringify(data.convocatoriaExcluded || {}), JSON.stringify(contact),
+      JSON.stringify(data.convocatoriaExcluded || {}), JSON.stringify(contact), canAnnounce, announceAfter, ticketType,
       workspaceId,
     ]
   );
 
   revalidateAll();
+
+  // El contacte principal d'aquest concert entra al mateix magatzem
+  // compartit que els contactes del full de ruta, perquè es pugui
+  // reutilitzar (autocompletar) des de qualsevol altre esdeveniment.
+  if (contact.name && contact.name.trim()) {
+    await syncRouteSheetContactsToContacts(workspaceId, [
+      { name: contact.name, role: "", phone: contact.phone, company: contact.company, email: contact.email },
+    ]);
+    revalidatePath("/contactes");
+  }
 
   return {
     id,
@@ -120,6 +138,9 @@ export async function saveConcertAction(data: SaveConcertInput) {
     noSubstitute: data.noSubstitute || {},
     convocatoriaExcluded: data.convocatoriaExcluded || {},
     contact,
+    canAnnounce,
+    announceAfter,
+    ticketType,
     routeSheet: null,
   } as Concert;
 }
@@ -216,8 +237,10 @@ export async function createEventAction(input: {
   title: string;
   date: string;
   time: string;
+  exactTime?: string;
   city: string;
   venue: string;
+  address?: string;
   invited: string[];
   repeat: { freq: "cap" | "setmanal" | "quinzenal" | "mensual"; count: number };
 }): Promise<{ created: number; firstId: string | null }> {
@@ -242,11 +265,11 @@ export async function createEventAction(input: {
     const id = "c" + Date.now() + i;
     if (!firstId) firstId = id;
     await pool.query(
-      `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount,
+      `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount,
                              attendance, substitutes, no_substitute, workspace_id, kind, invited)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'confirmat',0,'{}','{}','{}',$10,$11,$12)`,
-      [id, dateStr, input.time || "20:00", (input.venue || "").trim(), (input.city || "").trim() || band.city || "",
-        (input.title || "").trim(), band.id, band.name,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmat',0,'{}','{}','{}',$12,$13,$14)`,
+      [id, dateStr, input.time || "20:00", input.exactTime || "", (input.venue || "").trim(), (input.city || "").trim() || band.city || "",
+        (input.address || "").trim(), (input.title || "").trim(), band.id, band.name,
         JSON.stringify(band.tags || []), workspaceId, input.kind, JSON.stringify(input.invited || [])]
     );
     created++;
@@ -396,23 +419,7 @@ export async function searchCitiesAction(query: string): Promise<{ description: 
 // de trencar — el camp es pot seguir omplint a mà.
 export async function searchVenuesGoogleAction(query: string): Promise<{ description: string; placeId: string }[]> {
   await requireManagerAction();
-  const q = (query || "").trim();
-  const key = process.env.GOOGLE_MAPS_API_KEY;
-  if (!q || q.length < 2 || !key) return [];
-  const url = new URL("https://maps.googleapis.com/maps/api/place/autocomplete/json");
-  url.searchParams.set("input", q);
-  url.searchParams.set("language", "ca");
-  url.searchParams.set("key", key);
-  try {
-    const res = await fetch(url.toString());
-    if (!res.ok) return [];
-    const data = await res.json();
-    if (data.status !== "OK") return [];
-    const predictions: { description: string; place_id: string }[] = data.predictions || [];
-    return predictions.map((p) => ({ description: p.description, placeId: p.place_id }));
-  } catch {
-    return [];
-  }
+  return googlePlacesAutocomplete(query);
 }
 
 // Detall d'un recinte triat de l'autocompletat de Google: nom, població,
@@ -420,32 +427,7 @@ export async function searchVenuesGoogleAction(query: string): Promise<{ descrip
 // coordenades — per si calgués una geocodificació inversa de reserva.
 export async function getPlaceDetailsAction(placeId: string): Promise<{ name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null } | null> {
   await requireManagerAction();
-  const key = process.env.GOOGLE_MAPS_API_KEY;
-  if (!placeId || !key) return null;
-  const url = new URL("https://maps.googleapis.com/maps/api/place/details/json");
-  url.searchParams.set("place_id", placeId);
-  url.searchParams.set("language", "ca");
-  url.searchParams.set("fields", "name,address_component,geometry");
-  url.searchParams.set("key", key);
-  try {
-    const res = await fetch(url.toString());
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data.status !== "OK") return null;
-    const r = data.result || {};
-    const comps: { long_name: string; types: string[] }[] = r.address_components || [];
-    const find = (type: string) => comps.find((c) => c.types.includes(type))?.long_name || "";
-    return {
-      name: String(r.name || "").trim(),
-      city: find("locality") || find("postal_town") || find("administrative_area_level_2"),
-      street: find("route"),
-      housenumber: find("street_number"),
-      lat: r.geometry?.location?.lat ?? null,
-      lon: r.geometry?.location?.lng ?? null,
-    };
-  } catch {
-    return null;
-  }
+  return googlePlaceDetails(placeId);
 }
 
 // Cerca de recintes/llocs reals (sales, places, pavellons...) via Photon,
@@ -454,41 +436,7 @@ export async function getPlaceDetailsAction(placeId: string): Promise<{ name: st
 // població — es descarten només els resultats sense nom.
 export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null; placeId: string }[]> {
   await requireManagerAction();
-  const q = (query || "").trim();
-  if (!q || q.length < 2) return [];
-  const url = new URL("https://photon.komoot.io/api/");
-  url.searchParams.set("q", q);
-  url.searchParams.set("limit", "8");
-  url.searchParams.set("lang", "en");
-  try {
-    const res = await fetch(url.toString());
-    if (!res.ok) return [];
-    const data = await res.json();
-    const features: { properties: Record<string, unknown>; geometry?: { coordinates?: [number, number] } }[] = data.features || [];
-    const seen = new Set<string>();
-    const out: { description: string; name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null; placeId: string }[] = [];
-    for (const f of features) {
-      const p = f.properties || {};
-      const name = String(p.name || "").trim();
-      if (!name) continue;
-      const city = String(p.city || "").trim();
-      const context = [city || p.state, p.country].filter(Boolean).join(", ");
-      const description = context ? `${name}, ${context}` : name;
-      const key = description.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      const coords = f.geometry?.coordinates;
-      out.push({
-        description, name, city,
-        street: String(p.street || "").trim(), housenumber: String(p.housenumber || "").trim(),
-        lon: coords ? coords[0] : null, lat: coords ? coords[1] : null,
-        placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}`,
-      });
-    }
-    return out;
-  } catch {
-    return [];
-  }
+  return photonSearch(query);
 }
 
 // Molts recintes (sales, teatres...) no tenen número de carrer etiquetat a
@@ -497,23 +445,7 @@ export async function searchVenuesAction(query: string): Promise<{ description: 
 // direcció etiquetada més propera (amb carrer i número de veritat).
 export async function reverseGeocodeAction(lat: number, lon: number): Promise<{ street: string; housenumber: string; city: string } | null> {
   await requireManagerAction();
-  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
-  const url = new URL("https://photon.komoot.io/reverse");
-  url.searchParams.set("lat", String(lat));
-  url.searchParams.set("lon", String(lon));
-  url.searchParams.set("lang", "en");
-  try {
-    const res = await fetch(url.toString());
-    if (!res.ok) return null;
-    const data = await res.json();
-    const p = (data.features || [])[0]?.properties || {};
-    const street = String(p.street || "").trim();
-    const housenumber = String(p.housenumber || "").trim();
-    if (!street && !housenumber) return null;
-    return { street, housenumber, city: String(p.city || "").trim() };
-  } catch {
-    return null;
-  }
+  return photonReverseGeocode(lat, lon);
 }
 
 // Carrers reals al voltant d'un punt (per al mini-mapa del pòster del
@@ -864,4 +796,48 @@ export async function geocodeCitiesAction(cities: string[]): Promise<Record<stri
     }
   }
   return out;
+}
+
+// Nom de l'agència pel peu del PDF del full de ruta — es demana des del
+// component client (gestor o artista, tots dos el poden obrir) en comptes
+// de fer-lo baixar per props des de totes les pàgines que hi donen accés.
+export async function getAgencyNameAction(): Promise<string> {
+  const profile = await getProfile();
+  if (!profile?.workspaceId) return "";
+  const info = await getCompanyInfo(profile.workspaceId);
+  return info.nom || "";
+}
+
+// Edita assistència i substituts des de la vista "dia de bolo" (botó de
+// llapis a "Qui ve") sense passar per la fitxa completa del concert.
+// Actualitza NOMÉS aquestes tres columnes (mai la resta del concert, a
+// diferència de saveConcertAction, que les reescriu totes de cop) — cap
+// risc d'esborrar per accident data/lloc/import si qui truca no en té
+// l'instantània sencera i correcta (com la pàgina pública /conf/[token],
+// que mai hi arriba perquè és manager-only).
+export async function setConvocatoriaAction(
+  concertId: string,
+  attendance: Record<string, "yes" | "no">,
+  substitutes: Record<string, string>
+): Promise<void> {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update concerts set attendance=$1, substitutes=$2 where id=$3 and workspace_id=$4",
+    [JSON.stringify(attendance), JSON.stringify(substitutes), concertId, workspaceId]
+  );
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/concerts/${concertId}/dia`);
+}
+
+// Cançons destacades de la setlist assignada, per a aquest assaig en
+// concret (vegeu Concert.setlistHighlights) — la mateixa setlist pot
+// repetir-se a diversos assaigs amb destacades diferents a cada un.
+export async function setSetlistHighlightsAction(concertId: string, highlights: Record<string, boolean>): Promise<void> {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update concerts set setlist_highlights=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(highlights), concertId, workspaceId]
+  );
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/concerts/${concertId}/dia`);
 }

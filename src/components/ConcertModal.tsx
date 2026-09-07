@@ -18,6 +18,8 @@ type Cf = {
   time: string;
   venue: string;
   city: string;
+  address: string;
+  exactTime: string;
   festaEntitat: string;
   amount: string;
   status: string;
@@ -66,13 +68,13 @@ export default function ConcertModal({
     if (mode === "edit" && concert) {
       return {
         bandId: concert.bandId, bandName: concert.bandName, date: concert.date, time: concert.time,
-        venue: concert.venue, city: concert.city, festaEntitat: concert.festaEntitat || "", amount: String(concert.amount), status: concert.status,
+        venue: concert.venue, city: concert.city, address: concert.address || "", exactTime: concert.exactTime || "", festaEntitat: concert.festaEntitat || "", amount: String(concert.amount), status: concert.status,
         attendance: { ...(concert.attendance || {}) }, substitutes: { ...(concert.substitutes || {}) }, noSubstitute: { ...(concert.noSubstitute || {}) },
       };
     }
     return {
       bandId: bands[0]?.id || "", bandName: bands[0]?.name || "", date: today(), time: "21:00",
-      venue: "", city: "", festaEntitat: "", amount: "1500", status: "confirmat", attendance: {}, substitutes: {}, noSubstitute: {},
+      venue: "", city: "", address: "", exactTime: "", festaEntitat: "", amount: "1500", status: "confirmat", attendance: {}, substitutes: {}, noSubstitute: {},
     };
   });
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -101,7 +103,7 @@ export default function ConcertModal({
     setSaving(true);
     await saveConcertAction({
       id: mode === "edit" ? concert!.id : null,
-      bandName: payload.bandName, date: payload.date, time: payload.time, venue: payload.venue, city: payload.city,
+      bandName: payload.bandName, date: payload.date, time: payload.time, venue: payload.venue, city: payload.city, address: payload.address, exactTime: payload.exactTime,
       festaEntitat: payload.festaEntitat, amount: parseInt(payload.amount, 10) || 0, status: payload.status,
       attendance: payload.attendance, substitutes: payload.substitutes, noSubstitute: payload.noSubstitute,
     });
@@ -565,6 +567,8 @@ export default function ConcertModal({
             <RouteSheetEditor
               concert={concert} venue={cf.venue} city={cf.city}
               onVenueCityChange={(v) => setCf((prev) => ({ ...prev, venue: v.name, ...(v.city ? { city: v.city } : {}) }))}
+              address={cf.address} onAddressChange={(v) => setCf((prev) => ({ ...prev, address: v }))}
+              exactTime={cf.exactTime} onExactTimeChange={(v) => setCf((prev) => ({ ...prev, exactTime: v }))}
               vehicles={currentBand?.vehicles || []} bandDefaultRouteSheet={currentBand?.defaultRouteSheet || null}
               onCompleteChange={setRouteSheetComplete} onPercentChange={setRouteSheetPercent} onSaved={() => { everSavedRef.current = true; }}
             />

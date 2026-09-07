@@ -2,21 +2,27 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, SocialLinks } from "@/lib/types";
+import type { Band } from "@/lib/types";
 import { bandPhotoDataUri } from "@/lib/tags";
 import { uploadBandImageAction, saveBandAppearanceAction } from "@/app/(app)/grup/actions";
 import { removeSimpleBackground } from "@/lib/image-bg-remove";
-import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
+function CameraIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>
+    </svg>
+  );
+}
 
-// Editor d'aparença del grup: nom, logo, portada (estil LinkedIn), colors,
-// etiquetes lliures i xarxes socials.
+// Editor d'aparença del grup: nom, logo, portada (estil LinkedIn), colors i
+// etiquetes lliures — les xarxes socials es gestionen a la seva pròpia
+// pestanya (/grup/xarxes).
 export default function GroupAppearanceModal({ band, onClose }: { band: Band; onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(band.name);
   const [color1, setColor1] = useState(band.color1 || "#8b7bff");
   const [color2, setColor2] = useState(band.color2 || "#e86bd0");
   const [tags, setTags] = useState<string[]>(band.tags || []);
-  const [socialLinks, setSocialLinks] = useState<SocialLinks>(band.socialLinks || {});
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
@@ -70,11 +76,11 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
               onClick={() => coverInput.current?.click()}
               title="Canvia la portada"
             >
-              <span className="ga-cover-hint">{uploading === "cover" ? "Pujant…" : "📷 Canvia la portada"}</span>
+              <span className="ga-cover-hint">{uploading === "cover" ? "Pujant…" : <><CameraIcon /> Canvia la portada</>}</span>
             </div>
             <div className="ga-logo-wrap" onClick={() => logoInput.current?.click()} title="Canvia el logo">
               <img className="ga-logo" src={logoPreview || band.logo || bandPhotoDataUri(band)} alt="" />
-              <span className="ga-logo-hint">{uploading === "logo" ? "…" : "📷"}</span>
+              <span className="ga-logo-hint">{uploading === "logo" ? "…" : <CameraIcon />}</span>
             </div>
             <input ref={coverInput} type="file" hidden accept="image/*"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) upload("cover", f); e.target.value = ""; }} />
@@ -113,40 +119,13 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
             </div>
           </div>
 
-          {/* Xarxes socials */}
-          <div>
-            <div className="form-label" style={{ marginBottom: 8 }}>Xarxes socials</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="t-dim" style={{ flex: "none" }}><InstagramIcon /></span>
-                <input className="field-input" style={{ flex: 1 }} type="url" placeholder="Instagram (enllaç)" value={socialLinks.instagram || ""}
-                  onChange={(e) => setSocialLinks((prev) => ({ ...prev, instagram: e.target.value }))} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="t-dim" style={{ flex: "none" }}><YoutubeIcon /></span>
-                <input className="field-input" style={{ flex: 1 }} type="url" placeholder="YouTube (enllaç)" value={socialLinks.youtube || ""}
-                  onChange={(e) => setSocialLinks((prev) => ({ ...prev, youtube: e.target.value }))} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="t-dim" style={{ flex: "none" }}><TiktokIcon /></span>
-                <input className="field-input" style={{ flex: 1 }} type="url" placeholder="TikTok (enllaç)" value={socialLinks.tiktok || ""}
-                  onChange={(e) => setSocialLinks((prev) => ({ ...prev, tiktok: e.target.value }))} />
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <span className="t-dim" style={{ flex: "none" }}><SpotifyIcon /></span>
-                <input className="field-input" style={{ flex: 1 }} type="url" placeholder="Spotify (enllaç)" value={socialLinks.spotify || ""}
-                  onChange={(e) => setSocialLinks((prev) => ({ ...prev, spotify: e.target.value }))} />
-              </div>
-            </div>
-          </div>
-
           <div className="modal-actions">
             <div className="spacer"></div>
             <button className="btn-outline" onClick={onClose}>Tanca</button>
             <button className="btn-save" disabled={saving}
               onClick={async () => {
                 setSaving(true);
-                await saveBandAppearanceAction(band.id, { name, color1, color2, tags: tags.map((t) => t.trim()).filter(Boolean), socialLinks });
+                await saveBandAppearanceAction(band.id, { name, color1, color2, tags: tags.map((t) => t.trim()).filter(Boolean) });
                 router.refresh();
                 setSaving(false);
                 onClose();

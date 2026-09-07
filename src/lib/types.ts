@@ -2,7 +2,7 @@ export type MemberPerms = { songs: boolean; riders: boolean; setlists: boolean; 
 
 export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[]; perms?: Partial<MemberPerms> };
 
-export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
+export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string; role?: string };
 
 export type Vehicle = { type: string; brand: string; color: string; owner: string; plate: string };
 
@@ -15,15 +15,15 @@ export type SocialPlatform = "instagram" | "tiktok" | "spotify" | "youtube";
 export type SocialTracking = Partial<Record<SocialPlatform, boolean>>;
 
 export type SocialStats = {
-  // Instagram i TikTok: amb el compte connectat (OAuth), o a mà.
+  // Instagram i TikTok: llegits de la pàgina/perfil públic, o a mà.
   instagramFollowers?: number;
   tiktokFollowers?: number;
-  // Seguidors de Spotify: es llegeixen de l'API pública (credencials d'app).
-  spotifyFollowers?: number;
-  // Oients mensuals: cap API els dona; es llegeixen de la pàgina pública de
-  // l'artista (millor esforç) o s'escriuen a mà.
+  // Spotify no dona seguidors sense sessió iniciada (es carreguen amb
+  // JavaScript, mai al codi de la pàgina) — només els oients mensuals, que
+  // sí que hi surten (millor esforç) o s'escriuen a mà.
   spotifyMonthlyListeners?: number;
-  // Subscriptors i visites totals del canal de YouTube: API pública amb clau.
+  // Subscriptors i visites totals del canal de YouTube, llegits de la
+  // pàgina pública del canal.
   youtubeSubscribers?: number;
   youtubeViews?: number;
 };
@@ -61,6 +61,9 @@ export type Band = {
   // presentació que s'hi mostra.
   publicToken?: string;
   bio?: string;
+  // Any en actiu, editable a mà des de la pàgina pública — buit = es
+  // calcula sol a partir del primer concert.
+  activeSince?: string;
 };
 
 // Contracte d'actuació d'un concert: text de les clàusules (paràgrafs
@@ -116,6 +119,18 @@ export type Concert = {
   riderId?: string | null;
   setlistId?: string | null;
   kind?: "bolo" | "assaig" | "reunio" | "altre";
+  // Cançons destacades de la setlist assignada, per a aquest concert en
+  // concret (clau = títol de la cançó) — mateixa setlist, assaigs diferents,
+  // cada un amb les seves pròpies destacades.
+  setlistHighlights?: Record<string, boolean>;
+  // Si encara no es pot fer públic (xarxes, cartell...) i, si no, a partir
+  // de quina data ja s'hi podrà — "Informació general", al costat del tipus.
+  // "" = encara sense decidir (mai pre-sel·leccionat per defecte).
+  canAnnounce: "yes" | "no" | "";
+  announceAfter: string;
+  // Si l'entrada al concert és gratuïta o de pagament — "Informació
+  // general", al costat de "Es pot anunciar?". "" = encara sense decidir.
+  ticketType: "gratuit" | "pagament" | "";
   invited?: string[];
   attToken?: string;
   // Contracte d'actuació: clàusules editables i enllaç públic per enviar-lo.

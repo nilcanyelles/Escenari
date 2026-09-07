@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatCurrency, formatDate } from "@/lib/format";
 
@@ -15,8 +17,13 @@ export default function InvoicePreview({
   const subtotal = invoice.baseAmount || (concert ? concert.amount : Math.round(invoice.amount / 1.21));
   const vat = Math.round((subtotal * (invoice.ivaRate ?? 21)) / 100);
   const irpf = Math.round((subtotal * (invoice.irpfRate ?? 0)) / 100);
+  // Penjat de <body> via portal perquè en imprimir només quedi aquest
+  // overlay (veure @media print): així no hi ha pàgines en blanc abans/després.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
 
-  return (
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal wide rs-doc-modal" onClick={(e) => e.stopPropagation()}>
         <div className="rs-doc-top-toolbar">
@@ -119,6 +126,7 @@ export default function InvoicePreview({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

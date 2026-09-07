@@ -2,80 +2,25 @@
 
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { Concert, Vehicle } from "@/lib/types";
+import type { Concert, Vehicle, Contact } from "@/lib/types";
 import {
-  type RouteSheet, type LlocItem, type HospitalitatItem, type TecnicItem, type RouteSheetDefaults,
-  normalizeRouteSheet, rsBlankItem, rsIsComplete, rsCompletionPercent, stripSectionForDefault, RS_SECTION_ICONS,
+  type RouteSheet, type HospitalitatItem, type RouteSheetDefaults,
+  normalizeRouteSheet, rsIsComplete, rsCompletionPercent, stripSectionForDefault,
 } from "@/lib/route-sheet";
-import { saveRouteSheetAction, searchVenuesAction, searchVenuesGoogleAction, getPlaceDetailsAction } from "@/app/(app)/concerts/actions";
+import { saveRouteSheetAction, searchVenuesAction, searchVenuesGoogleAction, getPlaceDetailsAction, reverseGeocodeAction } from "@/app/(app)/concerts/actions";
 import { saveDefaultRouteSheetSectionAction } from "@/app/(app)/grup/actions";
+import {
+  type RsSection, useRouteSheetOps, SectionIcon, FieldRow, ContactRow, PhaseRow, HospRow, HotelBlock,
+} from "@/components/RouteSheetFields";
 
-type Section = "lloc" | "contacts" | "schedule" | "hospitalitat" | "tecnic";
-type DragInfo = { section: Section; index: number };
+type Section = RsSection;
 
-function SectionIcon({ title }: { title: string }) {
-  const path = RS_SECTION_ICONS[title];
-  if (!path) return null;
-  return (
-    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-      style={{ flex: "none" }} dangerouslySetInnerHTML={{ __html: path }} />
-  );
-}
-function XIcon() {
-  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>;
-}
-function DragHandle({ onDragStart }: { onDragStart: () => void }) {
-  return (
-    <div className="rs-drag-handle" draggable title="Arrossega per reordenar" onDragStart={onDragStart}>
-      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="7" x2="20" y2="7"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="17" x2="20" y2="17"></line></svg>
-    </div>
-  );
-}
-function ToggleIcon({ yes }: { yes: boolean }) {
-  return yes ? (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-  ) : (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-  );
-}
-
-function TimePairInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div className="rs-time-pair">
-      <input type="time" className="field-input rs-time-box" value={value || ""} onChange={(e) => onChange(e.target.value)} />
-    </div>
-  );
-}
-
-// Sí/No amb dos botonets separats (tick i creu) en comptes d'un sol
-// interruptor — cap dels dos surt marcat fins que se'n cliqui un: mai
-// activat o desactivat per defecte, sinó "encara per decidir".
-function TickCrossButtons({ value, onChange }: { value: boolean | undefined; onChange: (v: boolean) => void }) {
-  return (
-    <div className="rs-tick-cross">
-      <button type="button" className={"rs-tick-cross-btn yes" + (value === true ? " active" : "")} title="Sí" onClick={() => onChange(true)}>
-        <ToggleIcon yes={true} />
-      </button>
-      <button type="button" className={"rs-tick-cross-btn no" + (value === false ? " active" : "")} title="No" onClick={() => onChange(false)}>
-        <ToggleIcon yes={false} />
-      </button>
-    </div>
-  );
-}
-
-// Estat d'aprovació del contrarider: un botó que fa cicle entre les 3
-// opcions a cada clic — sense estat inicial (abans del primer clic, "Sense
-// revisar"), mai ja aprovat o similar per defecte.
-const CONTRA_STATUS_CYCLE = ["aprovat", "no-rebut", "esperant-canvis"] as const;
-const CONTRA_STATUS_LABELS: Record<string, string> = { aprovat: "Aprovat", "no-rebut": "No rebut", "esperant-canvis": "Esperant canvis" };
-function nextContraStatus(cur?: string): typeof CONTRA_STATUS_CYCLE[number] {
-  const idx = CONTRA_STATUS_CYCLE.indexOf(cur as typeof CONTRA_STATUS_CYCLE[number]);
-  return CONTRA_STATUS_CYCLE[(idx + 1) % CONTRA_STATUS_CYCLE.length];
-}
-
-export default function RouteSheetEditor({ concert, venue, city, onVenueCityChange, vehicles = [], bandDefaultRouteSheet = null, onCompleteChange, onPercentChange, onSaved }: {
+export default function RouteSheetEditor({ concert, venue, city, onVenueCityChange, address, onAddressChange, exactTime, onExactTimeChange, vehicles = [], bandDefaultRouteSheet = null, contacts = [], onCompleteChange, onPercentChange, onRouteSheetChange, onSaved }: {
   concert: Concert;
   vehicles?: Vehicle[];
+  // Contactes ja desats a l'agència (de qualsevol esdeveniment), per
+  // suggerir-los en escriure el "Nom" d'un contacte del full de ruta.
+  contacts?: Contact[];
   // Plantilla d'"opcions" del full de ruta del grup (etiquetes/fases/càrrecs
   // i interruptors) — s'aplica quan el concert encara no té cap secció
   // desada, en comptes de la plantilla genèrica de l'app.
@@ -88,13 +33,22 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   venue: string;
   city: string;
   onVenueCityChange: (v: { name: string; city?: string; street?: string; housenumber?: string }) => void;
+  // L'"Adreça" d'aquí i la d'Informació general són, de la mateixa manera,
+  // un únic camp compartit — mai un text lliure propi del full de ruta.
+  address: string;
+  onAddressChange: (v: string) => void;
+  // L'hora d'inici de la fase "Concert" dels horaris és la mateixa "Hora
+  // exacta" d'Informació general — mai un valor propi del full de ruta.
+  exactTime: string;
+  onExactTimeChange: (v: string) => void;
   onCompleteChange?: (complete: boolean) => void;
   onPercentChange?: (percent: number) => void;
+  onRouteSheetChange?: (rs: RouteSheet) => void;
   onSaved?: () => void;
 }) {
   const router = useRouter();
   const [rsf, setRsf] = useState<RouteSheet>(() => normalizeRouteSheet(concert.routeSheet as RouteSheet | null, concert, bandDefaultRouteSheet));
-  const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
+  const { updateSection, addItem, removeItem, dragHandlers } = useRouteSheetOps(setRsf);
   const [saving, setSaving] = useState(false);
   const [savedSection, setSavedSection] = useState<Section | null>(null);
   const isFirstRender = useRef(true);
@@ -125,17 +79,33 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   function sectionStats(section: Section): { filled: number; total: number } {
     let total = 0, filled = 0;
     const check = (v: unknown) => { total++; if (v && String(v).trim()) filled++; };
-    if (section === "lloc") rsf.lloc.forEach((it) => check(it.value));
+    // "Adreça" i la fase "Concert" són camps compartits amb Informació
+    // general (vegeu més avall) — es comprova sempre el valor en directe,
+    // mai el que hi hagués desat abans de vincular-los.
+    if (section === "lloc") rsf.lloc.forEach((it) => {
+      const isAdreça = it.label && it.label.trim().toLowerCase() === "adreça";
+      check(isAdreça ? address : it.value);
+    });
     else if (section === "contacts") rsf.contacts.forEach((it) => {
       total++;
       if (it.role.trim() && it.name.trim() && it.phone.trim() && it.company.trim()) filled++;
     });
     else if (section === "schedule") rsf.schedule.forEach((it) => {
+      const isConcertPhase = it.phase && it.phase.trim().toLowerCase() === "concert";
+      const start = isConcertPhase ? exactTime : it.start;
       total++;
-      if (it.start.trim() || it.end.trim()) filled++;
+      if (start.trim() || it.end.trim()) filled++;
     });
-    else if (section === "hospitalitat") rsf.hospitalitat.forEach((it) => check(it.value));
-    else rsf.tecnic.forEach((it) => { if (!(it.label && it.label.trim().toLowerCase() === "pantalla led")) check(it.value); });
+    else if (section === "hospitalitat") rsf.hospitalitat.forEach((it) => {
+      total++;
+      if ((it.value && it.value.trim()) || it.included !== undefined) filled++;
+    });
+    else rsf.tecnic.forEach((it) => {
+      const label = it.label && it.label.trim().toLowerCase();
+      total++;
+      if (label === "pantalla led") { if (it.included !== undefined) filled++; return; }
+      if ((it.value && it.value.trim()) || (label === "contra rider" && it.status === "aprovat")) filled++;
+    });
     return { filled, total };
   }
   const [openSections, setOpenSections] = useState<Record<Section, boolean>>(() => {
@@ -163,95 +133,8 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     );
   }
 
-  // Cerca de recintes per al camp "Recinte" — mateixa funció que "Ubicació
-  // / sala" a Informació (mateixa API, mateix desplegable).
-  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
-  const [venueSearch, setVenueSearch] = useState("");
-  const [venueResults, setVenueResults] = useState<{ description: string; placeId: string }[]>([]);
-  const [venueSearching, setVenueSearching] = useState(false);
-  const [venueResolving, setVenueResolving] = useState<string | null>(null);
-  const venueSearchTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current);
-    const q = venueSearch.trim();
-    if (q.length < 2) { setVenueResults([]); setVenueSearching(false); return; }
-    setVenueSearching(true);
-    venueSearchTimer.current = window.setTimeout(async () => {
-      const results = await searchVenuesGoogleAction(q);
-      setVenueResults(results);
-      setVenueSearching(false);
-    }, 300);
-    return () => { if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current); };
-  }, [venueSearch]);
-
-  // Triar una predicció de l'autocompletat de Google en demana els detalls
-  // (nom, població, carrer i número) abans d'omplir el Recinte.
-  async function selectVenue(placeId: string) {
-    setVenueResolving(placeId);
-    const details = await getPlaceDetailsAction(placeId);
-    setVenueResolving(null);
-    setVenueDropdownOpen(false);
-    if (!details) return;
-    onVenueCityChange(details);
-  }
-
-  // Cerca d'adreces per al camp "Adreça" — mateixa API (Photon), que ja
-  // retorna tant adreces com punts d'interès (comerços, escoles...), sense
-  // obligar a triar-ne un: és una ajuda per validar, no substitueix el text
-  // lliure.
-  const [addressDropdownOpen, setAddressDropdownOpen] = useState(false);
-  const [addressSearch, setAddressSearch] = useState("");
-  const [addressResults, setAddressResults] = useState<{ description: string; name: string; city: string; street: string; housenumber: string; placeId: string }[]>([]);
-  const [addressSearching, setAddressSearching] = useState(false);
-  const addressSearchTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (addressSearchTimer.current) window.clearTimeout(addressSearchTimer.current);
-    const q = addressSearch.trim();
-    if (q.length < 2) { setAddressResults([]); setAddressSearching(false); return; }
-    setAddressSearching(true);
-    addressSearchTimer.current = window.setTimeout(async () => {
-      const results = await searchVenuesAction(q);
-      setAddressResults(results);
-      setAddressSearching(false);
-    }, 300);
-    return () => { if (addressSearchTimer.current) window.clearTimeout(addressSearchTimer.current); };
-  }, [addressSearch]);
-
-  // Desplegable de xips de vehicles per al camp "Número de vehicles".
-  const [vehicleDropdownOpen, setVehicleDropdownOpen] = useState(false);
-
-  function updateSection<K extends Section>(section: K, updater: (items: RouteSheet[K]) => RouteSheet[K]) {
-    setRsf((prev) => ({ ...prev, [section]: updater(prev[section]) }));
-  }
-
-  function addItem(section: Section) {
-    setRsf((prev) => ({ ...prev, [section]: [...(prev[section] as unknown[]), rsBlankItem(section)] }));
-  }
-  function removeItem(section: Section, index: number) {
-    setRsf((prev) => ({ ...prev, [section]: (prev[section] as unknown[]).filter((_, i) => i !== index) }));
-  }
-  function reorder(section: Section, from: number, to: number) {
-    setRsf((prev) => {
-      const arr = (prev[section] as unknown[]).slice();
-      const [moved] = arr.splice(from, 1);
-      arr.splice(to, 0, moved);
-      return { ...prev, [section]: arr };
-    });
-  }
-
-  function dragHandlers(section: Section, index: number) {
-    return {
-      onDragStart: () => setDragInfo({ section, index }),
-      onDragOver: (e: React.DragEvent) => {
-        if (!dragInfo || dragInfo.section !== section) return;
-        e.preventDefault();
-        if (dragInfo.index === index) return;
-        reorder(section, dragInfo.index, index);
-        setDragInfo({ section, index });
-      },
-      onDrop: (e: React.DragEvent) => { e.preventDefault(); setDragInfo(null); },
-      onDragEnd: () => setDragInfo(null),
-    };
+  function updateHosp(i: number, patch: Partial<HospitalitatItem>) {
+    updateSection("hospitalitat", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x));
   }
 
   useEffect(() => {
@@ -278,253 +161,67 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   const percent = rsCompletionPercent({ ...concert, routeSheet: rsf });
   useEffect(() => { onCompleteChange?.(complete); }, [complete, onCompleteChange]);
   useEffect(() => { onPercentChange?.(percent); }, [percent, onPercentChange]);
+  // El pare en fa servir una còpia (per exemple per a la barra de progrés
+  // del bànner) que, sense això, només s'actualitzava en refer la pàgina.
+  useEffect(() => { onRouteSheetChange?.(rsf); }, [rsf, onRouteSheetChange]);
 
-  // ---- Lloc ----
-  const RS_LINK_FIELDS: Record<string, boolean> = { "adreça": true, "descàrrega": true, "parking": true };
-  function llocValuePlaceholder(label: string) {
-    return RS_LINK_FIELDS[(label || "").trim().toLowerCase()] ? "Enllaç Google Maps" : "";
-  }
-
-  function renderFieldRow(section: "lloc" | "tecnic", it: LlocItem | TecnicItem, i: number) {
-    const isPantallaLed = section === "tecnic" && it.label && it.label.trim().toLowerCase() === "pantalla led";
-    const isContrarider = section === "tecnic" && it.label && it.label.trim().toLowerCase() === "contra rider";
-    // El camp "Recinte" és el mateix que "Ubicació / sala" a Informació —
-    // no un camp de text lliure com la resta, sinó la mateixa cerca de
-    // recintes, en aquesta mateixa fila (no se n'afegeix cap de nova).
-    const isRecinte = section === "lloc" && it.label && it.label.trim().toLowerCase() === "recinte";
-    const isAdreça = section === "lloc" && it.label && it.label.trim().toLowerCase() === "adreça";
-    const isVehicleCount = section === "lloc" && it.label && it.label.trim().toLowerCase() === "número de vehicles";
-    return (
-      <div className="rs-field-row" {...dragHandlers(section, i)}>
-        <DragHandle onDragStart={() => setDragInfo({ section, index: i })} />
-        {isPantallaLed ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Camp" value={it.label}
-              onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, label: e.target.value } : x) as never)} />
-            <TickCrossButtons value={(it as TecnicItem).included}
-              onChange={(v) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, included: v } : x) as never)} />
-          </div>
-        ) : (
-          <input className="field-input" type="text" placeholder="Camp (p.ex. Adreça)" value={it.label}
-            onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, label: e.target.value } : x) as never)} />
-        )}
-        {isPantallaLed ? (
-          <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Mida (p.ex. 3x2m)" value={it.value}
-            onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, value: e.target.value } : x) as never)} />
-        ) : isContrarider ? (
-          <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
-            <button type="button"
-              className={"rs-status-btn" + ((it as TecnicItem).status ? " rs-status-" + (it as TecnicItem).status : "")}
-              title="Clica per canviar l'estat"
-              onClick={() => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, status: nextContraStatus((x as TecnicItem).status) } : x) as never)}>
-              {(it as TecnicItem).status ? CONTRA_STATUS_LABELS[(it as TecnicItem).status as string] : "Sense revisar"}
-            </button>
-            <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Notes" value={it.value}
-              onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, value: e.target.value } : x) as never)} />
-          </div>
-        ) : isVehicleCount ? (
-          <div style={{ position: "relative" }}>
-            <button type="button" className={"rs-vehicle-dropdown-btn" + ((it as LlocItem).plates ? "" : " placeholder")}
-              onClick={() => setVehicleDropdownOpen((v) => !v)}>
-              {(() => {
-                const plates = ((it as LlocItem).plates || "").split(",").map((p) => p.trim()).filter(Boolean);
-                return plates.length ? `${plates.length} vehicle${plates.length > 1 ? "s" : ""} seleccionat${plates.length > 1 ? "s" : ""}` : "Selecciona vehicles…";
-              })()}
-            </button>
-            {vehicleDropdownOpen && (
-              <>
-                <div className="year-picker-overlay" onClick={() => setVehicleDropdownOpen(false)}></div>
-                <div className="year-dropdown cf-band-dropdown rs-vehicle-dropdown-panel" onClick={(e) => e.stopPropagation()}>
-                  {vehicles.filter((v) => v.plate).length === 0 ? (
-                    <div className="cf-band-noresults">El grup no té cap vehicle registrat</div>
-                  ) : vehicles.filter((v) => v.plate).map((v) => {
-                    const currentPlates = ((it as LlocItem).plates || "").split(",").map((p) => p.trim()).filter(Boolean);
-                    const selected = currentPlates.includes(v.plate);
-                    const label = [[v.type, v.brand, v.color].filter(Boolean).join(" "), v.owner, v.plate].filter(Boolean).join(" · ");
-                    return (
-                      <button key={v.plate} type="button" className={"rs-vehicle-chip" + (selected ? " active" : "")}
-                        onClick={() => {
-                          const set = new Set(currentPlates);
-                          if (selected) set.delete(v.plate); else set.add(v.plate);
-                          const next = Array.from(set);
-                          updateSection("lloc", (arr) => arr.map((x, xi) => xi === i ? { ...x, plates: next.join(", "), value: next.length ? `${next.length} vehicle${next.length > 1 ? "s" : ""}` : "" } : x) as never);
-                        }}
-                      >{label}</button>
-                    );
-                  })}
-                </div>
-              </>
-            )}
-          </div>
-        ) : isRecinte ? (
-          <div style={{ position: "relative" }}>
-            <input
-              className="field-input" type="text" autoComplete="off" placeholder="Cerca un recinte…"
-              value={venueDropdownOpen ? venueSearch : venue}
-              onFocus={() => { setVenueSearch(venue); setVenueDropdownOpen(true); }}
-              onChange={(e) => setVenueSearch(e.target.value)}
-            />
-            {venueDropdownOpen && (
-              <>
-                <div className="year-picker-overlay" onClick={() => { if (!venueSearch.trim() && venue) onVenueCityChange({ name: "" }); setVenueDropdownOpen(false); }}></div>
-                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
-                  {venueSearch.trim().length < 2 ? (
-                    <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
-                  ) : venueSearching ? (
-                    <div className="cf-band-noresults">Cercant…</div>
-                  ) : venueResults.length ? venueResults.map((v) => (
-                    <button key={v.placeId} type="button" className="year-option" disabled={venueResolving === v.placeId}
-                      onClick={() => selectVenue(v.placeId)}>{venueResolving === v.placeId ? "Carregant…" : v.description}</button>
-                  )) : <div className="cf-band-noresults">Cap recinte coincideix</div>}
-                </div>
-              </>
-            )}
-          </div>
-        ) : isAdreça ? (
-          <div style={{ position: "relative" }}>
-            <input
-              className="field-input" type="text" autoComplete="off" placeholder="Adreça" value={it.value}
-              onFocus={() => { setAddressSearch(it.value); setAddressDropdownOpen(true); }}
-              onChange={(e) => {
-                const val = e.target.value;
-                setAddressSearch(val);
-                updateSection("lloc", (arr) => arr.map((x, xi) => xi === i ? { ...x, value: val } : x) as never);
-              }}
-            />
-            {addressDropdownOpen && addressSearch.trim().length >= 2 && (
-              <>
-                <div className="year-picker-overlay" onClick={() => setAddressDropdownOpen(false)}></div>
-                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
-                  {addressSearching ? (
-                    <div className="cf-band-noresults">Cercant…</div>
-                  ) : addressResults.length ? addressResults.map((v) => (
-                    <button key={v.placeId} type="button" className="year-option"
-                      onClick={() => {
-                        updateSection("lloc", (arr) => arr.map((x, xi) => xi === i ? { ...x, value: v.description } : x) as never);
-                        setAddressDropdownOpen(false);
-                      }}>{v.description}</button>
-                  )) : <div className="cf-band-noresults">Cap resultat</div>}
-                </div>
-              </>
-            )}
-          </div>
-        ) : (
-          <input className="field-input" type="text" placeholder={section === "lloc" ? llocValuePlaceholder(it.label) : ""} value={it.value}
-            onChange={(e) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, value: e.target.value } : x) as never)} />
-        )}
-        <button type="button" className="rs-mini-btn danger" title="Elimina" onClick={() => removeItem(section, i)}><XIcon /></button>
-      </div>
-    );
-  }
-
-  function fieldRows(section: "lloc" | "tecnic", items: (LlocItem | TecnicItem)[]) {
-    return items.map((it, i) => <div key={i}>{renderFieldRow(section, it, i)}</div>);
+  const fieldRowCtx = {
+    venue, onVenueCityChange, address, onAddressChange, vehicles,
+    venueSearchAction: searchVenuesGoogleAction, venueDetailsAction: getPlaceDetailsAction, addressSearchAction: searchVenuesAction,
+  };
+  function fieldRows(section: "lloc" | "tecnic", items: RouteSheet["lloc"] | RouteSheet["tecnic"]) {
+    return items.map((it, i) => (
+      <FieldRow
+        key={i} section={section} item={it} ctx={fieldRowCtx}
+        onChange={(patch) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x) as never)}
+        onRemove={() => removeItem(section, i)}
+        dragProps={dragHandlers(section, i)}
+      />
+    ));
   }
 
   // ---- Contacts ----
   const contactRows = rsf.contacts.map((ct, i) => (
-    <div key={i} className="rs-contact-row" {...dragHandlers("contacts", i)}>
-      <DragHandle onDragStart={() => setDragInfo({ section: "contacts", index: i })} />
-      <input className="field-input" type="text" placeholder="Càrrec" value={ct.role}
-        onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, role: e.target.value } : x))} />
-      <input className="field-input" type="text" placeholder="Nom" value={ct.name}
-        onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, name: e.target.value } : x))} />
-      <input className="field-input" type="text" placeholder="Empresa" value={ct.company}
-        onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, company: e.target.value } : x))} />
-      <input className="field-input" type="text" placeholder="Telèfon" value={ct.phone}
-        onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, phone: e.target.value } : x))} />
-      <button type="button" className="rs-mini-btn danger" title="Elimina" onClick={() => removeItem("contacts", i)}><XIcon /></button>
-    </div>
+    <ContactRow
+      key={i} item={ct} contacts={contacts}
+      onChange={(patch) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x))}
+      onRemove={() => removeItem("contacts", i)}
+      dragProps={dragHandlers("contacts", i)}
+    />
   ));
 
   // ---- Schedule ----
   const phaseRows = rsf.schedule.map((ph, i) => (
-    <div key={i} className="rs-phase-row" {...dragHandlers("schedule", i)}>
-      <DragHandle onDragStart={() => setDragInfo({ section: "schedule", index: i })} />
-      <input className="field-input" type="text" placeholder="Fase" value={ph.phase}
-        onChange={(e) => updateSection("schedule", (arr) => arr.map((x, xi) => xi === i ? { ...x, phase: e.target.value } : x))} />
-      <TimePairInput value={ph.start} onChange={(v) => updateSection("schedule", (arr) => arr.map((x, xi) => xi === i ? { ...x, start: v } : x))} />
-      <TimePairInput value={ph.end} onChange={(v) => updateSection("schedule", (arr) => arr.map((x, xi) => xi === i ? { ...x, end: v } : x))} />
-      <button type="button" className="rs-mini-btn danger" title="Elimina" onClick={() => removeItem("schedule", i)}><XIcon /></button>
-    </div>
+    <PhaseRow
+      key={i} item={ph} exactTime={exactTime} onExactTimeChange={onExactTimeChange}
+      onChange={(patch) => updateSection("schedule", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x))}
+      onRemove={() => removeItem("schedule", i)}
+      dragProps={dragHandlers("schedule", i)}
+    />
   ));
 
   // ---- Hospitalitat ----
-  const FIXED_TOGGLE_LABELS = ["dietes", "catering", "camerino"];
-  function updateHosp(i: number, patch: Partial<HospitalitatItem>) {
-    updateSection("hospitalitat", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x));
-  }
   let hotelBlock: React.ReactNode = null;
   const regularHospRows: React.ReactNode[] = [];
   rsf.hospitalitat.forEach((it, i) => {
     const isHotel = it.label && it.label.trim().toLowerCase() === "allotjament";
     if (!isHotel) {
-      const isFixedToggle = it.label && FIXED_TOGGLE_LABELS.indexOf(it.label.trim().toLowerCase()) !== -1;
-      // Mateixa estructura per als camps fixos (Dietes, Catering, Camerino)
-      // i els que s'afegeixen a mà — només canvia si l'etiqueta és text
-      // fix o editable, perquè les caselles quedin alineades entre elles.
       regularHospRows.push(
-        <div key={i} className="rs-field-row" {...dragHandlers("hospitalitat", i)}>
-          <DragHandle onDragStart={() => setDragInfo({ section: "hospitalitat", index: i })} />
-          <div className="rs-hosp-label-cell">
-            {isFixedToggle ? (
-              <span className="rs-hosp-fixed-label">{it.label}</span>
-            ) : (
-              <input className="field-input" type="text" placeholder="Camp (p.ex. Dietes)" value={it.label}
-                onChange={(e) => updateHosp(i, { label: e.target.value })} />
-            )}
-            <TickCrossButtons value={it.included} onChange={(v) => updateHosp(i, { included: v })} />
-          </div>
-          <input className="field-input" type="text" placeholder="Detalls (opcional)" value={it.value}
-            onChange={(e) => updateHosp(i, { value: e.target.value })} />
-          <button type="button" className="rs-mini-btn danger" title="Elimina" onClick={() => removeItem("hospitalitat", i)}><XIcon /></button>
-        </div>
+        <HospRow
+          key={i} item={it}
+          onChange={(patch) => updateHosp(i, patch)}
+          onRemove={() => removeItem("hospitalitat", i)}
+          dragProps={dragHandlers("hospitalitat", i)}
+        />
       );
       return;
     }
-    const included = it.included === true;
-    const parkingAvailable = it.parkingAvailable === true;
-    const breakfastAvailable = it.breakfastAvailable === true;
     hotelBlock = (
-      <div key={i} className="rs-hotel-subgroup">
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span className="rs-hosp-fixed-label" style={{ flex: "none" }}>{it.label}</span>
-          <TickCrossButtons value={it.included} onChange={(v) => updateHosp(i, { included: v })} />
-          <input className="field-input" style={{ flex: 1, minWidth: 0 }} type="text" placeholder="Nom de l'allotjament" value={it.value}
-            onChange={(e) => updateHosp(i, { value: e.target.value })} />
-        </div>
-        {included && (
-          <>
-            <div className="rs-hotel-subgroup-row">
-              <input className="field-input" type="text" placeholder="Telèfon de l'allotjament" value={it.phone || ""}
-                onChange={(e) => updateHosp(i, { phone: e.target.value })} />
-              <input className="field-input" type="text" placeholder="Enllaç Google Maps" value={it.location || ""}
-                onChange={(e) => updateHosp(i, { location: e.target.value })} />
-            </div>
-            <div className="rs-hotel-parking-row">
-              <span className="rs-hosp-fixed-label" style={{ flex: "none" }}>Pàrquing</span>
-              <TickCrossButtons value={it.parkingAvailable} onChange={(v) => updateHosp(i, { parkingAvailable: v })} />
-              <input className="field-input rs-parking-count" type="text" placeholder="Matrícules" value={it.parkingPlates || ""}
-                onChange={(e) => updateHosp(i, { parkingPlates: e.target.value })} />
-            </div>
-            <div className="rs-hotel-specs-row">
-              <div className="rs-hotel-checkinout-item">
-                <span className="rs-col-label" style={{ textAlign: "left" }}>Check-in</span>
-                <TimePairInput value={it.checkIn || ""} onChange={(v) => updateHosp(i, { checkIn: v })} />
-              </div>
-              <div className="rs-hotel-checkinout-item">
-                <span className="rs-col-label" style={{ textAlign: "left" }}>Check-out</span>
-                <TimePairInput value={it.checkOut || ""} onChange={(v) => updateHosp(i, { checkOut: v })} />
-              </div>
-            </div>
-            <div className="rs-hotel-parking-row">
-              <span className="rs-hosp-fixed-label" style={{ flex: "none" }}>Esmorzar</span>
-              <TickCrossButtons value={it.breakfastAvailable} onChange={(v) => updateHosp(i, { breakfastAvailable: v })} />
-              {breakfastAvailable && <TimePairInput value={it.breakfastTime || ""} onChange={(v) => updateHosp(i, { breakfastTime: v })} />}
-            </div>
-          </>
-        )}
-      </div>
+      <HotelBlock
+        key={i} item={it} vehicles={vehicles} onUpdate={(patch) => updateHosp(i, patch)}
+        searchAction={searchVenuesGoogleAction} detailsAction={getPlaceDetailsAction}
+        reverseGeocodeAction={reverseGeocodeAction}
+      />
     );
   });
 
@@ -555,6 +252,19 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
       body: <div className="rs-repeater" data-rs-section="tecnic">{fieldRows("tecnic", rsf.tecnic)}</div> },
   ];
   const allOpen = sections.every((s) => openSections[s.key]);
+  const sectionOrder: Section[] = ["lloc", "contacts", "schedule", "hospitalitat", "tecnic"];
+  // "Desa" d'una secció: com que tot ja es desa sol en editar qualsevol
+  // camp, aquest botó no fa cap desada extra — plega la secció actual i
+  // desplega la següent, perquè avançar pel full de ruta no calgui fer-ho
+  // manualment secció a secció.
+  function goToNextSection(key: Section) {
+    const next = sectionOrder[sectionOrder.indexOf(key) + 1];
+    setOpenSections((p) => {
+      const out = { ...p, [key]: false };
+      if (next) out[next] = true;
+      return out;
+    });
+  }
 
   return (
     <div style={{ position: "relative" }} className="rs-folds">
@@ -569,14 +279,19 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
         const complete = s.stats.total > 0 && s.stats.filled >= s.stats.total;
         return (
           <div key={s.key} className={"rs-fold" + (open ? " open" : "") + (complete ? " done" : "")}>
-            <button type="button" className="rs-fold-head" aria-expanded={open} onClick={() => setOpenSections((p) => ({ ...p, [s.key]: !p[s.key] }))}>
+            <div
+              className="rs-fold-head" role="button" tabIndex={0} aria-expanded={open}
+              onClick={() => setOpenSections((p) => ({ ...p, [s.key]: !p[s.key] }))}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setOpenSections((p) => ({ ...p, [s.key]: !p[s.key] })); } }}
+            >
               <span className="rs-fold-icon"><SectionIcon title={s.title} /></span>
               <span className="rs-fold-title">{s.title}</span>
               <span className={"rs-fold-badge" + (complete ? " done" : "")}>{complete ? "✓ complet" : `${s.stats.filled}/${s.stats.total}`}</span>
+              <button type="button" className="rs-fold-save-btn" onClick={(e) => { e.stopPropagation(); goToNextSection(s.key); }}>Desa</button>
               <span className="rs-fold-chevron" aria-hidden="true">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 6 15 12 9 18"></polyline></svg>
               </span>
-            </button>
+            </div>
             {open && (
               <div className="rs-fold-body">
                 <div className="rs-fold-toolbar"><SectionDefaultBtn section={s.key} /></div>

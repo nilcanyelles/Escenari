@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import type { Band, Concert, Invoice } from "@/lib/types";
-import { MONTH_ABBR, formatCurrency } from "@/lib/format";
+import { MONTH_ABBR, formatCurrency, isConcertOver } from "@/lib/format";
 import { bandColor } from "@/lib/tags";
 import {
   computeMonthAgg, computeYearAgg, computeInvoiceMonthAgg, computeProjectedMonthAgg,
@@ -262,7 +262,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
 
   if (tab === "concerts") {
     const concertsPool = pool.filter((c) => c.kind !== "assaig" && c.kind !== "reunio" && c.kind !== "altre");
-    const done = concertsPool.filter((c) => c.status !== "pendent" && c.date < today).length;
+    const done = concertsPool.filter((c) => c.status !== "pendent" && isConcertOver(c.date, c.time)).length;
     const pending = concertsPool.filter((c) => c.status === "pendent" || c.status === "reservat").length;
     const future = concertsPool.length - done - pending;
     const cancelled = boloConcerts.filter((c) => inPeriod(c.date) && c.status === "cancel·lat").length;
