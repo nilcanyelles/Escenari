@@ -21,7 +21,9 @@ import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
 import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction } from "@/app/(app)/concerts/share-actions";
-import { createAttendanceLinkAction } from "@/app/conf/actions";
+import { createAttendanceLinkAction, listAttendanceLinkConcertsAction } from "@/app/conf/actions";
+import AttendanceLinkModal, { type AttendanceLinkIntent } from "@/components/AttendanceLinkModal";
+import type { AttendanceLinkConcert } from "@/app/conf/actions";
 import { publishBackupRequestAction, setBackupRequestStatusAction, saveDefaultPayoutSplitAction } from "@/app/(app)/grup/actions";
 import type { Transaction } from "@/lib/finance";
 import { saveTransactionAction, deleteTransactionAction } from "@/app/(app)/estadistiques/finance-actions";
@@ -446,26 +448,48 @@ export default function ConcertDetailView({
   const [attBusy, setAttBusy] = useState(false);
   const [attCopied, setAttCopied] = useState(false);
 
-  async function ensureAttToken(): Promise<string> {
-    if (attToken) return attToken;
+  // Pregunta "per a quins concerts?" (AttendanceLinkModal) — només si el
+  // grup té més concerts propers a part d'aquest; si no, l'enllaç d'aquest
+  // concert es crea (o es recupera) directament.
+  const [attModal, setAttModal] = useState<{ intent: AttendanceLinkIntent; others: AttendanceLinkConcert[] } | null>(null);
+
+  function attWaText(url: string, multi: boolean): string {
+    if (multi) {
+      const what = concert.kind === "assaig" ? "propers assajos" : concert.kind === "reunio" ? "properes reunions" : "propers bolos";
+      return `Hola! Confirmeu si sereu als ${what} de ${concert.bandName}: ${url}`;
+    }
+    return `Hola! Confirmeu si sereu al ${concert.kind === "assaig" ? "assaig" : concert.kind === "reunio" ? "la reunió" : "bolo"} de ${concert.bandName} el ${capitalize(formatDateFull(concert.date))}${concert.city ? " a " + concert.city.split(",")[0] : ""}: ${url}`;
+  }
+
+  async function runAttIntent(intent: AttendanceLinkIntent, token: string, multi: boolean) {
+    const url = `${window.location.origin}/conf/${token}`;
+    if (intent === "copy") {
+      await navigator.clipboard.writeText(url);
+      setAttCopied(true);
+      window.setTimeout(() => setAttCopied(false), 1600);
+    } else if (intent === "wa") {
+      window.open(`https://wa.me/?text=${encodeURIComponent(attWaText(url, multi))}`, "_blank");
+    } else {
+      window.open(url, "_blank");
+    }
+  }
+
+  async function startAtt(intent: AttendanceLinkIntent) {
+    if (attBusy) return;
     setAttBusy(true);
-    const { token } = await createAttendanceLinkAction(concert.id);
-    setAttToken(token);
-    setAttBusy(false);
-    return token;
-  }
-
-  async function copyAttLink() {
-    const t = await ensureAttToken();
-    await navigator.clipboard.writeText(`${window.location.origin}/conf/${t}`);
-    setAttCopied(true);
-    window.setTimeout(() => setAttCopied(false), 1600);
-  }
-
-  async function waAttLink() {
-    const t = await ensureAttToken();
-    const text = `Hola! Confirmeu si sereu al ${concert.kind === "assaig" ? "assaig" : concert.kind === "reunio" ? "la reunió" : "bolo"} de ${concert.bandName} el ${capitalize(formatDateFull(concert.date))}${concert.city ? " a " + concert.city.split(",")[0] : ""}: ${window.location.origin}/conf/${t}`;
-    window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
+    try {
+      const list = await listAttendanceLinkConcertsAction(concert.id);
+      const others = list.filter((c) => c.id !== concert.id);
+      if (others.length === 0) {
+        let t = attToken;
+        if (!t) { t = (await createAttendanceLinkAction(concert.id)).token; setAttToken(t); }
+        await runAttIntent(intent, t, false);
+      } else {
+        setAttModal({ intent, others });
+      }
+    } finally {
+      setAttBusy(false);
+    }
   }
 
   // ---- Rider i setlist ----
@@ -1263,16 +1287,17 @@ export default function ConcertDetailView({
             <div>
               <div className="cd-subtitle" style={{ marginBottom: 4 }}>Comparteix per confirmar</div>
               <div className="t-dim" style={{ fontSize: 12.5 }}>
-                Un enllaç per al grup: cada músic es marca i confirma si hi serà.
+                Un enllaç per al grup: cada músic es marca, entra amb el seu compte i confirma si hi serà —
+                per a aquest concert o per a uns quants de propers alhora.
                 Qui no tingui compte se&apos;l crea en un moment i queda vinculat al grup.
               </div>
             </div>
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-              <button type="button" className="btn-save cd-send-convocatoria-btn" disabled={attBusy} onClick={waAttLink}>
+              <button type="button" className="btn-save cd-send-convocatoria-btn" disabled={attBusy} onClick={() => startAtt("wa")}>
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
                 {attBusy ? "Creant…" : "Enviar convocatòria"}
               </button>
-              <button type="button" className="btn-outline cd-copy-link-btn" disabled={attBusy} onClick={copyAttLink}>
+              <button type="button" className="btn-outline cd-copy-link-btn" disabled={attBusy} onClick={() => startAtt("copy")}>
                 {attCopied ? (
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                 ) : (
@@ -1280,9 +1305,7 @@ export default function ConcertDetailView({
                 )}
                 {attCopied ? "Copiat ✓" : "Copia l'enllaç"}
               </button>
-              {attToken && (
-                <button type="button" className="link-btn" onClick={() => window.open(`/conf/${attToken}`, "_blank")}>Obre</button>
-              )}
+              <button type="button" className="link-btn" disabled={attBusy} onClick={() => startAtt("open")}>Obre</button>
             </div>
           </div>
         )}
@@ -1925,6 +1948,18 @@ export default function ConcertDetailView({
       )}
       {posterOpen && (
         <ConcertPosterModal concert={liveConcert} band={band} onClose={() => setPosterOpen(false)} />
+      )}
+      {attModal && (
+        <AttendanceLinkModal
+          concert={concert} others={attModal.others} intent={attModal.intent}
+          onClose={() => setAttModal(null)}
+          onDone={(token, multi) => {
+            const intent = attModal.intent;
+            if (!multi) setAttToken(token);
+            setAttModal(null);
+            void runAttIntent(intent, token, multi);
+          }}
+        />
       )}
     </div>
   );
