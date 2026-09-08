@@ -22,13 +22,10 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
   // Un gestor que també toca en algun grup té l'àrea de músic a un clic.
   const isMusician = await hasBandMembership(profile.clerkUserId);
   const selectedBandId = resolveBandScope(bands, selectedRaw);
-  // La pestanya "Grup" només existeix quan hi ha un grup seleccionat: amb
-  // "tots els grups" no hi ha pàgina de grup.
-  const pages = selectedBandId ? PAGES : PAGES.filter((p) => p.key !== "grup");
   return (
     <AppShell
       todayLabel={todayLabel}
-      pages={pages}
+      pages={PAGES}
       user={{
         name: profile.name,
         roleLabel: ppRow?.role_label || "Gestió",
@@ -42,7 +39,6 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
       selectedBandId={selectedBandId}
       agency={{ name: wsRow?.name || "", logo: wsRow?.logo || "" }}
       subLinks={[
-        { href: "/configuracio", label: "Configuració", emoji: "⚙️" },
         { href: "/suplents", label: "Suplències", emoji: "🔄" },
         ...(isMusician ? [{ href: "/artista", label: "Àrea de músic", emoji: "🎸" }] : []),
       ]}

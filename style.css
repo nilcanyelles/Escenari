@@ -1525,6 +1525,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .artist-band-name { font-weight: 700; font-size: 15.5px; margin: 8px 0 2px; }
 .artist-band-meta { font-size: 12.5px; color: var(--text-muted); }
+/* Variant clicable (targeta de grup a Agència › Grups, on és un <button>
+   en comptes d'un <div>): només reseteja el que un <button> afegeix pel seu
+   compte (vora, font, alineació) — la resta de l'aspecte de targeta ve tal
+   qual de .artist-band-card, que no es toca. */
+.artist-band-card.clickable { appearance: none; -webkit-appearance: none; margin: 0; padding: 0; font: inherit; text-align: left; display: block; width: 100%; cursor: pointer; }
 .invite-card {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   background: oklch(0.68 0.19 290 / 0.08); border: 1px solid oklch(0.68 0.19 290 / 0.3);
@@ -6201,7 +6206,6 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 /* ============ Agència a la barra de grups + perfil del gestor ============ */
 .band-rail-agency-logo { background: var(--bg-card); }
 .band-chip img { width: 16px; height: 16px; border-radius: 4px; object-fit: cover; }
-.mp-agency { display: flex; flex-direction: column; }
 .mp-agency-logo {
   width: 42px; height: 42px; border-radius: 12px; flex: none; cursor: pointer;
   border: 1px solid var(--border-input); background: var(--bg-card-2); color: var(--text-muted);
@@ -6286,11 +6290,31 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .ag-head { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ag-logo { width: 56px; height: 56px; border-radius: 16px; object-fit: cover; background: var(--bg-card-2); }
 .ag-logo-empty { display: inline-flex; align-items: center; justify-content: center; font-size: 24px; }
+/* Logo clicable dins del propi títol, en mode edició. */
+.ag-logo-edit {
+  all: unset; box-sizing: border-box; position: relative; flex: none; cursor: pointer;
+  width: 56px; height: 56px; border-radius: 16px; overflow: hidden; background: var(--bg-card-2);
+  display: inline-flex; align-items: center; justify-content: center; font-size: 24px;
+}
+.ag-logo-edit img { width: 100%; height: 100%; object-fit: cover; }
+.ag-logo-edit-hint {
+  position: absolute; inset: auto 0 0 0; background: oklch(0 0 0 / 0.55); color: #fff;
+  font-size: 9px; text-align: center; padding: 2px 0;
+}
+.ag-name-input { font-size: 19px; font-weight: 700; padding: 7px 10px; }
+/* Llapis al costat del nom de l'agència: clicar-lo obre l'edició in-place. */
+.ag-edit-pencil {
+  all: unset; box-sizing: border-box; cursor: pointer; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 24px; height: 24px; border-radius: 50%; color: var(--text-faint);
+}
+.ag-edit-pencil:hover { background: oklch(1 0 0 / 0.08); color: var(--text-dim); }
 .ag-members { display: flex; flex-direction: column; gap: 10px; }
 .ag-member { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .ag-member.owner { border-color: oklch(0.68 0.19 290 / 0.4); }
 .ag-member-head { display: flex; align-items: center; gap: 12px; }
-.ag-owner-badge { background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-text); }
+.ag-owner-badge { background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-text); display: inline-flex; align-items: center; gap: 4px; }
+.ag-owner-badge svg { flex: none; }
 .ag-member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; }
 .ag-field { display: flex; flex-direction: column; gap: 5px; }
 .ag-assign { display: flex; flex-direction: column; }
@@ -6394,21 +6418,31 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .bill-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .bill-plan { font-family: "Space Grotesk", sans-serif; font-size: 20px; font-weight: 700; display: flex; align-items: center; flex-wrap: wrap; margin: 2px 0 4px; }
 .bill-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.up-modal { width: min(960px, 96vw); max-width: 96vw; }
+/* .modal.up-modal (totes dues classes) perquè guanyi sí o sí a
+   .modal.wide — mateixa especificitat (dues classes) i ve després al full
+   d'estils, però així queda blindat encara que canviï l'ordre. */
+.modal.up-modal { width: min(1240px, 96vw); max-width: 96vw; }
 .up-interval { display: flex; justify-content: center; margin: 4px 0 14px; }
-.up-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
-.up-card { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 14px; padding: 14px 12px; display: flex; flex-direction: column; gap: 6px; }
+.up-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px; }
+.up-card { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 14px; padding: 20px 18px; display: flex; flex-direction: column; gap: 8px; }
 .up-card.rec { border-color: var(--accent); box-shadow: 0 12px 30px -18px oklch(0.68 0.19 290 / 0.8); }
 .up-card.current { opacity: 0.75; }
-.up-name { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 14px; }
-.up-price { font-family: "Space Grotesk", sans-serif; font-weight: 800; font-size: 26px; letter-spacing: -0.02em; line-height: 1.1; }
-.up-price small { font-family: Inter, sans-serif; font-size: 12px; font-weight: 500; color: var(--text-faint); margin-left: 2px; }
-.up-launch { font-size: 11px; color: var(--amber); }
-.up-list { list-style: none; padding: 0; margin: 4px 0 8px; display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); flex: 1; }
+.up-name { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 15.5px; white-space: nowrap; }
+.up-price { font-family: "Space Grotesk", sans-serif; font-weight: 800; font-size: 28px; letter-spacing: -0.02em; line-height: 1.1; white-space: nowrap; }
+.up-price small { font-family: Inter, sans-serif; font-size: 12.5px; font-weight: 500; color: var(--text-faint); margin-left: 2px; }
+/* Preu de referència (12 mesos al preu mensual) tatxat davant del preu
+   anual real — mateixa idea que .up-launch però per a la vista anual. */
+.up-price-was { font-family: Inter, sans-serif; font-weight: 500; font-size: 14px; color: var(--text-faint); margin-right: 6px; }
+.up-launch { font-size: 11.5px; color: var(--amber); }
+.up-savings {
+  align-self: flex-start; font-size: 11.5px; font-weight: 600; color: oklch(0.78 0.14 155);
+  background: oklch(0.72 0.15 155 / 0.16); border-radius: 8px; padding: 3px 8px;
+}
+.up-list { list-style: none; padding: 0; margin: 6px 0 10px; display: flex; flex-direction: column; gap: 7px; font-size: 13px; line-height: 1.4; color: var(--text-muted); flex: 1; }
 .up-list li::before { content: "· "; color: var(--accent-text); }
 .up-card .btn-save, .up-card .btn-outline { width: 100%; }
 .up-founder { margin-top: 14px; display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; background: oklch(0.78 0.15 80 / 0.1); border: 1px solid oklch(0.78 0.15 80 / 0.35); border-radius: 12px; padding: 10px 14px; }
-@media (max-width: 900px) { .up-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .up-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .up-name, .up-price { white-space: normal; } }
 @media (max-width: 520px) { .up-grid { grid-template-columns: 1fr; } }
 
 /* ============ Mòbil: tot visible en un telèfon ============ */

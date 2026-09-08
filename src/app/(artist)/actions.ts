@@ -114,7 +114,7 @@ export async function createGroupAsMusicianAction(input: CreateGroupInput, myIns
   });
   revalidateArtist();
   revalidatePath("/grup");
-  revalidatePath("/configuracio");
+  revalidatePath("/agencia");
   return { bandId: res.bandId, invites: res.invites };
 }
 

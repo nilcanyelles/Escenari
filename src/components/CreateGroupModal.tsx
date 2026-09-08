@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import { instrumentIconFor } from "@/lib/tags";
 import type { CreateGroupPerson, CreateGroupResult } from "@/lib/group-create";
-import { createGroupAction } from "@/app/(app)/configuracio/actions";
+import { createGroupAction } from "@/app/(app)/agencia/actions";
 import { createGroupAsMusicianAction } from "@/app/(artist)/actions";
 
 const DEFAULT_COLOR1 = "#8b7bff";

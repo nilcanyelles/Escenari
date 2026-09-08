@@ -61,14 +61,29 @@ export default function UpgradeModal({ billing, recommended, reason, onClose }: 
             const isCurrent = current === key;
             const isRec = recommended === key;
             const price = interval === "monthly" ? (p.launchMonthly ?? p.monthly) : p.yearly;
+            // Preu "de veres" si es paguessin els 12 mesos per separat —
+            // només té sentit en vista anual (en mensual ja es paga mes a
+            // mes, no hi ha res a comparar-hi).
+            const yearlyFullPrice = p.monthly * 12;
+            // Quant estalvia, per grup, contractar aquest pla d'agència en
+            // comptes de pagar un pla Grup individual per cada grup —
+            // només s'aplica als plans d'agència amb un nombre de grups
+            // definit (l'XL és il·limitat, no hi ha "per grup" a comparar).
+            const bundleSavingsPct = interval === "yearly" && p.groups != null && p.groups > 1
+              ? Math.round((1 - p.yearly / (p.groups * PLANS.grup.yearly)) * 100)
+              : null;
             return (
               <div key={key} className={"up-card" + (isRec ? " rec" : "") + (isCurrent ? " current" : "")}>
                 <div className="up-name">{p.label}</div>
                 <div className="up-price">
+                  {interval === "yearly" && yearlyFullPrice > price && <s className="up-price-was">{yearlyFullPrice} €</s>}
                   {price} €<small>{interval === "monthly" ? "/mes" : "/any"}</small>
                 </div>
                 {interval === "monthly" && p.launchMonthly && p.launchMonthly < p.monthly && (
                   <div className="up-launch"><s>{p.monthly} €</s> preu de llançament</div>
+                )}
+                {bundleSavingsPct != null && bundleSavingsPct > 0 && (
+                  <div className="up-savings">Estalvia un {bundleSavingsPct}% per grup respecte el pla Grup</div>
                 )}
                 <ul className="up-list">
                   <li>{p.groups == null ? "Grups il·limitats" : p.groups === 1 ? "1 grup" : `Fins a ${p.groups} grups`}</li>

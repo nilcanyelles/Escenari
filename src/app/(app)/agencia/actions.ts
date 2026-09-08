@@ -7,35 +7,63 @@ import { requireFeature, groupCap } from "@/lib/billing";
 import { createAgencyInvitations, type AgencyInviteInput } from "@/lib/agency";
 import { createBandWithPeople, type CreateGroupInput, type CreateGroupResult } from "@/lib/group-create";
 import { syncBandPeopleToContacts } from "@/app/(app)/contactes/actions";
+import { uploadFileBlob } from "@/lib/blob-storage";
 
-// Configuració de l'agència: membres, permisos, invitacions i alta de grups.
+// Agència: pla, membres, permisos, invitacions, alta de grups i dades de
+// l'agència (nom i logotip).
 
 async function requireOwner() {
   const p = await requireManagerAction();
-  if (!p.agencyOwner) throw new Error("Només qui mana a l'agència pot fer això");
+  if (!p.agencyOwner) throw new Error("Només un admin de l'agència pot fer això");
   return p;
 }
 
 function revalidateAll() {
-  revalidatePath("/configuracio");
+  revalidatePath("/agencia");
   revalidatePath("/grup");
   revalidatePath("/agenda");
   revalidatePath("/concerts");
   revalidatePath("/resum");
 }
 
+// Nom i logotip de l'agència — abans es desaven des del perfil personal del
+// gestor; ara viuen a Agència › Inici i només un admin els pot canviar.
+export async function saveAgencyInfoAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const p = await requireOwner();
+  const pool = db();
+  const name = String(formData.get("agencyName") || "").trim();
+  if (name) {
+    await pool.query("update workspaces set name=$1 where id=$2", [name, p.workspaceId]);
+  }
+  const logo = formData.get("agencyLogo") as File | null;
+  if (logo && logo.size > 0) {
+    if (logo.size > 8 * 1024 * 1024) return { ok: false, error: "El logotip pot fer 8 MB com a màxim" };
+    if (!logo.type.startsWith("image/")) return { ok: false, error: "El logotip ha de ser una imatge" };
+    const buf = Buffer.from(await logo.arrayBuffer());
+    const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+    const blobUrl = await uploadFileBlob("files/" + id, buf, logo.type);
+    await pool.query(
+      "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+      [id, p.workspaceId, logo.name || "logo", logo.type, logo.size, p.name, blobUrl]
+    );
+    await pool.query("update workspaces set logo=$1 where id=$2", [`/api/file/${id}`, p.workspaceId]);
+  }
+  revalidateAll();
+  return { ok: true };
+}
+
 export async function inviteAgencyMembersAction(list: AgencyInviteInput[]): Promise<{ id: string; name: string; email: string; url: string }[]> {
   const p = await requireOwner();
   await requireFeature(p.workspaceId, "agency");
   const out = await createAgencyInvitations(p.workspaceId, p.name, list);
-  revalidatePath("/configuracio");
+  revalidatePath("/agencia");
   return out;
 }
 
 export async function revokeAgencyInvitationAction(id: string) {
   const p = await requireOwner();
   await db().query("update agency_invitations set status='revocada' where id=$1 and workspace_id=$2", [id, p.workspaceId]);
-  revalidatePath("/configuracio");
+  revalidatePath("/agencia");
 }
 
 export type AgencyMemberPatch = {
@@ -58,7 +86,7 @@ export async function setAgencyMemberAction(clerkUserId: string, patch: AgencyMe
   if (!target) throw new Error("Membre no trobat");
   if (patch.agencyOwner === false && target.agency_owner) {
     const owners = (await pool.query("select count(*)::int as n from profiles where workspace_id=$1 and role='manager' and agency_owner", [p.workspaceId])).rows[0].n;
-    if (owners <= 1) throw new Error("L'agència ha de tenir algú que hi mani");
+    if (owners <= 1) throw new Error("L'agència ha de tenir algun admin");
   }
   await pool.query(
     `update profiles set

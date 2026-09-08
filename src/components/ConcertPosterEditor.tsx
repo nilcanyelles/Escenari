@@ -146,6 +146,28 @@ export default function ConcertPosterEditor({ concert, band, onClose }: { concer
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
 
+    // Avança el percentatge sol, de veres, mentre esperem una resposta de
+    // durada variable (geocodificar, demanar els carrers): s'acosta a `to`
+    // cada cop més a poc a poc (mai hi arriba del tot) perquè, si triga més
+    // del previst, es continuï veient avançar en comptes de quedar-se
+    // parat a mig camí — quan el pas de veres acaba, es fixa el número
+    // exacte i es talla la rampa.
+    let stopRamp: (() => void) | null = null;
+    function rampProgress(from: number, to: number, tauMs: number) {
+      stopRamp?.();
+      const t0 = performance.now();
+      let raf = 0;
+      function tick() {
+        if (cancelled) return;
+        const elapsed = performance.now() - t0;
+        const eased = 1 - Math.exp(-elapsed / tauMs);
+        setMapProgress(Math.round(from + (to - from) * eased));
+        raf = requestAnimationFrame(tick);
+      }
+      raf = requestAnimationFrame(tick);
+      stopRamp = () => cancelAnimationFrame(raf);
+    }
+
     // Mode fosc: text clar (crema) amb ombra fosca — pensat per a fotos
     // fosques. Mode clar: text fosc amb ombra clara — per a fotos clares.
     // El PNG exportat sempre és transparent; només canvia aquest to.
@@ -270,11 +292,18 @@ export default function ConcertPosterEditor({ concert, band, onClose }: { concer
       let drewMap = false;
       const q = [concert.venue, concert.city].filter(Boolean).join(", ");
       if (q) {
+        rampProgress(10, 48, 900);
         const geo = await geocode(q);
+        stopRamp?.();
         setMapProgress(50);
         if (geo && !cancelled) {
+          // L'Overpass és el pas que triga de veres (uns quants segons) —
+          // la rampa és més lenta (tau més gran) perquè no s'acosti massa
+          // de pressa al topall abans que la resposta arribi de veres.
+          rampProgress(50, 92, 2600);
           const { ways } = await getStreetWaysAction(geo.lat, geo.lon, MAP_RADIUS_M);
-          setMapProgress(90);
+          stopRamp?.();
+          setMapProgress(93);
           if (!cancelled && ways.length) {
             // Projecció local senzilla centrada al punt del concert
             // (equirectangular amb correcció de cos(lat), com ja fa servir
@@ -461,7 +490,7 @@ export default function ConcertPosterEditor({ concert, band, onClose }: { concer
     }
 
     draw().catch((err) => console.error("ConcertPosterEditor: error dibuixant el pòster", err));
-    return () => { cancelled = true; };
+    return () => { cancelled = true; stopRamp?.(); };
     // El pare (ConcertDetailView) reconstrueix l'objecte "concert" a cada
     // render seu (liveConcert = {...concert, ...cf, ...}), així que fer
     // servir concert/band sencers com a dependències feia que qualsevol

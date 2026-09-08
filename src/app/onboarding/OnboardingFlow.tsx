@@ -246,12 +246,12 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
               </div>
             </>
           ) : (
-            <p className="onboarding-sub">Ara crea el primer grup i convida&apos;n els músics des de Configuració.</p>
+            <p className="onboarding-sub">Ara crea el primer grup i convida&apos;n els músics des d&apos;Agència.</p>
           )}
           <button
             className="btn-primary"
             onClick={() => {
-              router.push("/configuracio");
+              router.push("/agencia");
               router.refresh();
             }}
           >

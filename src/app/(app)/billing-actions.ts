@@ -41,8 +41,8 @@ export async function createCheckoutSessionAction(plan: PlanKey, interval: Inter
     client_reference_id: p.workspaceId,
     subscription_data: { metadata: { workspaceId: p.workspaceId, plan } },
     allow_promotion_codes: true,
-    success_url: `${appBaseUrl()}/configuracio?billing=ok&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appBaseUrl()}/configuracio?billing=cancel`,
+    success_url: `${appBaseUrl()}/agencia?billing=ok&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appBaseUrl()}/agencia?billing=cancel`,
     locale: "es",
   });
   return { url: session.url || undefined };
@@ -62,8 +62,8 @@ export async function createFounderCheckoutAction(): Promise<{ url?: string; err
     client_reference_id: p.workspaceId,
     metadata: { workspaceId: p.workspaceId, founder: "1" },
     allow_promotion_codes: true,
-    success_url: `${appBaseUrl()}/configuracio?billing=ok&session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${appBaseUrl()}/configuracio?billing=cancel`,
+    success_url: `${appBaseUrl()}/agencia?billing=ok&session_id={CHECKOUT_SESSION_ID}`,
+    cancel_url: `${appBaseUrl()}/agencia?billing=cancel`,
     locale: "es",
   });
   return { url: session.url || undefined };
@@ -76,8 +76,8 @@ export async function createPortalSessionAction(): Promise<{ url?: string; error
   if (!ws?.stripe_customer_id) return { error: "Encara no hi ha cap subscripció." };
   const session = await getStripe().billingPortal.sessions.create({
     customer: ws.stripe_customer_id,
-    return_url: `${appBaseUrl()}/configuracio`,
+    return_url: `${appBaseUrl()}/agencia`,
   });
-  revalidatePath("/configuracio");
+  revalidatePath("/agencia");
   return { url: session.url };
 }

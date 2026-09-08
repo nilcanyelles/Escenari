@@ -70,6 +70,17 @@ export default function AppShell({
   const activeBandObj = (bands || []).find((b) => b.id === activeBand) || null;
   const hasRail = Array.isArray(bands);
 
+  // "Grup" només té sentit amb un grup seleccionat i fora d'Agència (la
+  // intenció d'Agència és la vista general de tota l'agència, no la d'un
+  // grup concret — encara que hi hagi un grup seleccionat de fons). Fora
+  // d'Agència, "Agència" només surt si no hi ha cap grup seleccionat.
+  const onAgenciaRoute = pathname === routeBase + "/agencia" || pathname.startsWith(routeBase + "/agencia/");
+  const shownPages = pages.filter((p) => {
+    if (p.key === "grup") return !!activeBand && !onAgenciaRoute;
+    if (p.key === "agencia") return onAgenciaRoute || !activeBand;
+    return true;
+  });
+
   // El menú lateral de grups es pot amagar — es recorda entre pàgines
   // (localStorage, no cookie: és només una preferència visual d'aquest
   // navegador, no cal que el servidor la conegui).
@@ -131,7 +142,10 @@ export default function AppShell({
   }
 
   function BandRailItem({ b }: { b: ShellBand }) {
-    const active = activeBand === b.id;
+    // A Agència res del grup queda marcat com a actiu: l'única fila
+    // seleccionada és la de l'agència, encara que quedi un grup seleccionat
+    // de fons (la cookie no es toca en anar-hi).
+    const active = activeBand === b.id && !onAgenciaRoute;
     return (
       <button
         type="button"
@@ -161,13 +175,15 @@ export default function AppShell({
         </>
       )}
       <div className="band-rail-title">{agency?.name ? "Agència" : "Els teus grups"}</div>
-      {/* Gestor: l'agència (nom i logotip) és qui té tots els grups a dins;
-          clicar-la és veure'ls tots. Músic: "Tots els grups". */}
+      {/* Gestor: l'agència (nom i logotip) és qui té tots els grups a dins
+          — clicar-la porta a la pàgina d'Agència (pla, grups, membres); per
+          tornar a "tots els grups" cal desseleccionar el grup actiu (clicar-
+          lo de nou a la llista de sota). Músic: "Tots els grups". */}
       <button
         type="button"
-        className={"band-rail-item band-rail-all" + (activeBand === "" ? " active" : "")}
-        onClick={() => selectBand("")}
-        title={agency?.name ? `${agency.name} — tots els grups` : "Tots els grups"}
+        className={"band-rail-item band-rail-all" + (activeBand === "" || onAgenciaRoute ? " active" : "")}
+        onClick={() => { if (agency) { router.push(routeBase + "/agencia"); } else { selectBand(""); } }}
+        title={agency?.name ? `${agency.name} — Agència` : "Tots els grups"}
       >
         {agency?.logo ? (
           <img className="band-rail-avatar band-rail-agency-logo" src={agency.logo} alt="" />
@@ -202,7 +218,7 @@ export default function AppShell({
           {l.emoji} {l.label}
         </Link>
       ))}
-      <button type="button" className={"band-chip" + (activeBand === "" ? " active" : "")} onClick={() => selectBand("")}>
+      <button type="button" className={"band-chip" + (activeBand === "" || onAgenciaRoute ? " active" : "")} onClick={() => { if (agency) { router.push(routeBase + "/agencia"); } else { selectBand(""); } }}>
         {agency?.logo && <img src={agency.logo} alt="" />}{agency?.name || "Tots"}
       </button>
       {(subLinks || []).map((l) => (
@@ -214,7 +230,7 @@ export default function AppShell({
         <button
           key={b.id}
           type="button"
-          className={"band-chip" + (activeBand === b.id ? " active" : "")}
+          className={"band-chip" + (activeBand === b.id && !onAgenciaRoute ? " active" : "")}
           onClick={() => selectBand(activeBand === b.id ? "" : b.id)}
         >
           <img src={b.logo || bandPhotoDataUri(b)} alt="" />
@@ -258,10 +274,15 @@ export default function AppShell({
             {agency?.logo && (
               <>
                 <span className="page-header-sep">/</span>
-                <img className="brand-mark page-header-agency" src={agency.logo} alt={agency.name} title={agency.name} />
+                <Link href={routeBase + "/agencia"} title={agency.name || "Agència"}>
+                  <img className="brand-mark page-header-agency" src={agency.logo} alt={agency.name} />
+                </Link>
               </>
             )}
-            {activeBandObj && (
+            {/* A Agència no hi surt cap logo de grup, encara que quedi un
+                grup seleccionat de fons — només apareix en entrar-hi (a la
+                seva pròpia pàgina). */}
+            {activeBandObj && !onAgenciaRoute && (
               <>
                 <span className="page-header-sep">/</span>
                 <img className="brand-mark page-header-band" src={activeBandObj.logo || bandPhotoDataUri(activeBandObj)} alt={activeBandObj.name} title={activeBandObj.name} />
@@ -278,7 +299,7 @@ export default function AppShell({
               }}
               aria-hidden="true"
             ></div>
-            {pages.map((p) => {
+            {shownPages.map((p) => {
               const active = pathname === p.href || pathname.startsWith(p.href + "/");
               return (
                 <Link
@@ -305,7 +326,7 @@ export default function AppShell({
       </div>
 
       <div className="bottom-nav mobile-only">
-        {pages.map((p) => {
+        {shownPages.map((p) => {
           const active = pathname === p.href || pathname.startsWith(p.href + "/");
           return (
             <Link
@@ -351,7 +372,6 @@ export default function AppShell({
             photoUrl: user.photoUrl || "", phone: user.phone || "",
             whatsapp: user.whatsapp || "", email: user.email || "",
           }}
-          agency={agency || null}
           onClose={() => setProfileEditOpen(false)}
         />
       )}
