@@ -1,6 +1,7 @@
 import type { Concert } from "./types";
 
 export const RS_SECTION_ICONS: Record<string, string> = {
+  "Informació general": '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
   "Lloc": '<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle>',
   "Contactes": '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
   "Horaris": '<circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline>',
@@ -14,15 +15,29 @@ export const RS_LLOC_ICONS: Record<string, string> = {
   "parking": '<circle cx="12" cy="12" r="9.5"></circle><text x="12" y="16.3" text-anchor="middle" font-size="12.5" font-weight="700" font-family="Inter,sans-serif" stroke="none" fill="currentColor">P</text>',
 };
 
-export type LlocItem = { label: string; value: string; plates?: string; vehicleCount?: string };
+// "link" és propi de Descàrrega/Parking (l'enllaç de Google Maps, separat
+// dels detalls de text lliure que ja hi havia a "value").
+export type LlocItem = { label: string; value: string; plates?: string; link?: string };
 export type ContactItem = { role: string; name: string; phone: string; company: string };
 export type ScheduleItem = { phase: string; start: string; end: string };
 export type HospitalitatItem = {
   label: string; value: string; included?: boolean;
   phone?: string; location?: string; parkingAvailable?: boolean; parkingPlates?: string;
   checkIn?: string; checkOut?: string; breakfastAvailable?: boolean; breakfastTime?: string;
+  // Qui gestiona l'allotjament — al formulari públic de regidor, si és el
+  // grup, només se'n veu el nom (vegeu HotelBlock a RouteSheetFields.tsx).
+  arrangedBy?: "grup" | "promotor";
 };
-export type TecnicItem = { label: string; value: string; included?: boolean };
+// "status" només s'usa per al camp especial "Contra rider": l'estat
+// d'aprovació, en un cicle de 3 (mai desat com a opció predeterminada, és
+// propi de cada concert — vegeu stripSectionForDefault).
+// counterFile*: el document de contrarider que el promotor penja des del
+// formulari públic de regidor (mai l'estat/notes, que és cosa de
+// l'agència) — vegeu HotelBlock/FieldRow per l'ús.
+export type TecnicItem = {
+  label: string; value: string; included?: boolean; status?: "aprovat" | "no-rebut" | "esperant-canvis";
+  counterFileUrl?: string; counterFileMime?: string; counterFileName?: string;
+};
 
 export type RouteSheet = {
   lloc: LlocItem[];
@@ -30,6 +45,11 @@ export type RouteSheet = {
   schedule: ScheduleItem[];
   hospitalitat: HospitalitatItem[];
   tecnic: TecnicItem[];
+  // Etiquetes de camps "sempre presents per defecte" (Allotjament, Pantalla
+  // LED, Número de vehicles, Backline) que s'han eliminat expressament en
+  // aquest concert — sense això, normalizeRouteSheet els tornaria a afegir
+  // cada cop que es torna a carregar la pàgina (vegeu més avall).
+  removedDefaults?: Partial<Record<"lloc" | "contacts" | "schedule" | "hospitalitat" | "tecnic", string[]>>;
 };
 
 // Plantilla de "només opcions" que un grup pot desar per secció (etiquetes,
@@ -48,6 +68,7 @@ export function defaultRouteSheet(c: { venue?: string; time?: string }, bandDefa
       { label: "Adreça", value: "" },
       { label: "Descàrrega", value: "" },
       { label: "Parking", value: "", plates: "" },
+      { label: "Número de vehicles", value: "", plates: "" },
     ],
     contacts: [{ role: "", name: "", phone: "", company: "" }],
     schedule: [
@@ -56,17 +77,21 @@ export function defaultRouteSheet(c: { venue?: string; time?: string }, bandDefa
       { phase: "Proves de so", start: "", end: "" },
       { phase: "Concert", start: c.time || "", end: "" },
     ],
+    // "included" es queda sense definir (ni sí ni no) fins que es cliqui
+    // explícitament un dels dos botons (tick/creu) — no ha d'aparèixer cap
+    // opció ja activada o desactivada per defecte.
     hospitalitat: [
-      { label: "Dietes", value: "", included: true },
-      { label: "Catering", value: "", included: true },
-      { label: "Camerino", value: "", included: true },
-      { label: "Allotjament", value: "", included: true, phone: "", location: "", parkingAvailable: true, parkingPlates: "", checkIn: "", checkOut: "", breakfastAvailable: true, breakfastTime: "" },
+      { label: "Dietes", value: "" },
+      { label: "Catering", value: "" },
+      { label: "Camerino", value: "" },
+      { label: "Allotjament", value: "", phone: "", location: "", parkingPlates: "", checkIn: "", checkOut: "", breakfastTime: "" },
     ],
     tecnic: [
       { label: "Mesures escenari", value: "" },
       { label: "Tarimes", value: "" },
       { label: "Contra rider", value: "" },
-      { label: "Pantalla LED", value: "", included: true },
+      { label: "Backline", value: "" },
+      { label: "Pantalla LED", value: "" },
     ],
   };
   if (bandDefault) {
@@ -109,7 +134,7 @@ export function stripSectionForDefault<K extends keyof RouteSheet>(section: K, i
 export function rsBlankItem(section: keyof RouteSheet) {
   if (section === "contacts") return { role: "", name: "", phone: "", company: "" };
   if (section === "schedule") return { phase: "", start: "", end: "" };
-  if (section === "hospitalitat") return { label: "", value: "", phone: "", location: "", parkingAvailable: true, parkingPlates: "", checkIn: "", checkOut: "", breakfastAvailable: true, breakfastTime: "" };
+  if (section === "hospitalitat") return { label: "", value: "", phone: "", location: "", parkingPlates: "", checkIn: "", checkOut: "", breakfastTime: "" };
   return { label: "", value: "" };
 }
 
@@ -123,6 +148,13 @@ export function normalizeRouteSheet(rs: RouteSheet | null | undefined, c: { venu
   out.hospitalitat = out.hospitalitat && out.hospitalitat.length ? out.hospitalitat : def.hospitalitat;
   out.tecnic = out.tecnic && out.tecnic.length ? out.tecnic : def.tecnic;
 
+  // Abans de tornar a afegir qualsevol d'aquests camps "sempre presents per
+  // defecte" que falti, es comprova que no s'hagi eliminat expressament —
+  // si l'usuari l'ha esborrat, es queda esborrat per a aquest concert.
+  const removed = out.removedDefaults || {};
+  const isRemoved = (section: keyof typeof removed, label: string) =>
+    (removed[section] || []).some((l) => l.trim().toLowerCase() === label.trim().toLowerCase());
+
   out.hospitalitat.forEach((it) => { if (it.label && it.label.trim().toLowerCase() === "hotel") it.label = "Allotjament"; });
   let seenAllotjament = false;
   out.hospitalitat = out.hospitalitat.filter((it) => {
@@ -132,7 +164,7 @@ export function normalizeRouteSheet(rs: RouteSheet | null | undefined, c: { venu
     seenAllotjament = true;
     return true;
   });
-  if (!seenAllotjament) out.hospitalitat = out.hospitalitat.concat([def.hospitalitat[def.hospitalitat.length - 1]]);
+  if (!seenAllotjament && !isRemoved("hospitalitat", "allotjament")) out.hospitalitat = out.hospitalitat.concat([def.hospitalitat[def.hospitalitat.length - 1]]);
 
   let seenPantallaLed = false;
   out.tecnic = out.tecnic.filter((it) => {
@@ -142,9 +174,57 @@ export function normalizeRouteSheet(rs: RouteSheet | null | undefined, c: { venu
     seenPantallaLed = true;
     return true;
   });
-  if (!seenPantallaLed) out.tecnic = out.tecnic.concat([def.tecnic[def.tecnic.length - 1]]);
+  if (!seenPantallaLed && !isRemoved("tecnic", "pantalla led")) out.tecnic = out.tecnic.concat([def.tecnic[def.tecnic.length - 1]]);
+
+  // Camps nous que un full de ruta ja desat abans de la seva existència no
+  // té: s'afegeixen (un cop) al final, mai duplicats — tret que l'usuari ja
+  // els hagi esborrat expressament per a aquest concert.
+  const hasVehicleCount = out.lloc.some((it) => it.label && it.label.trim().toLowerCase() === "número de vehicles");
+  if (!hasVehicleCount && !isRemoved("lloc", "número de vehicles")) {
+    const def2 = def.lloc.find((it) => it.label.trim().toLowerCase() === "número de vehicles");
+    if (def2) out.lloc = out.lloc.concat([def2]);
+  }
+  const hasBackline = out.tecnic.some((it) => it.label && it.label.trim().toLowerCase() === "backline");
+  if (!hasBackline && !isRemoved("tecnic", "backline")) {
+    const def3 = def.tecnic.find((it) => it.label.trim().toLowerCase() === "backline");
+    if (def3) out.tecnic = out.tecnic.concat([def3]);
+  }
 
   return out;
+}
+
+// L'"Adreça" del full de ruta és el mateix camp que "Informació general"
+// (mai un text lliure propi seu — vegeu RouteSheetEditor), així que
+// qualsevol comprovació de completesa o vista n'ha de fer servir sempre la
+// del concert, mai el valor que hi hagués desat abans de vincular-los (que
+// quedaria congelat).
+export function withLiveAddress(lloc: LlocItem[] | undefined, address: string): LlocItem[] {
+  return (lloc || []).map((it) =>
+    it.label && it.label.trim().toLowerCase() === "adreça" ? { ...it, value: address || it.value } : it
+  );
+}
+
+// Enllaç de Google Maps d'un camp de Lloc (Descàrrega/Parking): l'"Enllaç"
+// desat si n'hi ha, si no un de construït a partir del text de "Detalls" —
+// mateix criteri que RouteSheetPreviewDoc, per si cal en algun altre lloc
+// (com la vista del dia de bolo). Retorna "" si no hi ha res d'aprofitable.
+export function llocItemMapsHref(item: LlocItem | undefined): string {
+  if (!item) return "";
+  const value = item.value || "";
+  const legacyValueIsLink = !item.link && !!value && /^https?:\/\//i.test(value.trim());
+  const link = item.link && item.link.trim() ? item.link.trim() : legacyValueIsLink ? value.trim() : "";
+  if (link) return link;
+  const text = legacyValueIsLink ? "" : value;
+  return text.trim() ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}` : "";
+}
+
+// La mateixa idea per a l'hora d'inici de la fase "Concert" dels horaris —
+// és el mateix camp que "Hora exacta" d'Informació general (vegeu
+// RouteSheetEditor), mai un valor propi del full de ruta.
+export function withLiveConcertStart(schedule: ScheduleItem[] | undefined, exactTime: string): ScheduleItem[] {
+  return (schedule || []).map((ph) =>
+    ph.phase && ph.phase.trim().toLowerCase() === "concert" ? { ...ph, start: exactTime || ph.start } : ph
+  );
 }
 
 function rsAllFilled<T extends Record<string, unknown>>(items: T[] | undefined, fields: (keyof T)[]): boolean {
@@ -156,7 +236,9 @@ function rsHospitalitatComplete(items: HospitalitatItem[] | undefined): boolean 
 function rsTecnicComplete(items: TecnicItem[] | undefined): boolean {
   return !!(items && items.length) && items.every((it) => {
     if (!it.label || !String(it.label).trim()) return false;
-    if (it.label.trim().toLowerCase() === "pantalla led") return true;
+    const label = it.label.trim().toLowerCase();
+    if (label === "pantalla led") return it.included !== undefined;
+    if (label === "contra rider" && it.status === "aprovat") return true;
     return !!(it.value && String(it.value).trim());
   });
 }
@@ -173,12 +255,23 @@ export function rsCompletionPercent(c: Concert): number {
   let total = 0, filled = 0;
   const check = (v: unknown) => { total++; if (v && String(v).trim()) filled++; };
 
-  (rs.lloc || []).forEach((it) => { check(it.value); });
+  withLiveAddress(rs.lloc, c.address).forEach((it) => { check(it.value); });
   (rs.contacts || []).forEach((it) => { check(it.role); check(it.name); check(it.phone); check(it.company); });
-  (rs.schedule || []).forEach((it) => { check(it.start); check(it.end); });
-  (rs.hospitalitat || []).forEach((it) => { check(it.value); });
+  withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => { check(it.start); check(it.end); });
+  // Un "sí" o un "no" ja és una resposta completa per si sola — no cal
+  // haver escrit també algun detall perquè el camp compti com a fet.
+  (rs.hospitalitat || []).forEach((it) => {
+    total++;
+    if ((it.value && String(it.value).trim()) || it.included !== undefined) filled++;
+  });
+  // Un contrarider "aprovat", o una pantalla LED amb el tick o la creu ja
+  // marcats, ja són una resposta completa per si soles, encara que no s'hi
+  // hagi afegit cap nota.
   (rs.tecnic || []).forEach((it) => {
-    if (!(it.label && it.label.trim().toLowerCase() === "pantalla led")) check(it.value);
+    const label = it.label && it.label.trim().toLowerCase();
+    total++;
+    if (label === "pantalla led") { if (it.included !== undefined) filled++; return; }
+    if ((it.value && String(it.value).trim()) || (label === "contra rider" && it.status === "aprovat")) filled++;
   });
 
   if (!total) return 0;
@@ -188,11 +281,11 @@ export function rsCompletionPercent(c: Concert): number {
 export function rsIsComplete(c: Concert): boolean {
   const rs = c.routeSheet as RouteSheet | null | undefined;
   if (!rs) return false;
-  const hasLloc = rsAllFilled(rs.lloc, ["label", "value"]);
+  const hasLloc = rsAllFilled(withLiveAddress(rs.lloc, c.address), ["label", "value"]);
   const hasContacts = rsAllFilled(rs.contacts, ["role", "name", "phone", "company"]);
   const hasHospitalitat = rsHospitalitatComplete(rs.hospitalitat);
   const hasTecnic = rsTecnicComplete(rs.tecnic);
-  const hasFullSchedule = !!(rs.schedule && rs.schedule.length && rs.schedule.every((ph) => ph.phase && ph.start && ph.end));
+  const hasFullSchedule = !!(rs.schedule && rs.schedule.length && withLiveConcertStart(rs.schedule, c.exactTime).every((ph) => ph.phase && ph.start && ph.end));
   return hasLloc && hasContacts && hasHospitalitat && hasTecnic && hasFullSchedule;
 }
 

@@ -28,10 +28,16 @@ export type BandPublicData = {
   tags: string[];
   city: string;
   bio: string;
+  // Any escrit a mà (buit si encara es calcula sol) i el calculat sol
+  // (a partir del primer concert, sense l'escrit a mà) — vegeu "since" a
+  // "stats" pel que s'acaba mostrant de veres.
+  activeSince: string;
+  autoSince: string | null;
   socialLinks: SocialLinks;
   socialStats: SocialStats;
   trackedPlatforms: SocialPlatform[];
   members: PublicMember[];
+  crew: PublicMember[];
   stats: { concertsDone: number; upcoming: number; since: string | null };
 };
 
@@ -76,20 +82,30 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
   const dates: string[] = concertRows.rows.map((r) => r.date);
   const done = dates.filter((d) => d < t).length;
   const upcoming = dates.filter((d) => d >= t).length;
-  const since = dates.length ? dates.slice().sort()[0].slice(0, 4) : null;
+  // Si el grup l'ha escrit a mà (activeSince), sempre guanya — el càlcul a
+  // partir del primer concert és només per als grups que encara no l'han
+  // corregit (poden fer anys que existeixen abans de portar els bolos a
+  // Escenari). "autoSince" (el càlcul sol, sense l'escrit a mà) es passa a
+  // part perquè, en netejar l'any escrit a mà des del client, es pugui
+  // tornar a mostrar el calculat sense haver d'esperar un refresc.
+  const activeSince: string = b.active_since || "";
+  const autoSince = dates.length ? dates.slice().sort()[0].slice(0, 4) : null;
+  const since = activeSince || autoSince;
 
   const links: SocialLinks = b.social_links || {};
   const tracking: SocialTracking = b.social_tracking || {};
   const connected = new Set<string>(accountRows.rows.map((r) => r.platform));
   const trackedPlatforms = SOCIAL_PLATFORMS.filter((p) => isTracked(p, tracking, links, connected.has(p)));
 
-  const members: PublicMember[] = ((b.members || []) as Person[]).map((m) => ({
+  const toPublicMember = (m: Person): PublicMember => ({
     name: m.name,
     instruments: instrumentsFor(m),
     role: m.role || "",
     photoFileId: photos[normalize(m.name)] || null,
     igHandle: igs[normalize(m.name)] || "",
-  }));
+  });
+  const members: PublicMember[] = ((b.members || []) as Person[]).map(toPublicMember);
+  const crew: PublicMember[] = ((b.crew || []) as Person[]).map(toPublicMember);
 
   return {
     token,
@@ -103,10 +119,13 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
     tags: b.tags || [],
     city: b.city || "",
     bio: b.bio || "",
+    activeSince,
+    autoSince,
     socialLinks: links,
     socialStats: b.social_stats || {},
     trackedPlatforms,
     members,
+    crew,
     stats: { concertsDone: done, upcoming, since },
   };
 }

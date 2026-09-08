@@ -21,9 +21,12 @@ export async function createAttendanceLinkAction(concertId: string): Promise<{ t
   return { token };
 }
 
-// Un músic (identificat amb el seu compte) confirma o rebutja des de l'enllaç.
-// Si el membre encara no tenia compte vinculat, el compte que respon queda
-// vinculat automàticament com a músic d'aquest grup.
+// Qualsevol persona amb l'enllaç confirma o rebutja assistència — no cal
+// compte ni registre, l'enllaç ja fa de control d'accés (es comparteix
+// directament amb el grup pel WhatsApp). Si qui respon SÍ que té la sessió
+// iniciada amb un compte d'Escenari, es fa servir com a bonus: es respecten
+// els vincles ja fets i, si el membre encara no en tenia, el compte que
+// respon queda vinculat automàticament com a músic d'aquest grup.
 export async function respondConfAction(
   token: string,
   memberName: string,
@@ -31,15 +34,17 @@ export async function respondConfAction(
 ): Promise<{ ok: boolean; error?: string }> {
   if (answer !== "yes" && answer !== "no") return { ok: false, error: "Resposta no vàlida" };
   const { userId } = await auth();
-  if (!userId) return { ok: false, error: "Cal iniciar sessió per confirmar" };
 
   const pool = db();
 
   // Un compte de gestor mai pot reclamar ni respondre per un músic: el gestor
-  // marca l'assistència des de la fitxa del concert.
-  const myProfile = (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0];
-  if (myProfile?.role === "manager") {
-    return { ok: false, error: "Ets el gestor — marca l'assistència des de la fitxa del concert, no des d'aquest enllaç." };
+  // marca l'assistència des de la fitxa del concert. Només aplica si hi ha
+  // algú identificat — la resposta anònima no té aquest concepte.
+  if (userId) {
+    const myProfile = (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0];
+    if (myProfile?.role === "manager") {
+      return { ok: false, error: "Ets el gestor — marca l'assistència des de la fitxa del concert, no des d'aquest enllaç." };
+    }
   }
 
   const concert = (await pool.query(
@@ -53,49 +58,51 @@ export async function respondConfAction(
   const member = [...(band.members || []), ...(band.crew || [])].find((m: Person) => normalize(m.name) === normalize(memberName));
   if (!member) return { ok: false, error: "Aquesta persona no és membre del grup" };
 
-  // Qui pot respondre per aquest membre: el compte ja vinculat, o qualsevol
-  // compte nou si el membre encara no en té (queda vinculat en respondre).
-  const memberLink = (await pool.query(
-    "select clerk_user_id from band_members where band_id=$1 and lower(member_name)=lower($2)",
-    [band.id, member.name]
-  )).rows[0];
-  if (memberLink && memberLink.clerk_user_id !== userId) {
-    return { ok: false, error: `${member.name} ja té el compte vinculat — només pot confirmar la mateixa persona.` };
-  }
-  const myLink = (await pool.query(
-    "select member_name from band_members where band_id=$1 and clerk_user_id=$2",
-    [band.id, userId]
-  )).rows[0];
-  if (myLink && normalize(myLink.member_name) !== normalize(member.name)) {
-    return { ok: false, error: `El teu compte ja està vinculat a ${myLink.member_name} en aquest grup.` };
-  }
+  if (userId) {
+    // Amb sessió iniciada es respecten els vincles ja fets — sense, qualsevol
+    // visitant amb l'enllaç pot respondre per qualsevol membre.
+    const memberLink = (await pool.query(
+      "select clerk_user_id from band_members where band_id=$1 and lower(member_name)=lower($2)",
+      [band.id, member.name]
+    )).rows[0];
+    if (memberLink && memberLink.clerk_user_id !== userId) {
+      return { ok: false, error: `${member.name} ja té el compte vinculat — només pot confirmar la mateixa persona.` };
+    }
+    const myLink = (await pool.query(
+      "select member_name from band_members where band_id=$1 and clerk_user_id=$2",
+      [band.id, userId]
+    )).rows[0];
+    if (myLink && normalize(myLink.member_name) !== normalize(member.name)) {
+      return { ok: false, error: `El teu compte ja està vinculat a ${myLink.member_name} en aquest grup.` };
+    }
 
-  if (!memberLink) {
-    // Alta automàtica: si el compte és nou (sense perfil), es crea com a
-    // músic amb la informació que ja tenim del membre.
-    const hasProfile = (await pool.query("select 1 from profiles where clerk_user_id=$1", [userId])).rows[0];
-    if (!hasProfile) {
-      const cu = await currentUser();
-      const email = cu?.primaryEmailAddress?.emailAddress || cu?.emailAddresses?.[0]?.emailAddress || "";
-      const instruments: string[] = member.instruments?.length
-        ? member.instruments
-        : String(member.role || "").split(/[,/]| i /i).map((s: string) => s.trim()).filter(Boolean);
+    if (!memberLink) {
+      // Alta automàtica: si el compte és nou (sense perfil), es crea com a
+      // músic amb la informació que ja tenim del membre.
+      const hasProfile = (await pool.query("select 1 from profiles where clerk_user_id=$1", [userId])).rows[0];
+      if (!hasProfile) {
+        const cu = await currentUser();
+        const email = cu?.primaryEmailAddress?.emailAddress || cu?.emailAddresses?.[0]?.emailAddress || "";
+        const instruments: string[] = member.instruments?.length
+          ? member.instruments
+          : String(member.role || "").split(/[,/]| i /i).map((s: string) => s.trim()).filter(Boolean);
+        await pool.query(
+          `insert into profiles (clerk_user_id, email, role, name, instruments)
+           values ($1, $2, 'artist', $3, $4) on conflict (clerk_user_id) do nothing`,
+          [userId, email, member.name, JSON.stringify(instruments)]
+        );
+      }
       await pool.query(
-        `insert into profiles (clerk_user_id, email, role, name, instruments)
-         values ($1, $2, 'artist', $3, $4) on conflict (clerk_user_id) do nothing`,
-        [userId, email, member.name, JSON.stringify(instruments)]
+        `insert into band_members (band_id, clerk_user_id, member_name) values ($1,$2,$3)
+         on conflict (band_id, clerk_user_id) do update set member_name = excluded.member_name`,
+        [band.id, userId, member.name]
+      );
+      // Vincula el perfil públic creat pel gestor, si n'hi havia.
+      await pool.query(
+        "update person_profiles set clerk_user_id=$1 where workspace_id=$2 and lower(person_name)=lower($3) and clerk_user_id is null",
+        [userId, concert.workspace_id, member.name]
       );
     }
-    await pool.query(
-      `insert into band_members (band_id, clerk_user_id, member_name) values ($1,$2,$3)
-       on conflict (band_id, clerk_user_id) do update set member_name = excluded.member_name`,
-      [band.id, userId, member.name]
-    );
-    // Vincula el perfil públic creat pel gestor, si n'hi havia.
-    await pool.query(
-      "update person_profiles set clerk_user_id=$1 where workspace_id=$2 and lower(person_name)=lower($3) and clerk_user_id is null",
-      [userId, concert.workspace_id, member.name]
-    );
   }
 
   if (answer === "yes") {

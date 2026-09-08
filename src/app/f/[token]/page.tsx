@@ -6,7 +6,10 @@ export const dynamic = "force-dynamic";
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  // Un Date d'una columna "date" de Postgres representa mitjanit LOCAL
+  // d'aquell dia — amb toISOString() (que sempre passa a UTC) es podia
+  // desplaçar un dia enrere segons la zona horària del servidor.
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
 // Formulari públic (sense sessió) per omplir la informació o el full de ruta
@@ -50,6 +53,12 @@ export default async function PublicSharePage({ params }: { params: Promise<{ to
       </div>
     );
   }
+  const band = (await db().query("select vehicles from bands where id=$1", [c.band_id])).rows[0];
+  // Rider assignat a aquest concert (només per veure'l — s'edita a la
+  // pestanya Documents del formulari normal, mai des d'aquí).
+  const rider = c.rider_id
+    ? (await db().query("select name, public_token from riders where id=$1", [c.rider_id])).rows[0]
+    : null;
 
   await db().query("update share_links set last_opened_at=now() where id=$1", [token]);
 
@@ -61,6 +70,15 @@ export default async function PublicSharePage({ params }: { params: Promise<{ to
     city: c.city,
     festaEntitat: c.festa_entitat,
     bandName: c.band_name,
+    kind: (c.kind || "bolo") as "bolo" | "assaig" | "reunio" | "altre",
+    canAnnounce: (c.can_announce || "") as "" | "yes" | "no",
+    announceAfter: c.announce_after || "",
+    ticketType: (c.ticket_type || "") as "" | "gratuit" | "pagament",
+    // "Adreça" (Lloc) i l'hora d'inici de la fase "Concert" (Horaris) són
+    // el mateix camp que aquestes columnes — vegeu RouteSheetEditor i el
+    // comentari de submitShareFormAction.
+    address: c.address || "",
+    exactTime: c.exact_time || "",
   };
   const routeSheet = normalizeRouteSheet(c.route_sheet as RouteSheet | null, { venue: c.venue, time: c.time });
 
@@ -72,6 +90,8 @@ export default async function PublicSharePage({ params }: { params: Promise<{ to
       alreadySubmitted={!!link.submitted_at}
       concert={concert}
       routeSheet={routeSheet}
+      vehicles={band?.vehicles || []}
+      assignedRider={rider ? { name: rider.name, publicToken: rider.public_token } : null}
     />
   );
 }

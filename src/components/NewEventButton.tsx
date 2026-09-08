@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
-import type { Band, Concert } from "@/lib/types";
+import type { Band } from "@/lib/types";
 import { saveConcertAction, createEventAction } from "@/app/(app)/concerts/actions";
-import { personPhotoDataUri } from "@/lib/tags";
-import { normalize } from "@/lib/text";
+import { personPhotoDataUri, bandPhotoDataUri } from "@/lib/tags";
+import InlineDatePicker from "@/components/InlineDatePicker";
+import TimePeriodBubble from "@/components/TimePeriodBubble";
+import VenueSearchField from "@/components/VenueSearchField";
 
 const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon: string; desc: string }[] = [
   { kind: "bolo", label: "Bolo", icon: "🎤", desc: "Concert amb tota la fitxa: caixet, full de ruta, factura…" },
@@ -18,22 +20,28 @@ const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon
 // "+ Nou esdeveniment": primer es tria el tipus. Un bolo obre la fitxa
 // completa; assaig/reunió/altre es creen en un moment des d'un popup amb
 // data, convidats i repetició estil Google Calendar.
-export default function NewEventButton({ bands, concerts = [], selectedBandId = "", allowBolo = true, defaultDate }: {
+export default function NewEventButton({ bands, selectedBandId = "", allowBolo = true, defaultDate }: {
   bands: Band[];
-  concerts?: Concert[];
   selectedBandId?: string;
   allowBolo?: boolean; // els músics amb permís creen assajos/reunions, no bolos
   defaultDate?: string;
 }) {
   const router = useRouter();
-  const [step, setStep] = useState<"closed" | "kind" | "quick">("closed");
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [step, setStep] = useState<"closed" | "kind" | "quick" | "bolo-band">("closed");
   const [kind, setKind] = useState<"assaig" | "reunio" | "altre">("assaig");
   const [bandId, setBandId] = useState(selectedBandId || bands[0]?.id || "");
   const [title, setTitle] = useState("");
-  const [date, setDate] = useState(defaultDate || new Date().toISOString().slice(0, 10));
+  // Aquest botó viu muntat tota l'estona (no es refà en canviar de dia al
+  // calendari), així que l'inicial de "defaultDate" només serveix per al
+  // primer cop — es torna a agafar el dia sel·leccionat cada vegada que
+  // s'obre el flux (vegeu el onClick del botó "+ Nou esdeveniment").
+  const [date, setDate] = useState(defaultDate || todayStr);
   const [time, setTime] = useState("20:00");
+  const [exactTime, setExactTime] = useState("");
   const [city, setCity] = useState("");
   const [venue, setVenue] = useState("");
+  const [address, setAddress] = useState("");
   const [invited, setInvited] = useState<Set<string>>(new Set());
   const [freq, setFreq] = useState<"cap" | "setmanal" | "quinzenal" | "mensual">("cap");
   const [count, setCount] = useState(4);
@@ -47,31 +55,27 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
 
   const band = bands.find((b) => b.id === bandId) || null;
 
-  // Ubicacions ja usades pel grup (local d'assaig, sales…): es proposen en
-  // crear el següent esdeveniment.
-  const pastVenues = useMemo(() => {
-    const seen = new Map<string, { venue: string; city: string }>();
-    concerts
-      .filter((c) => c.bandId === bandId && c.venue.trim())
-      .sort((a, b) => b.date.localeCompare(a.date))
-      .forEach((c) => {
-        const key = normalize(c.venue);
-        if (!seen.has(key)) seen.set(key, { venue: c.venue, city: c.city });
-      });
-    return Array.from(seen.values()).slice(0, 30);
-  }, [concerts, bandId]);
+  // Crea el bolo amb el grup triat a "bandId" — es fa servir tant si es crea
+  // de seguida (grup ja decidit) com des del pas d'escollir grup.
+  async function createBolo() {
+    setBusy(true);
+    const created = await saveConcertAction({
+      id: null, bandName: band?.name || "", date: date || defaultDate || todayStr,
+      time: "", venue: "", city: "", festaEntitat: "", amount: 0, status: "pendent",
+      attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
+    });
+    setBusy(false);
+    setStep("closed");
+    if (created) router.push(`/concerts/${created.id}`);
+  }
 
   async function chooseKind(k: "bolo" | "assaig" | "reunio" | "altre") {
     if (k === "bolo") {
-      setBusy(true);
-      const created = await saveConcertAction({
-        id: null, bandName: band?.name || "", date: defaultDate || new Date().toISOString().slice(0, 10),
-        time: "", venue: "", city: "", festaEntitat: "", amount: 0, status: "pendent",
-        attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
-      });
-      setBusy(false);
-      setStep("closed");
-      if (created) router.push(`/concerts/${created.id}`);
+      // Amb més d'un grup i cap de preseleccionat, primer cal triar a
+      // quin — abans es creava sempre al grup que ja estava actiu, sense
+      // poder-ho canviar.
+      if (!selectedBandId && bands.length > 1) { setStep("bolo-band"); return; }
+      await createBolo();
       return;
     }
     setKind(k);
@@ -83,7 +87,7 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
     if (!bandId) return;
     setBusy(true);
     const { created } = await createEventAction({
-      bandId, kind, title, date, time, city, venue,
+      bandId, kind, title, date, time, exactTime, city, venue, address,
       invited: Array.from(invited),
       repeat: { freq, count },
     });
@@ -96,7 +100,7 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
 
   return (
     <>
-      <button className="glow-cta" onClick={() => setStep("kind")}>+ Nou esdeveniment</button>
+      <button className="glow-cta" onClick={() => { setDate(defaultDate || todayStr); setStep("kind"); }}>+ Nou esdeveniment</button>
 
       {step === "kind" && portal(
         <div className="modal-overlay" onClick={() => setStep("closed")}>
@@ -120,6 +124,39 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
         </div>
       )}
 
+      {step === "bolo-band" && portal(
+        <div className="modal-overlay" onClick={() => setStep("closed")}>
+          <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">Quin grup?</div>
+              <button className="cf-head-close" onClick={() => setStep("closed")}>✕</button>
+            </div>
+            <div className="modal-form" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label className="form-label">Grup</label>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                  {bands.map((b) => (
+                    <button key={b.id} type="button" className={"band-chip" + (bandId === b.id ? " active" : "")} onClick={() => setBandId(b.id)}>
+                      <img src={b.logo || bandPhotoDataUri(b)} alt="" />
+                      {b.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="form-label">Data</label>
+                <InlineDatePicker value={date} onChange={setDate} today={todayStr} />
+              </div>
+              <div className="modal-actions">
+                <div className="spacer"></div>
+                <button className="btn-outline" onClick={() => setStep("kind")}>← Enrere</button>
+                <button className="btn-save" disabled={busy || !bandId} onClick={createBolo}>{busy ? "Creant…" : "Crea"}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {step === "quick" && portal(
         <div className="modal-overlay" onClick={() => setStep("closed")}>
           <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
@@ -131,10 +168,15 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
               {!selectedBandId && bands.length > 1 && (
                 <div>
                   <label className="form-label">Grup</label>
-                  <select className="field-input form-field" value={bandId}
-                    onChange={(e) => { setBandId(e.target.value); const b = bands.find((x) => x.id === e.target.value); setInvited(new Set((b?.members || []).map((m) => m.name))); }}>
-                    {bands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-                  </select>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 6 }}>
+                    {bands.map((b) => (
+                      <button key={b.id} type="button" className={"band-chip" + (bandId === b.id ? " active" : "")}
+                        onClick={() => { setBandId(b.id); setInvited(new Set((b.members || []).map((m) => m.name))); }}>
+                        <img src={b.logo || bandPhotoDataUri(b)} alt="" />
+                        {b.name}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div>
@@ -143,30 +185,32 @@ export default function NewEventButton({ bands, concerts = [], selectedBandId = 
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div><label className="form-label">Data</label>
-                  <input className="field-input form-field" type="date" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-                <div><label className="form-label">Hora</label>
-                  <input className="field-input form-field" type="time" value={time} onChange={(e) => setTime(e.target.value)} /></div>
+                  <InlineDatePicker value={date} onChange={setDate} today={todayStr} /></div>
+                <div className="cd-time-pair-row">
+                  <div className="cd-time-pair-col" style={{ flex: 1.2 }}>
+                    <label className="form-label">Hora aproximada</label>
+                    <div className="cd-time-pair-col-body">
+                      <TimePeriodBubble time={time} onChange={setTime} />
+                    </div>
+                  </div>
+                  <div className="cd-time-pair-col grow">
+                    <label className="form-label">Hora exacta</label>
+                    <div className="cd-time-pair-col-body">
+                      <input type="time" className="field-input form-field" value={exactTime} onChange={(e) => setExactTime(e.target.value)} />
+                    </div>
+                  </div>
+                </div>
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <div>
-                  <label className="form-label">Ubicació</label>
-                  <input
-                    className="field-input form-field" list="ne-venues" placeholder="Local d'assaig, sala…"
-                    value={venue}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setVenue(v);
-                      // En triar una ubicació coneguda, la població s'omple sola.
-                      const known = pastVenues.find((p) => normalize(p.venue) === normalize(v));
-                      if (known && known.city) setCity(known.city);
-                    }}
+                  <label className="form-label">Recinte</label>
+                  <VenueSearchField
+                    venue={venue}
+                    onCommit={(v) => { setVenue(v.venue); if (v.city) setCity(v.city); if (v.address) setAddress(v.address); }}
                   />
-                  <datalist id="ne-venues">
-                    {pastVenues.map((p) => <option key={p.venue} value={p.venue}>{p.city ? p.city.split(",")[0] : ""}</option>)}
-                  </datalist>
                 </div>
-                <div><label className="form-label">Població</label>
-                  <input className="field-input form-field" placeholder={band?.city || "Població"} value={city} onChange={(e) => setCity(e.target.value)} /></div>
+                <div><label className="form-label">Adreça</label>
+                  <input className="field-input form-field" placeholder="S'empleix en triar un recinte…" value={address} onChange={(e) => setAddress(e.target.value)} /></div>
               </div>
 
               {/* Convidats */}

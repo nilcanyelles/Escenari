@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, Concert, Invoice, CompanyInfo } from "@/lib/types";
-import { formatDate, statusColors } from "@/lib/format";
+import type { Band, Concert, Contact } from "@/lib/types";
+import { formatDate, statusColors, isConcertOver } from "@/lib/format";
 import { KIND_META } from "@/components/CalendariView";
 import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
@@ -12,9 +12,7 @@ import NewEventButton from "@/components/NewEventButton";
 import { importConcertsAction } from "@/app/(app)/concerts/actions";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
-import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import ConcertModal from "@/components/ConcertModal";
-import InvoicePreview from "@/components/InvoicePreview";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 
@@ -62,7 +60,7 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, invoices, companyInfo, selectedBandId = "", viewer = "manager", canCreate = true, detailBase = "/concerts", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; companyInfo: CompanyInfo; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; detailBase?: string; today: string }) {
+export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, detailBase = "/concerts", contacts = [], today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; detailBase?: string; contacts?: Contact[]; today: string }) {
   const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
@@ -75,8 +73,6 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
   const [tagFilter, setTagFilter] = useState("tots");
   const [modal, setModal] = useState<{ concertId: string } | null>(null);
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
-  const [previewInvoiceId, setPreviewInvoiceId] = useState<string | null>(null);
-  const [generatingFor, setGeneratingFor] = useState<string | null>(null);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
   const PAGE_SIZE = 50;
   const [upcomingVisible, setUpcomingVisible] = useState(PAGE_SIZE);
@@ -122,54 +118,32 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
     (tagFilter === "tots" || (c.tags && c.tags.indexOf(tagFilter) !== -1)) &&
     (!searchL || normalize(c.bandName).includes(searchL) || normalize(c.venue).includes(searchL) || normalize(c.city).includes(searchL) || normalize(c.festaEntitat || "").includes(searchL))
   );
-  const upcomingList = list.filter((c) => c.date >= today).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-  const pastList = list.filter((c) => c.date < today).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  // "Realitzat" mira si el concert ja s'ha acabat del tot (data i hora
+  // exactes, amb un marge prudent — vegeu isConcertOver) — no es dona per
+  // fet només perquè ja hagi començat, ni perquè el calendari ja hagi
+  // passat del seu dia efectiu (per a un concert de matinada).
+  const upcomingList = list.filter((c) => !isConcertOver(c.date, c.time)).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  const pastList = list.filter((c) => isConcertOver(c.date, c.time)).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
 
   const tagOpts = uniqueTags(concerts);
-
-  const invByConcert: Record<string, Invoice> = {};
-  invoices.forEach((i) => { invByConcert[i.concertId] = i; });
 
   function ConcertRow({ c }: { c: Concert }) {
     const displayStatus = statusOverrides[c.id] ?? c.status;
     const sc = statusColors(displayStatus);
-    const inv = invByConcert[c.id];
-    let invoiceCell: React.ReactNode;
-    if (inv) {
-      const ic = statusColors(inv.state);
-      invoiceCell = (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <button type="button" className="row-rs-btn" style={{ color: ic.color }} title={"Visualitza la factura (" + inv.id + ")"} aria-label="Visualitza la factura"
-            onClick={(e) => { e.stopPropagation(); setPreviewInvoiceId(inv.id); }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle></svg>
-          </button>
-        </div>
-      );
-    } else if (displayStatus === "confirmat") {
-      invoiceCell = (
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <button type="button" className="row-rs-btn" title="Genera factura" aria-label="Genera factura" disabled={generatingFor === c.id}
-            onClick={async (e) => {
-              e.stopPropagation();
-              if (!confirm("Generar factura per aquest concert?")) return;
-              setGeneratingFor(c.id);
-              await generateInvoiceAction(c.id);
-              router.refresh();
-              setGeneratingFor(null);
-            }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="12" y1="13" x2="12" y2="17"></line><line x1="10" y1="15" x2="14" y2="15"></line></svg>
-          </button>
-        </div>
-      );
-    } else {
-      invoiceCell = <span className="t-dim">—</span>;
-    }
-
     const isSelected = modal?.concertId === c.id;
-    // Recompte d'assistència dels membres del grup.
+    // Assistència de músics i crew — mateix càlcul que la barra del bànner
+    // del concert (AttendanceMeter): els exclosos de la convocatòria
+    // d'aquest concert no compten enlloc (ni al total).
     const rowBand = bands.find((b) => b.id === c.bandId);
-    const attTotal = rowBand?.members.length || 0;
-    const attYes = rowBand ? rowBand.members.filter((m) => (c.attendance || {})[m.name] === "yes").length : 0;
+    const attPeople = rowBand ? [...rowBand.members, ...rowBand.crew] : [];
+    const attExcluded = c.convocatoriaExcluded || {};
+    const attActive = attPeople.filter((p) => !attExcluded[p.name]);
+    const attTotal = attActive.length;
+    const attendanceMap = c.attendance || {};
+    const attYes = attActive.filter((p) => attendanceMap[p.name] === "yes").length;
+    const attNo = attActive.filter((p) => attendanceMap[p.name] === "no").length;
+    const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
+    const attNoPct = attTotal ? (attNo / attTotal) * 100 : 0;
     const rsPct = rsCompletionPercent(c);
     return (
       <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`${detailBase}/${c.id}`)}>
@@ -186,8 +160,14 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
         <div className="cc-bold">{c.festaEntitat || "—"}</div>
         <div style={{ textAlign: "center" }}>
           {attTotal > 0 ? (
-            <span className={"att-badge" + (attYes === attTotal ? " full" : "")}
-              title={`${attYes} de ${attTotal} membres han confirmat assistència`}>{attYes}/{attTotal}</span>
+            <div className="cc-att"
+              title={`${attYes} de ${attTotal} han confirmat assistència${attNo > 0 ? ` · ${attNo} han dit que no` : ""}`}>
+              <div className="cc-att-track">
+                <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
+                <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
+              </div>
+              <div className="cc-att-count">{attYes}/{attTotal}</div>
+            </div>
           ) : <span className="t-dim">—</span>}
         </div>
         <div>
@@ -216,7 +196,6 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
             </svg>
           </button>
         </div>
-        <div style={{ textAlign: "center" }}>{isMgr ? invoiceCell : <span className="t-dim">—</span>}</div>
         <div onClick={(e) => e.stopPropagation()}>{isMgr && <DeleteConcertBtn id={c.id} />}</div>
       </div>
     );
@@ -226,8 +205,6 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
     ? concerts.find((c) => c.id === modal.concertId) || (draftConcert && draftConcert.id === modal.concertId ? draftConcert : null)
     : null;
   const isNewDraft = !!draftConcert && modal?.concertId === draftConcert.id;
-  const previewInvoice = previewInvoiceId ? invoices.find((i) => i.id === previewInvoiceId) || null : null;
-  const previewConcert = previewInvoice ? concerts.find((c) => c.id === previewInvoice.concertId) || null : null;
   const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
   const rsPreviewConcert = rsPreviewConcertId ? concerts.find((c) => c.id === rsPreviewConcertId) || null : null;
 
@@ -286,7 +263,7 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>}
-        {canCreate && <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
+        {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
       </div>
 
       {importOpen && (
@@ -315,8 +292,8 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
         <div className="concerts-list">
           <div className={"t-row t-head " + colsClass}>
             <div>Data</div><div>Tipus</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Festa/entitat</div>
-            <div style={{ textAlign: "center" }}>Membres</div><div>Estat</div>
-            <div style={{ textAlign: "center" }}>FDR</div><div style={{ textAlign: "center" }}>Factura</div><div></div>
+            <div style={{ textAlign: "center" }}>Assistència</div><div>Estat</div>
+            <div style={{ textAlign: "center" }}>FDR</div><div></div>
           </div>
           <div className="table-wrap no-clip">
             {upcomingList.slice(0, upcomingVisible).map((c) => <ConcertRow key={c.id} c={c} />)}
@@ -362,16 +339,13 @@ export default function ConcertsView({ bands, concerts, invoices, companyInfo, s
         />
       )}
 
-      {previewInvoice && (
-        <InvoicePreview invoice={previewInvoice} concert={previewConcert} companyInfo={companyInfo} onClose={() => setPreviewInvoiceId(null)} />
-      )}
-
       {rsModalConcert && (
         <RouteSheetModal
           key={rsModalConcert.id}
           concert={rsModalConcert}
           onClose={() => setRsModalConcertId(null)}
           onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(rsModalConcert.id); }}
+          contacts={contacts}
         />
       )}
       {rsPreviewConcert && (

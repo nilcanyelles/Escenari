@@ -3,23 +3,32 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Concert } from "@/lib/types";
-import { requireManagerAction } from "@/lib/current-user";
+import { requireManagerAction, getProfile } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
+import { getCompanyInfo } from "@/lib/data";
+import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonReverseGeocode } from "@/lib/geo-search";
 
 export type SaveConcertInput = {
   id: string | null;
   bandName: string;
   date: string;
   time: string;
+  exactTime?: string;
   venue: string;
   city: string;
+  address?: string;
   festaEntitat: string;
   amount: number;
   status: string;
   attendance: Record<string, string>;
   substitutes: Record<string, string>;
   noSubstitute: Record<string, boolean>;
+  convocatoriaExcluded?: Record<string, boolean>;
+  contact?: { email: string; name: string; phone: string; company: string };
+  canAnnounce?: "yes" | "no" | "";
+  announceAfter?: string;
+  ticketType?: "gratuit" | "pagament" | "";
   skipDefaults?: boolean;
 };
 
@@ -76,29 +85,48 @@ export async function saveConcertAction(data: SaveConcertInput) {
   const city = data.skipDefaults ? data.city.trim() : (data.city.trim() || bandRow.city);
 
   const id = data.id || "c" + Date.now();
+  const contact = data.contact || { email: "", name: "", phone: "", company: "" };
+  const exactTime = data.exactTime || "";
+  const address = data.address || "";
+  const canAnnounce = data.canAnnounce === "yes" || data.canAnnounce === "no" ? data.canAnnounce : "";
+  const announceAfter = data.announceAfter || "";
+  const ticketType = data.ticketType === "pagament" ? "pagament" : data.ticketType === "gratuit" ? "gratuit" : "";
   await pool.query(
-    `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, workspace_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, convocatoria_excluded, contact, can_announce, announce_after, ticket_type, workspace_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
      on conflict (id) do update set
-       date=$2, time=$3, venue=$4, city=$5, festa_entitat=$6, band_id=$7, band_name=$8, tags=$9, status=$10, amount=$11,
-       attendance=$12, substitutes=$13, no_substitute=$14
+       date=$2, time=$3, exact_time=$4, venue=$5, city=$6, address=$7, festa_entitat=$8, band_id=$9, band_name=$10, tags=$11, status=$12, amount=$13,
+       attendance=$14, substitutes=$15, no_substitute=$16, convocatoria_excluded=$17, contact=$18, can_announce=$19, announce_after=$20, ticket_type=$21
      where concerts.workspace_id = excluded.workspace_id`,
     [
-      id, data.date, data.time, venue, city, (data.festaEntitat || "").trim(),
+      id, data.date, data.time, exactTime, venue, city, address, (data.festaEntitat || "").trim(),
       bandRow ? bandRow.id : null, bandRow ? bandRow.name : "", JSON.stringify(bandRow?.tags || []), data.status, Math.round(data.amount) || 0,
       JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.noSubstitute || {}),
+      JSON.stringify(data.convocatoriaExcluded || {}), JSON.stringify(contact), canAnnounce, announceAfter, ticketType,
       workspaceId,
     ]
   );
 
   revalidateAll();
 
+  // El contacte principal d'aquest concert entra al mateix magatzem
+  // compartit que els contactes del full de ruta, perquè es pugui
+  // reutilitzar (autocompletar) des de qualsevol altre esdeveniment.
+  if (contact.name && contact.name.trim()) {
+    await syncRouteSheetContactsToContacts(workspaceId, [
+      { name: contact.name, role: "", phone: contact.phone, company: contact.company, email: contact.email },
+    ]);
+    revalidatePath("/contactes");
+  }
+
   return {
     id,
     date: data.date,
     time: data.time,
+    exactTime,
     venue,
     city,
+    address,
     festaEntitat: (data.festaEntitat || "").trim(),
     bandId: bandRow ? bandRow.id : "",
     bandName: bandRow ? bandRow.name : "",
@@ -108,6 +136,11 @@ export async function saveConcertAction(data: SaveConcertInput) {
     attendance: data.attendance || {},
     substitutes: data.substitutes || {},
     noSubstitute: data.noSubstitute || {},
+    convocatoriaExcluded: data.convocatoriaExcluded || {},
+    contact,
+    canAnnounce,
+    announceAfter,
+    ticketType,
     routeSheet: null,
   } as Concert;
 }
@@ -204,8 +237,10 @@ export async function createEventAction(input: {
   title: string;
   date: string;
   time: string;
+  exactTime?: string;
   city: string;
   venue: string;
+  address?: string;
   invited: string[];
   repeat: { freq: "cap" | "setmanal" | "quinzenal" | "mensual"; count: number };
 }): Promise<{ created: number; firstId: string | null }> {
@@ -230,11 +265,11 @@ export async function createEventAction(input: {
     const id = "c" + Date.now() + i;
     if (!firstId) firstId = id;
     await pool.query(
-      `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount,
+      `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount,
                              attendance, substitutes, no_substitute, workspace_id, kind, invited)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,'confirmat',0,'{}','{}','{}',$10,$11,$12)`,
-      [id, dateStr, input.time || "20:00", (input.venue || "").trim(), (input.city || "").trim() || band.city || "",
-        (input.title || "").trim(), band.id, band.name,
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'confirmat',0,'{}','{}','{}',$12,$13,$14)`,
+      [id, dateStr, input.time || "20:00", input.exactTime || "", (input.venue || "").trim(), (input.city || "").trim() || band.city || "",
+        (input.address || "").trim(), (input.title || "").trim(), band.id, band.name,
         JSON.stringify(band.tags || []), workspaceId, input.kind, JSON.stringify(input.invited || [])]
     );
     created++;
@@ -251,19 +286,27 @@ export async function setConcertKindAction(id: string, kind: "bolo" | "assaig" |
   revalidatePath(`/concerts/${id}`);
 }
 
-// Repeteix un esdeveniment setmanalment N cops (assajos, residències...).
-export async function repeatConcertAction(id: string, weeks: number): Promise<{ created: number }> {
+// Repeteix un esdeveniment (típicament un assaig) fins a una data —
+// setmanalment, cada dues setmanes o cada mes — creant un concert nou i
+// independent per a cada ocurrència (mateixa hora, lloc i títol; sense
+// assistència ni substituts, que són propis de cada dia). Topall de
+// seguretat perquè una data massa llunyana no en generi milers.
+export async function repeatConcertAction(id: string, freq: "setmanal" | "quinzenal" | "mensual", untilDate: string): Promise<{ created: number }> {
   const { workspaceId } = await requireManagerAction();
   const pool = db();
   const c = (await pool.query("select * from concerts where id=$1 and workspace_id=$2", [id, workspaceId])).rows[0];
-  if (!c) return { created: 0 };
-  const n = Math.min(Math.max(weeks, 1), 26);
+  if (!c || !untilDate) return { created: 0 };
   const baseDate = typeof c.date === "string" ? c.date.slice(0, 10) : c.date.toISOString().slice(0, 10);
+  if (untilDate <= baseDate) return { created: 0 };
+  const p = baseDate.split("-").map(Number);
+  const MAX_OCCURRENCES = 104;
   let created = 0;
-  for (let i = 1; i <= n; i++) {
-    const p = baseDate.split("-").map(Number);
-    const d = new Date(p[0], p[1] - 1, p[2] + i * 7);
+  for (let i = 1; i <= MAX_OCCURRENCES; i++) {
+    const d = freq === "mensual"
+      ? new Date(p[0], p[1] - 1 + i, p[2])
+      : new Date(p[0], p[1] - 1, p[2] + i * (freq === "quinzenal" ? 14 : 7));
     const dateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    if (dateStr > untilDate) break;
     const newId = "c" + Date.now() + i;
     await pool.query(
       `insert into concerts (id, date, time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, workspace_id, kind)
@@ -368,41 +411,41 @@ export async function searchCitiesAction(query: string): Promise<{ description: 
   }
 }
 
+// Cerca de recintes via Google Places (Autocomplete): a diferència de
+// Photon, gairebé sempre sap el número de carrer exacte del lloc — per
+// això és la que s'usa per al camp "Recinte" (Photon es queda només per a
+// la cerca de poblacions i d'adreça lliure, que no necessiten aquest grau
+// de detall). Sense GOOGLE_MAPS_API_KEY, torna una llista buida en comptes
+// de trencar — el camp es pot seguir omplint a mà.
+export async function searchVenuesGoogleAction(query: string): Promise<{ description: string; placeId: string }[]> {
+  await requireManagerAction();
+  return googlePlacesAutocomplete(query);
+}
+
+// Detall d'un recinte triat de l'autocompletat de Google: nom, població,
+// carrer i número (buit si aquell lloc no en té, per exemple una plaça) i
+// coordenades — per si calgués una geocodificació inversa de reserva.
+export async function getPlaceDetailsAction(placeId: string): Promise<{ name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null } | null> {
+  await requireManagerAction();
+  return googlePlaceDetails(placeId);
+}
+
 // Cerca de recintes/llocs reals (sales, places, pavellons...) via Photon,
 // la mateixa API gratuïta que la de poblacions. Aquí no es filtra per
 // type="city" perquè un recinte és un punt d'interès concret, no una
 // població — es descarten només els resultats sense nom.
-export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; city: string; placeId: string }[]> {
+export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null; placeId: string }[]> {
   await requireManagerAction();
-  const q = (query || "").trim();
-  if (!q || q.length < 2) return [];
-  const url = new URL("https://photon.komoot.io/api/");
-  url.searchParams.set("q", q);
-  url.searchParams.set("limit", "8");
-  url.searchParams.set("lang", "en");
-  try {
-    const res = await fetch(url.toString());
-    if (!res.ok) return [];
-    const data = await res.json();
-    const features: { properties: Record<string, unknown> }[] = data.features || [];
-    const seen = new Set<string>();
-    const out: { description: string; name: string; city: string; placeId: string }[] = [];
-    for (const f of features) {
-      const p = f.properties || {};
-      const name = String(p.name || "").trim();
-      if (!name) continue;
-      const city = String(p.city || "").trim();
-      const context = [city || p.state, p.country].filter(Boolean).join(", ");
-      const description = context ? `${name}, ${context}` : name;
-      const key = description.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({ description, name, city, placeId: `${p.osm_type || "n"}${p.osm_id ?? out.length}` });
-    }
-    return out;
-  } catch {
-    return [];
-  }
+  return photonSearch(query);
+}
+
+// Molts recintes (sales, teatres...) no tenen número de carrer etiquetat a
+// OSM tot i tenir-hi el nom — només un punt dins la ciutat. Quan passa,
+// es completa amb una geocodificació inversa de les seves coordenades: la
+// direcció etiquetada més propera (amb carrer i número de veritat).
+export async function reverseGeocodeAction(lat: number, lon: number): Promise<{ street: string; housenumber: string; city: string } | null> {
+  await requireManagerAction();
+  return photonReverseGeocode(lat, lon);
 }
 
 // Carrers reals al voltant d'un punt (per al mini-mapa del pòster del
@@ -486,6 +529,121 @@ export async function getStreetWaysAction(lat: number, lon: number, radiusM = 90
     }
   }
   return { bbox, ways: [] };
+}
+
+// Encadena els trams (way) del contorn "outer" d'una relació administrativa
+// pels seus extrems compartits fins a tancar-los en un o més anells — una
+// relació pot tenir més d'un tram perquè OSM el parteix per fronteres
+// d'edició, però units formen el contorn sencer del municipi.
+function assembleRings(members: { role?: string; geometry?: { lat: number; lon: number }[] }[]): [number, number][][] {
+  const segments = members
+    .filter((m) => m.role === "outer" && m.geometry && m.geometry.length > 1)
+    .map((m) => m.geometry!.map((g) => [g.lon, g.lat] as [number, number]));
+  const rings: [number, number][][] = [];
+  const remaining = segments.slice();
+  const key = (p: [number, number]) => p[0].toFixed(6) + "," + p[1].toFixed(6);
+  while (remaining.length) {
+    let ring = remaining.shift()!;
+    let progress = true;
+    while (progress && key(ring[0]) !== key(ring[ring.length - 1])) {
+      progress = false;
+      for (let i = 0; i < remaining.length; i++) {
+        const seg = remaining[i];
+        if (key(seg[0]) === key(ring[ring.length - 1])) { ring = ring.concat(seg.slice(1)); remaining.splice(i, 1); progress = true; break; }
+        if (key(seg[seg.length - 1]) === key(ring[ring.length - 1])) { ring = ring.concat(seg.slice(0, -1).reverse()); remaining.splice(i, 1); progress = true; break; }
+        if (key(seg[seg.length - 1]) === key(ring[0])) { ring = seg.slice(0, -1).concat(ring); remaining.splice(i, 1); progress = true; break; }
+        if (key(seg[0]) === key(ring[0])) { ring = seg.slice(1).reverse().concat(ring); remaining.splice(i, 1); progress = true; break; }
+      }
+    }
+    if (ring.length > 2) rings.push(ring);
+  }
+  return rings;
+}
+
+// Contorn real (límit municipal) d'una població, per al mapa acolorit de
+// "Poblacions més repetides" a Estadístiques — a diferència de
+// getStreetWaysAction (carrers), aquí es demana la relació administrativa
+// (OSM boundary=administrative) que hi ha al punt donat i se n'encadenen
+// els trams en un polígon. admin_level 6-8 cobreix el municipi a la
+// majoria de països (a Espanya, 8); si n'hi ha diverses que hi coincideixen
+// (comarca i municipi alhora, per exemple), es tria la que té el nom exacte
+// o, si cap no hi coincideix, la de caixa delimitadora més petita (la més
+// local, no la comarca/regió que també la conté).
+export async function getMunicipalityBoundaryAction(city: string, lat: number, lon: number): Promise<{ rings: [number, number][][]; bbox: [number, number, number, number] } | null> {
+  await requireManagerAction();
+  const name = (city || "").trim();
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const cacheKey = `${normalizeForMatch(name)}@${lat.toFixed(2)},${lon.toFixed(2)}`;
+  const pool = db();
+  try {
+    const cached = (await pool.query("select bbox, rings from municipality_boundary_cache where key=$1", [cacheKey])).rows[0];
+    if (cached) return { bbox: cached.bbox, rings: cached.rings };
+  } catch (err) {
+    console.error("getMunicipalityBoundaryAction: error llegint la cache", err);
+  }
+
+  const query = `[out:json][timeout:20];rel(around:8000,${lat},${lon})["boundary"="administrative"]["admin_level"~"^(6|7|8)$"]["name"];out geom;`;
+  const endpoints = [
+    "https://overpass-api.de/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+  ];
+  for (let attempt = 0; attempt < 2; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+    for (const url of endpoints) {
+      try {
+        const res = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+            "User-Agent": "Escenari (escenari.app, contacte via l'app)",
+          },
+          body: "data=" + encodeURIComponent(query),
+          signal: AbortSignal.timeout(9000),
+        });
+        if (!res.ok) {
+          console.error("getMunicipalityBoundaryAction: Overpass ha respost", url, res.status, await res.text().catch(() => ""));
+          continue;
+        }
+        const data = await res.json();
+        const rels: { type: string; tags?: Record<string, string>; members?: { role?: string; geometry?: { lat: number; lon: number }[] }[] }[] = data.elements || [];
+        const candidates = rels.filter((r) => r.type === "relation" && r.members?.length);
+        if (!candidates.length) return null;
+
+        const cityNorm = normalizeForMatch(name);
+        let best = candidates.find((r) => normalizeForMatch(r.tags?.name || "") === cityNorm) || null;
+        function bboxArea(r: (typeof candidates)[number]): number {
+          let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+          (r.members || []).forEach((m) => (m.geometry || []).forEach((g) => {
+            minLat = Math.min(minLat, g.lat); maxLat = Math.max(maxLat, g.lat);
+            minLon = Math.min(minLon, g.lon); maxLon = Math.max(maxLon, g.lon);
+          }));
+          return (maxLat - minLat) * (maxLon - minLon);
+        }
+        if (!best) best = candidates.slice().sort((a, b) => bboxArea(a) - bboxArea(b))[0] || null;
+        if (!best) return null;
+
+        const rings = assembleRings(best.members || []);
+        if (!rings.length) return null;
+        let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+        rings.forEach((ring) => ring.forEach(([lo, la]) => {
+          minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la);
+          minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo);
+        }));
+        const bbox: [number, number, number, number] = [minLat, minLon, maxLat, maxLon];
+        pool.query(
+          "insert into municipality_boundary_cache (key, bbox, rings) values ($1,$2,$3) on conflict (key) do update set bbox=$2, rings=$3, updated_at=now()",
+          [cacheKey, JSON.stringify(bbox), JSON.stringify(rings)]
+        ).catch((err) => console.error("getMunicipalityBoundaryAction: error desant la cache", err));
+        return { bbox, rings };
+      } catch (err) {
+        console.error("getMunicipalityBoundaryAction: error cridant Overpass", url, err);
+      }
+    }
+  }
+  return null;
 }
 
 // Geocodifica un grapat de poblacions (per posar-hi xinxetes en un mapa) amb
@@ -638,4 +796,48 @@ export async function geocodeCitiesAction(cities: string[]): Promise<Record<stri
     }
   }
   return out;
+}
+
+// Nom de l'agència pel peu del PDF del full de ruta — es demana des del
+// component client (gestor o artista, tots dos el poden obrir) en comptes
+// de fer-lo baixar per props des de totes les pàgines que hi donen accés.
+export async function getAgencyNameAction(): Promise<string> {
+  const profile = await getProfile();
+  if (!profile?.workspaceId) return "";
+  const info = await getCompanyInfo(profile.workspaceId);
+  return info.nom || "";
+}
+
+// Edita assistència i substituts des de la vista "dia de bolo" (botó de
+// llapis a "Qui ve") sense passar per la fitxa completa del concert.
+// Actualitza NOMÉS aquestes tres columnes (mai la resta del concert, a
+// diferència de saveConcertAction, que les reescriu totes de cop) — cap
+// risc d'esborrar per accident data/lloc/import si qui truca no en té
+// l'instantània sencera i correcta (com la pàgina pública /conf/[token],
+// que mai hi arriba perquè és manager-only).
+export async function setConvocatoriaAction(
+  concertId: string,
+  attendance: Record<string, "yes" | "no">,
+  substitutes: Record<string, string>
+): Promise<void> {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update concerts set attendance=$1, substitutes=$2 where id=$3 and workspace_id=$4",
+    [JSON.stringify(attendance), JSON.stringify(substitutes), concertId, workspaceId]
+  );
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/concerts/${concertId}/dia`);
+}
+
+// Cançons destacades de la setlist assignada, per a aquest assaig en
+// concret (vegeu Concert.setlistHighlights) — la mateixa setlist pot
+// repetir-se a diversos assaigs amb destacades diferents a cada un.
+export async function setSetlistHighlightsAction(concertId: string, highlights: Record<string, boolean>): Promise<void> {
+  const { workspaceId } = await requireManagerAction();
+  await db().query(
+    "update concerts set setlist_highlights=$1 where id=$2 and workspace_id=$3",
+    [JSON.stringify(highlights), concertId, workspaceId]
+  );
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/concerts/${concertId}/dia`);
 }

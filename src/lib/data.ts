@@ -1,10 +1,14 @@
 import { db } from "./db";
 import { visibleBandIds } from "./current-user";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact } from "./types";
+import { normalizeContact } from "./types";
 
 function toDateStr(d: Date | string): string {
   if (typeof d === "string") return d.slice(0, 10);
-  return d.toISOString().slice(0, 10);
+  // Un Date d'una columna "date" de Postgres representa mitjanit LOCAL
+  // d'aquell dia — amb toISOString() (que sempre passa a UTC) es podia
+  // desplaçar un dia enrere segons la zona horària del servidor.
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
 // Els gestors que només tenen alguns grups assignats veuen només aquests
@@ -41,6 +45,7 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     socialTracking: r.social_tracking || {},
     publicToken: r.public_token || "",
     bio: r.bio || "",
+    activeSince: r.active_since || "",
   }));
 }
 
@@ -54,8 +59,10 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     id: r.id,
     date: toDateStr(r.date),
     time: r.time,
+    exactTime: r.exact_time || "",
     venue: r.venue,
     city: r.city,
+    address: r.address || "",
     festaEntitat: r.festa_entitat,
     bandId: r.band_id,
     bandName: r.band_name,
@@ -65,6 +72,9 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     attendance: r.attendance,
     substitutes: r.substitutes,
     noSubstitute: r.no_substitute,
+    convocatoriaExcluded: r.convocatoria_excluded || {},
+    setlistHighlights: r.setlist_highlights || {},
+    contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,
     payouts: r.payouts || {},
     agencyAssumesExpenses: r.agency_assumes_expenses !== false,
@@ -73,6 +83,9 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     riderId: r.rider_id || null,
     setlistId: r.setlist_id || null,
     kind: r.kind || "bolo",
+    canAnnounce: r.can_announce === "yes" || r.can_announce === "no" ? r.can_announce : "",
+    announceAfter: r.announce_after || "",
+    ticketType: r.ticket_type === "pagament" ? "pagament" : r.ticket_type === "gratuit" ? "gratuit" : "",
     invited: r.invited || [],
     attToken: r.att_token || "",
     contract: r.contract || null,

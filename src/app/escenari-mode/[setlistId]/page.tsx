@@ -8,8 +8,12 @@ export const dynamic = "force-dynamic";
 
 // Mode escenari: la setlist a pantalla completa amb lletres, acords,
 // auto-scroll, metrònom i to inicial. Per a gestors i membres del grup.
-export default async function PerformPage({ params }: { params: Promise<{ setlistId: string }> }) {
+export default async function PerformPage({ params, searchParams }: {
+  params: Promise<{ setlistId: string }>;
+  searchParams: Promise<{ concert?: string }>;
+}) {
   const { setlistId } = await params;
+  const { concert: concertParam } = await searchParams;
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
 
@@ -58,6 +62,25 @@ export default async function PerformPage({ params }: { params: Promise<{ setlis
       };
     });
 
+  // Cançons destacades: només si arribem des d'un assaig/concert concret
+  // (Concert.setlistHighlights) — la mateixa setlist es pot obrir sense
+  // venir de cap concert (des de la pestanya Cançons), i aleshores no hi ha
+  // res a destacar.
+  let concertId: string | null = null;
+  let highlights: Record<string, boolean> = {};
+  if (concertParam) {
+    const c = (await db().query(
+      "select id, setlist_highlights from concerts where id=$1 and band_id=$2",
+      [concertParam, sl.band_id]
+    )).rows[0];
+    if (c) { concertId = c.id; highlights = c.setlist_highlights || {}; }
+  }
+
   const backHref = profile.role === "manager" ? "/grup" : `/material/${sl.band_id}`;
-  return <PerformView name={sl.name} bandName={sl.band_name} songs={songs} backHref={backHref} />;
+  return (
+    <PerformView
+      name={sl.name} bandName={sl.band_name} songs={songs} backHref={backHref}
+      concertId={concertId} initialHighlights={highlights} canHighlight={profile.role === "manager"}
+    />
+  );
 }

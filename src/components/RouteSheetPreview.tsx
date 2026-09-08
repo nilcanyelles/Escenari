@@ -1,10 +1,20 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Concert } from "@/lib/types";
 import RouteSheetPreviewDoc from "@/components/RouteSheetPreviewDoc";
 
 export default function RouteSheetPreview({ concert, onClose, onEdit }: { concert: Concert; onClose: () => void; onEdit: () => void }) {
-  return (
+  // Penjat de <body> via portal: en imprimir, el CSS de @media print amaga
+  // tots els altres fills de <body> i deixa només aquest overlay, així no
+  // queda cap pàgina en blanc abans/després (la resta de l'app ja no ocupa
+  // espai al flux, en comptes de només quedar invisible).
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal wide rs-doc-modal" onClick={(e) => e.stopPropagation()}>
         <div className="rs-doc-top-toolbar">
@@ -25,6 +35,7 @@ export default function RouteSheetPreview({ concert, onClose, onEdit }: { concer
           <RouteSheetPreviewDoc concert={concert} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

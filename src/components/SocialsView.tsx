@@ -8,18 +8,15 @@ import {
   SOCIAL_PLATFORMS, PLATFORM_META, isTracked, formatNumber, formatCompact, lastMonths, monthlySeries, monthLabel,
   previousMonthValue, upsertTodaySnapshot, type SocialSnapshot,
 } from "@/lib/social-history";
-import { saveSocialSettingsAction, saveManualSocialStatsAction, refreshBandSocialsAction, disconnectSocialAccountAction } from "@/app/(app)/grup/social-actions";
+import { saveSocialSettingsAction, saveManualSocialStatsAction, refreshBandSocialsAction } from "@/app/(app)/grup/social-actions";
 import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
 import PlanLock from "@/components/PlanLock";
 import type { BillingInfo } from "@/lib/plans";
 
-// Pàgina de xarxes socials del grup: per a cada plataforma, l'enllaç, la
-// connexió (automàtica o a mà), si se'n fa seguiment i les xifres; a sota,
-// l'evolució mes a mes de cada xifra amb seguiment.
-
-export type ConnectedAccount = { platform: string; username: string; connectedAt: string; expiresAt: string | null };
-export type SocialConfigured = Record<SocialPlatform, boolean>;
-export type SocialNotice = { connected: string; error: string; platform: string; detail: string };
+// Pàgina de xarxes socials del grup: per a cada plataforma, l'enllaç, si
+// se'n fa seguiment i les xifres (llegides soles de la pàgina pública de
+// l'enllaç, mai amb cap clau d'API ni compte connectat); a sota, l'evolució
+// mes a mes de cada xifra amb seguiment.
 
 const ICONS: Record<SocialPlatform, React.ReactNode> = {
   instagram: <InstagramIcon />, tiktok: <TiktokIcon />, spotify: <SpotifyIcon />, youtube: <YoutubeIcon />,
@@ -31,10 +28,6 @@ const LINK_PLACEHOLDER: Record<SocialPlatform, string> = {
   spotify: "https://open.spotify.com/artist/…",
   youtube: "https://youtube.com/@elgrup",
 };
-
-function labelOf(p: string): string {
-  return (PLATFORM_META as Record<string, { label: string } | undefined>)[p]?.label || p;
-}
 
 // "+123 (+2,1 %) des del mes passat"
 function Delta({ current, prev }: { current: number | undefined; prev: number | null }) {
@@ -91,64 +84,32 @@ function TrendChart({ months, values, color }: { months: string[]; values: (numb
   );
 }
 
-// Estat de la connexió de cada xarxa: què es llegeix sol, què cal fer perquè
-// es llegeixi sol, o per què s'ha d'escriure a mà.
-function ConnectionStatus({ p, link, account, configured, bandId, onDisconnect, disconnecting }: {
-  p: SocialPlatform;
-  link: string;
-  account: ConnectedAccount | undefined;
-  configured: boolean;
-  bandId: string;
-  onDisconnect: () => void;
-  disconnecting: boolean;
-}) {
-  if (p === "youtube") {
-    if (!link) return <div className="sx-status dim">Enganxa l&apos;enllaç del canal per llegir-ne subscriptors i visites sols.</div>;
-    if (!configured) return <div className="sx-status warn">Falta YOUTUBE_API_KEY al servidor: les xifres s&apos;escriuen a mà.</div>;
-    return <div className="sx-status ok">Lectura automàtica amb l&apos;API de YouTube — sense iniciar sessió enlloc.</div>;
-  }
-  if (p === "spotify") {
-    if (!link) return <div className="sx-status dim">Enganxa l&apos;enllaç de l&apos;artista per llegir-ne seguidors i oients mensuals sols.</div>;
+// Estat de la connexió de cada xarxa: totes funcionen igual (es visita
+// l'enllaç desat i es llegeix la xifra directament de la pàgina pública,
+// sense cap clau d'API ni compte connectat) — només canvia el missatge
+// segons quines xifres en dona cadascuna.
+function ConnectionStatus({ p, link }: { p: SocialPlatform; link: string }) {
+  // Instagram bloqueja massa sovint la lectura automàtica (vegeu
+  // fetchInstagramFollowers) — mentre no hi hagi una solució fiable, es
+  // deixa clar que aquesta xarxa és manual de moment, en comptes de dir
+  // "lectura automàtica" i que després no es refresqui mai de veres.
+  if (p === "instagram") {
     return (
-      <div className={"sx-status " + (configured ? "ok" : "warn")}>
-        {configured
-          ? "Seguidors via l'API de Spotify; oients mensuals llegits de la pàgina pública de l'artista."
-          : "Oients mensuals llegits de la pàgina pública de l'artista; per als seguidors falten SPOTIFY_CLIENT_ID/SECRET al servidor."}
+      <div className="sx-status warn">
+        Estem treballant per automatitzar el comptador de seguidors. De moment, afegeix-los manualment.
       </div>
     );
   }
-  const label = PLATFORM_META[p].label;
-  if (account) {
-    return (
-      <div className="sx-status ok">
-        <span>Connectat{account.username ? ` com @${account.username}` : ""} · els seguidors es refresquen cada dia.</span>
-        <button type="button" className="link-btn" disabled={disconnecting} onClick={onDisconnect}>{disconnecting ? "Desconnectant…" : "Desconnecta"}</button>
-      </div>
-    );
+  if (!link) {
+    const what = p === "youtube" ? "subscriptors i visites" : p === "spotify" ? "oients mensuals" : "seguidors";
+    return <div className="sx-status dim">Enganxa l&apos;enllaç per llegir-ne {what} sols.</div>;
   }
-  if (configured) {
-    return (
-      <div className="sx-status dim">
-        <a className="btn-save sx-connect" href={`/api/social/${p}/connect?bandId=${encodeURIComponent(bandId)}`}>{ICONS[p]} Connecta amb {label}</a>
-        <span>{p === "instagram" ? "Cal un compte professional (Business o Creator) — inicia-hi sessió amb el compte del grup." : "Inicia sessió amb el compte de TikTok del grup."}</span>
-      </div>
-    );
-  }
-  return (
-    <div className="sx-status warn">
-      {label} només dona els seguidors amb el compte connectat, i per això cal una app a{" "}
-      {p === "instagram" ? "Meta for Developers (INSTAGRAM_APP_ID i INSTAGRAM_APP_SECRET al servidor)" : "TikTok for Developers (TIKTOK_CLIENT_KEY i TIKTOK_CLIENT_SECRET al servidor)"}.
-      Mentrestant, escriu-los a mà.
-    </div>
-  );
+  return <div className="sx-status ok">Lectura automàtica des de la pàgina pública de l&apos;enllaç — sense iniciar sessió enlloc.</div>;
 }
 
-export default function SocialsView({ band, accounts, snapshots: initialSnapshots, configured, notice, today, billing, canUpgrade = true }: {
+export default function SocialsView({ band, snapshots: initialSnapshots, today, billing, canUpgrade = true }: {
   band: Band;
-  accounts: ConnectedAccount[];
   snapshots: SocialSnapshot[];
-  configured: SocialConfigured;
-  notice: SocialNotice;
   today: string;
   billing?: BillingInfo;
   canUpgrade?: boolean;
@@ -163,7 +124,6 @@ export default function SocialsView({ band, accounts, snapshots: initialSnapshot
   const [refreshing, setRefreshing] = useState(false);
   const [result, setResult] = useState<{ updated: SocialPlatform[]; errors: Partial<Record<SocialPlatform, string>>; general?: string } | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
-  const [disconnecting, setDisconnecting] = useState<string | null>(null);
 
   // Enllaços i seguiment: es desen sols amb un petit marge després de
   // l'últim canvi.
@@ -225,38 +185,15 @@ export default function SocialsView({ band, accounts, snapshots: initialSnapshot
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [band.id]);
 
-  async function disconnect(p: SocialPlatform) {
-    if (!confirm(`Desconnectar ${PLATFORM_META[p].label}? Les xifres es quedaran com estan, però ja no s'actualitzaran soles.`)) return;
-    setDisconnecting(p);
-    await disconnectSocialAccountAction(band.id, p);
-    router.refresh();
-    setDisconnecting(null);
-  }
-
   const months = lastMonths(today, 12);
-  const accountFor = (p: SocialPlatform) => accounts.find((a) => a.platform === p);
-  const tracked = SOCIAL_PLATFORMS.filter((p) => isTracked(p, tracking, links, !!accountFor(p)));
+  const tracked = SOCIAL_PLATFORMS.filter((p) => isTracked(p, tracking, links));
 
-  // Quines xifres es llegeixen soles (les altres s'escriuen a mà; totes es
-  // poden retocar, però les automàtiques es sobreescriuen al refresc).
-  function isAuto(p: SocialPlatform, key: keyof SocialStats): boolean {
-    if (p === "youtube") return !!links.youtube && configured.youtube;
-    if (p === "spotify") return !!links.spotify && (key === "spotifyMonthlyListeners" || configured.spotify);
-    return !!accountFor(p);
+  // Totes les xifres d'una xarxa amb enllaç es llegeixen soles de la seva
+  // pàgina pública; sense enllaç, s'escriuen a mà.
+  function isAuto(p: SocialPlatform): boolean {
+    return !!links[p];
   }
 
-  const noticeText = (() => {
-    if (notice.connected) return { kind: "ok", text: `${labelOf(notice.connected)} connectat: els seguidors ja es llegiran sols cada dia.` };
-    if (!notice.error) return null;
-    const label = labelOf(notice.platform);
-    switch (notice.error) {
-      case "config": return { kind: "err", text: `Falten les claus de ${label} al servidor (.env.local) — mentrestant, escriu les xifres a mà.` };
-      case "denegat": return { kind: "err", text: `S'ha cancel·lat la connexió amb ${label}.` };
-      case "estat": return { kind: "err", text: "La connexió ha caducat abans d'acabar — torna-ho a provar." };
-      case "intercanvi": return { kind: "err", text: `No s'ha pogut completar la connexió amb ${label}${notice.detail ? `: ${notice.detail}` : "."}` };
-      default: return { kind: "err", text: "No s'ha pogut fer la connexió." };
-    }
-  })();
   const resultErrors = result ? (Object.entries(result.errors) as [SocialPlatform, string][]) : [];
 
   return (
@@ -271,7 +208,6 @@ export default function SocialsView({ band, accounts, snapshots: initialSnapshot
         <button type="button" className="btn-outline" disabled={refreshing} onClick={() => refresh(false)}>Actualitza ara</button>
       </div>
 
-      {noticeText && <div className={"sx-notice " + noticeText.kind}>{noticeText.text}</div>}
       {result && (result.general || resultErrors.length > 0 || result.updated.length > 0) && (
         <div className={"sx-notice " + (resultErrors.length || result.general ? "err" : "ok")}>
           {result.updated.length > 0 && <div>Actualitzat: {result.updated.map((p) => PLATFORM_META[p].label).join(", ")}.</div>}
@@ -283,7 +219,6 @@ export default function SocialsView({ band, accounts, snapshots: initialSnapshot
       <div className="sx-platforms">
         {SOCIAL_PLATFORMS.map((p) => {
           const meta = PLATFORM_META[p];
-          const acc = accountFor(p);
           const on = tracked.includes(p);
           return (
             <div key={p} className={"sx-card" + (on ? "" : " off")}>
@@ -300,14 +235,14 @@ export default function SocialsView({ band, accounts, snapshots: initialSnapshot
                 className="field-input compact-field" type="url" placeholder={LINK_PLACEHOLDER[p]}
                 value={links[p] || ""} onChange={(e) => setLinks((l) => ({ ...l, [p]: e.target.value }))}
               />
-              <ConnectionStatus
-                p={p} link={links[p] || ""} account={acc} configured={configured[p]} bandId={band.id}
-                onDisconnect={() => disconnect(p)} disconnecting={disconnecting === p}
-              />
+              <ConnectionStatus p={p} link={links[p] || ""} />
               <div className="sx-metrics">
                 {meta.metrics.map((m) => (
                   <div key={m.key} className="sx-metric">
-                    <span className="sx-metric-l">{m.label}{isAuto(p, m.key) && <span className="sx-auto">auto</span>}</span>
+                    <span className="sx-metric-l">
+                      {m.label}
+                      {p === "instagram" ? <span className="sx-manual-badge">manual</span> : isAuto(p) && <span className="sx-auto">auto</span>}
+                    </span>
                     <input
                       className="field-input compact-field" type="number" min={0} placeholder="—"
                       value={stats[m.key] ?? ""}

@@ -82,10 +82,10 @@ export async function syncAllBandPeopleToContacts(workspaceId: string) {
   await syncBandPeopleToContacts(workspaceId, people);
 }
 
-export async function syncRouteSheetContactsToContacts(workspaceId: string, contacts: { name: string; role: string; phone: string; company: string }[]) {
+export async function syncRouteSheetContactsToContacts(workspaceId: string, contacts: { name: string; role: string; phone: string; company: string; email?: string }[]) {
   const pool = db();
   for (const c of contacts) {
-    await upsertContact(pool, workspaceId, { name: c.name, kind: "ruta", role: c.role, phone: c.phone, company: c.company });
+    await upsertContact(pool, workspaceId, { name: c.name, kind: "ruta", role: c.role, phone: c.phone, company: c.company, email: c.email });
   }
 }
 

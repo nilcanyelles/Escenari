@@ -15,7 +15,7 @@ const MANAGER_FEATURES = [
   "Factures amb IVA i IRPF, bestretes i recordatoris de cobrament",
   "Despeses amb rebuts, marge net per bolo i exportació CSV",
   "Repartiment del caixet i comptes clars per músic",
-  "Checklists per concert i seguiment de contactes",
+  "Seguiment de contactes: historial d'interaccions i pròxims passos",
   "Estadístiques de concerts i diners per grup i població",
   "Fitxers del grup i la imatge del mes per compartir",
 ];

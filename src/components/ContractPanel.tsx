@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { Concert, CompanyInfo, ContractData } from "@/lib/types";
 import { emptyContract, defaultContractClauses, type ContractClient } from "@/lib/contract";
@@ -27,6 +28,10 @@ export default function ContractPanel({ concert, companyInfo, client, emailReady
   const [emailStatus, setEmailStatus] = useState<string | null>(null);
   const first = useRef(true);
   const timer = useRef<number | null>(null);
+  // La previsualització es penja de <body> via portal perquè en imprimir
+  // només quedi ella (veure @media print): així no hi ha pàgines en blanc.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   // Desat automàtic amb un petit marge.
   useEffect(() => {
@@ -106,7 +111,7 @@ export default function ContractPanel({ concert, companyInfo, client, emailReady
         </div>
       </div>
 
-      {previewOpen && (
+      {previewOpen && mounted && createPortal(
         <div className="modal-overlay" onClick={() => setPreviewOpen(false)}>
           <div className="modal wide rs-doc-modal" onClick={(e) => e.stopPropagation()}>
             <div className="rs-doc-top-toolbar">
@@ -124,7 +129,8 @@ export default function ContractPanel({ concert, companyInfo, client, emailReady
               <ContractDoc concert={concert} contract={data} companyInfo={companyInfo} client={client} generatedOn={today()} />
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );

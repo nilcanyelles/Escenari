@@ -2,7 +2,7 @@ export type MemberPerms = { songs: boolean; riders: boolean; setlists: boolean; 
 
 export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[]; perms?: Partial<MemberPerms> };
 
-export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
+export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string; role?: string };
 
 export type Vehicle = { type: string; brand: string; color: string; owner: string; plate: string };
 
@@ -15,15 +15,15 @@ export type SocialPlatform = "instagram" | "tiktok" | "spotify" | "youtube";
 export type SocialTracking = Partial<Record<SocialPlatform, boolean>>;
 
 export type SocialStats = {
-  // Instagram i TikTok: amb el compte connectat (OAuth), o a mà.
+  // Instagram i TikTok: llegits de la pàgina/perfil públic, o a mà.
   instagramFollowers?: number;
   tiktokFollowers?: number;
-  // Seguidors de Spotify: es llegeixen de l'API pública (credencials d'app).
-  spotifyFollowers?: number;
-  // Oients mensuals: cap API els dona; es llegeixen de la pàgina pública de
-  // l'artista (millor esforç) o s'escriuen a mà.
+  // Spotify no dona seguidors sense sessió iniciada (es carreguen amb
+  // JavaScript, mai al codi de la pàgina) — només els oients mensuals, que
+  // sí que hi surten (millor esforç) o s'escriuen a mà.
   spotifyMonthlyListeners?: number;
-  // Subscriptors i visites totals del canal de YouTube: API pública amb clau.
+  // Subscriptors i visites totals del canal de YouTube, llegits de la
+  // pàgina pública del canal.
   youtubeSubscribers?: number;
   youtubeViews?: number;
 };
@@ -61,6 +61,9 @@ export type Band = {
   // presentació que s'hi mostra.
   publicToken?: string;
   bio?: string;
+  // Any en actiu, editable a mà des de la pàgina pública — buit = es
+  // calcula sol a partir del primer concert.
+  activeSince?: string;
 };
 
 // Contracte d'actuació d'un concert: text de les clàusules (paràgrafs
@@ -77,8 +80,14 @@ export type Concert = {
   id: string;
   date: string;
   time: string;
+  // Hora exacta (HH:MM), diferent de "time" (tram aproximat del dia) —
+  // opcional; si és buida, no compta al percentatge d'Informació general.
+  exactTime: string;
   venue: string;
   city: string;
+  // Carrer, número i població del recinte — s'empleix sol en triar un
+  // recinte a la cerca; Població ja no és un camp propi de la UI.
+  address: string;
   festaEntitat: string;
   bandId: string;
   bandName: string;
@@ -88,6 +97,12 @@ export type Concert = {
   attendance: Record<string, "yes" | "no">;
   substitutes: Record<string, string>;
   noSubstitute: Record<string, boolean>;
+  // Membres exclosos de la convocatòria d'aquest concert (name -> true):
+  // no s'eliminen del grup, es desactiven només per a aquest bolo.
+  convocatoriaExcluded: Record<string, boolean>;
+  // Contacte principal d'aquest concert (organitzador/promotor) — a la
+  // pestanya "Informació general", diferent dels contactes del full de ruta.
+  contact: { email: string; name: string; phone: string; company: string };
   routeSheet: unknown;
   payouts?: Record<string, number>;
   // Si l'agència assumeix les despeses del bolo (el seu % es calcula sobre
@@ -104,12 +119,31 @@ export type Concert = {
   riderId?: string | null;
   setlistId?: string | null;
   kind?: "bolo" | "assaig" | "reunio" | "altre";
+  // Cançons destacades de la setlist assignada, per a aquest concert en
+  // concret (clau = títol de la cançó) — mateixa setlist, assaigs diferents,
+  // cada un amb les seves pròpies destacades.
+  setlistHighlights?: Record<string, boolean>;
+  // Si encara no es pot fer públic (xarxes, cartell...) i, si no, a partir
+  // de quina data ja s'hi podrà — "Informació general", al costat del tipus.
+  // "" = encara sense decidir (mai pre-sel·leccionat per defecte).
+  canAnnounce: "yes" | "no" | "";
+  announceAfter: string;
+  // Si l'entrada al concert és gratuïta o de pagament — "Informació
+  // general", al costat de "Es pot anunciar?". "" = encara sense decidir.
+  ticketType: "gratuit" | "pagament" | "";
   invited?: string[];
   attToken?: string;
   // Contracte d'actuació: clàusules editables i enllaç públic per enviar-lo.
   contract?: ContractData | null;
   contractToken?: string;
 };
+
+// El contacte ve d'una columna jsonb que pot faltar o tenir només algunes
+// claus (concerts antics, migració nova) — sempre torna les 4 fetes.
+export function normalizeContact(c: unknown): Concert["contact"] {
+  const o = (c && typeof c === "object" ? c : {}) as Partial<Concert["contact"]>;
+  return { email: o.email || "", name: o.name || "", phone: o.phone || "", company: o.company || "" };
+}
 
 export type Invoice = {
   id: string;

@@ -27,7 +27,6 @@ export const PLATFORM_META: Record<SocialPlatform, { label: string; color: strin
   spotify: {
     label: "Spotify", color: "#1DB954", gradient: "#1DB954",
     metrics: [
-      { key: "spotifyFollowers", label: "Seguidors", short: "seguidors" },
       { key: "spotifyMonthlyListeners", label: "Oients mensuals", short: "oients/mes" },
     ],
   },
@@ -42,11 +41,13 @@ export const PLATFORM_META: Record<SocialPlatform, { label: string; color: strin
 
 export const SOCIAL_STAT_KEYS: (keyof SocialStats)[] = SOCIAL_PLATFORMS.flatMap((p) => PLATFORM_META[p].metrics.map((m) => m.key));
 
-// Xifra "de seguidors" de cada xarxa (la que se suma al total d'Inici).
-export const FOLLOWERS_KEY: Record<SocialPlatform, keyof SocialStats> = {
+// Xifra "de seguidors" de cada xarxa (la que se suma al total d'Inici) —
+// Spotify no en té (només oients mensuals, un concepte diferent, mai
+// sumat aquí perquè no s'infli el total amb una xifra que no és de
+// seguidors).
+export const FOLLOWERS_KEY: Partial<Record<SocialPlatform, keyof SocialStats>> = {
   instagram: "instagramFollowers",
   tiktok: "tiktokFollowers",
-  spotify: "spotifyFollowers",
   youtube: "youtubeSubscribers",
 };
 
@@ -69,6 +70,16 @@ export function formatCompact(n: number): string {
   if (abs >= 1e4) return Math.round(n / 1e3) + " k";
   if (abs >= 1e3) return (n / 1e3).toFixed(1).replace(".", ",").replace(",0", "") + " k";
   return String(n);
+}
+
+// Xifra grossa i clara de cada targeta de xarxa: sencera fins a 10.000,
+// "10,4K" un cop la passa (sempre amb un decimal), "1M" un cop passa el
+// milió (12345 → "12,3K", 1234567 → "1,2M", 900 → "900").
+export function formatHeroNumber(n: number): string {
+  const abs = Math.abs(n);
+  if (abs > 1e6) return (n / 1e6).toFixed(abs % 1e6 === 0 ? 0 : 1).replace(".", ",").replace(",0", "") + "M";
+  if (abs > 1e4) return (n / 1e3).toFixed(1).replace(".", ",") + "K";
+  return formatNumber(n);
 }
 
 export function shiftMonth(ym: string, delta: number): string {

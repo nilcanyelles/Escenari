@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert } from "@/lib/types";
-import { formatCurrency, formatDate } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateShort, formatDateFull, capitalize, relativeDayLabel, formatConcertTime } from "@/lib/format";
 import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColored, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
@@ -16,14 +16,18 @@ import { generateJoinCodeAction } from "@/app/(app)/grups/actions";
 import { setMyAttendanceAction } from "@/app/(artist)/actions";
 import { memberPerms, PERM_LABELS } from "@/lib/perms";
 import type { MemberPerms, Vehicle, SocialStats, SocialPlatform } from "@/lib/types";
-import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, isTracked, formatNumber } from "@/lib/social-history";
-import { normalizeRouteSheet, formatPhoneDisplay, rsFormatDuration, type RouteSheet } from "@/lib/route-sheet";
-import RouteSheetPreview from "@/components/RouteSheetPreview";
+import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, isTracked, formatNumber, formatHeroNumber } from "@/lib/social-history";
+import { normalizeRouteSheet, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
+import DiaTopActions from "@/components/DiaTopActions";
+import ConcertPosterEditor from "@/components/ConcertPosterEditor";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
+import SetlistEditor from "@/components/SetlistEditor";
+import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
 import SongsPanel from "@/components/SongsPanel";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
+import { KIND_META } from "@/components/CalendariView";
 
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
@@ -57,10 +61,10 @@ const SOCIAL_ICONS: Record<SocialPlatform, React.ReactNode> = {
   instagram: <InstagramIcon />, tiktok: <TiktokIcon />, spotify: <SpotifyIcon />, youtube: <YoutubeIcon />,
 };
 
-// Targeta d'una xifra de xarxes socials (Inici): amb el color/gradient de
-// marca de cada plataforma a la insígnia de la icona, la xifra actual i la
-// diferència respecte al mes passat. Només lectura — es connecta i s'edita
-// tot des de la pàgina de xarxes del grup.
+// Una xifra dins la secció d'una xarxa (Inici): la icona i el nom de la
+// xarxa ja surten un sol cop a la capçalera de la secció (bento-social-
+// platform-head) — aquí només el número, en el color de marca de la
+// xarxa, i la diferència respecte al mes passat.
 function SocialStatBox({ platform, label, value, prev }: {
   platform: SocialPlatform;
   label: string;
@@ -70,10 +74,11 @@ function SocialStatBox({ platform, label, value, prev }: {
   const d = value != null && prev != null ? value - prev : null;
   return (
     <div className="bento-social-box">
-      <span className="bento-social-icon" style={{ background: PLATFORM_META[platform].gradient }}>{SOCIAL_ICONS[platform]}</span>
       <div style={{ display: "flex", flexDirection: "column", gap: 1, flex: 1, minWidth: 0 }}>
         <span className="bento-social-l">{label}</span>
-        <span className="bento-social-n">{value != null ? formatNumber(value) : "—"}</span>
+        <span className="bento-social-n" style={{ color: PLATFORM_META[platform].color }} title={value != null ? formatNumber(value) : undefined}>
+          {value != null ? formatHeroNumber(value) : "—"}
+        </span>
         {d != null && d !== 0 && (
           <span className={"sx-delta " + (d > 0 ? "up" : "down")} style={{ fontSize: 10.5 }}>
             {d > 0 ? "+" : "−"}{formatNumber(Math.abs(d))} aquest mes
@@ -84,73 +89,192 @@ function SocialStatBox({ platform, label, value, prev }: {
   );
 }
 
-// Bolo d'avui a Inici: el que diu el full de ruta (horaris, contactes, lloc
-// i hospitalitat), amb accés directe al concert, al mapa i al document.
-function TodayGig({ c, base, isMgr, onRouteSheet }: { c: Concert; base: string; isMgr: boolean; onRouteSheet: () => void }) {
-  const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
-  const address = rs.lloc.find((l) => l.label.trim().toLowerCase() === "adreça")?.value || "";
-  const parking = rs.lloc.find((l) => l.label.trim().toLowerCase() === "parking");
-  const mapsQuery = encodeURIComponent([c.venue, address, c.city].filter(Boolean).join(", "));
-  const phases = rs.schedule.filter((p) => p.phase && (p.start || p.end));
-  const contacts = rs.contacts.filter((ct) => (ct.name || "").trim() || (ct.phone || "").trim());
-  const hosp = rs.hospitalitat.filter((h) => h.included !== false && (h.value || "").trim());
-  const placeLines = [
-    address ? { label: "Adreça", value: address } : null,
-    parking && (parking.value || parking.plates) ? { label: "Parking", value: [parking.value, parking.plates].filter(Boolean).join(" · ") } : null,
-    ...hosp.map((h) => ({ label: h.label, value: h.value })),
-  ].filter((x): x is { label: string; value: string } => !!x);
+function InfoIcon() {
   return (
-    <div className="bento-today-gig" onClick={(e) => e.stopPropagation()}>
-      <div className="bento-today-head">
-        <div>
-          <div className="bento-today-place">{c.venue || "Lloc per determinar"}{c.city ? ` · ${c.city.split(",")[0]}` : ""}</div>
-          <div className="t-dim" style={{ fontSize: 12.5, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-            <span>{c.time ? `Concert a les ${c.time}h` : "Hora per confirmar"}{c.festaEntitat ? ` · ${c.festaEntitat}` : ""}</span>
-            <span className="badge">{c.status}</span>
-          </div>
-        </div>
-        <div className="bento-today-actions">
-          <a className="btn-outline" href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`} target="_blank" rel="noreferrer">Mapa</a>
-          <button type="button" className="btn-outline" onClick={onRouteSheet}>Full de ruta</button>
-          {isMgr && <Link className="btn-outline" href={`/concerts/${c.id}/dia`}>Dia de bolo</Link>}
-          <Link className="btn-save" href={`${base}/concerts/${c.id}`}>Obre el concert</Link>
-        </div>
-      </div>
-      <div className="bento-today-cols">
-        <div className="bento-today-col">
-          <div className="dia-card-title">Horaris</div>
-          {phases.length === 0 ? (
-            <span className="t-dim" style={{ fontSize: 12.5 }}>Sense horaris al full de ruta{c.time ? ` — concert a les ${c.time}h` : ""}.</span>
-          ) : phases.map((p, i) => (
-            <div key={i} className="dia-sched-row">
-              <span className="dia-sched-time">{p.start || "—"}{p.end ? `–${p.end}` : ""}</span>
-              <span>{p.phase}</span>
-              <span className="t-dim" style={{ marginLeft: "auto", fontSize: 11 }}>{rsFormatDuration(p.start, p.end)}</span>
-            </div>
-          ))}
-        </div>
-        <div className="bento-today-col">
-          <div className="dia-card-title">Contactes</div>
-          {contacts.length === 0 ? (
-            <span className="t-dim" style={{ fontSize: 12.5 }}>Cap contacte al full de ruta.</span>
-          ) : contacts.map((ct, i) => (
-            <div key={i} className="bento-today-contact">
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontWeight: 600 }}>{ct.name || ct.role || "Contacte"}</div>
-                <div className="t-dim" style={{ fontSize: 11.5 }}>{[ct.name ? ct.role : "", ct.company].filter(Boolean).join(" · ")}</div>
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>
+    </svg>
+  );
+}
+function SetlistIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle>
+    </svg>
+  );
+}
+function PencilIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+  );
+}
+// Botó de la setlist al bànner de "Proper concert": amb setlist assignada
+// obre'n el PDF/públic (el mateix camí que "Obre / PDF" a la fitxa del
+// concert); sense cap assignada, un avís explica que en falta una en
+// comptes de no fer res — igual de desplegable que el menú de compartir.
+function SetlistButton({ c, band, setlists, songs, canEdit, iconBtnClass }: {
+  c: Concert; band: Band; setlists: Setlist[]; songs: Song[]; canEdit: boolean; iconBtnClass: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [showSwitch, setShowSwitch] = useState(false);
+  const [assigning, setAssigning] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const setlist = setlists.find((s) => s.id === c.setlistId);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDocClick(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) { setOpen(false); setShowSwitch(false); }
+    }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  // Assigna sense sortir d'aquí (mai redirigint a la fitxa del concert) —
+  // mateixa acció que ja fa servir la fitxa del concert per triar setlist.
+  async function assign(id: string) {
+    setAssigning(true);
+    await setConcertMaterialAction(c.id, "setlist", id);
+    setAssigning(false);
+    setOpen(false);
+    setShowSwitch(false);
+    router.refresh();
+  }
+
+  return (
+    <div className="dia-share-wrap setlist-menu-wrap" ref={wrapRef}>
+      <button
+        type="button" className={iconBtnClass}
+        title={setlist ? `Setlist: ${setlist.name}` : "Sense setlist assignada"}
+        onClick={() => { setOpen((v) => !v); setShowSwitch(false); }}
+      >
+        <SetlistIcon />
+      </button>
+      {open && (
+        <div className="dia-share-menu" style={{ minWidth: 220, padding: 10 }}>
+          {setlist ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "3px 6px 7px" }}>
+                <span style={{ fontSize: 11, letterSpacing: "0.06em", textTransform: "uppercase", color: "var(--text-ghost)", fontWeight: 700 }}>Setlist</span>
+                {canEdit && setlists.filter((s) => s.id !== setlist.id).length > 0 && (
+                  <button type="button" className="pv-stat-edit" title="Tria una altra setlist" onClick={() => setShowSwitch((v) => !v)}><PencilIcon /></button>
+                )}
               </div>
-              {ct.phone && <a className="bento-today-call" href={`tel:${ct.phone.replace(/\s/g, "")}`}>{ICON_PHONE}{formatPhoneDisplay(ct.phone)}</a>}
+              <button type="button" className="dia-share-menu-item" onClick={() => { setOpen(false); router.push(`/escenari-mode/${setlist.id}?concert=${c.id}`); }}>▶ {setlist.name}</button>
+              {showSwitch && setlists.filter((s) => s.id !== setlist.id).map((s) => (
+                <button key={s.id} type="button" className="dia-share-menu-item" disabled={assigning} onClick={() => assign(s.id)}>{s.name}</button>
+              ))}
+              {canEdit && (
+                <button type="button" className="dia-share-menu-item" onClick={() => { setEditorOpen(true); setOpen(false); }}>+ Crea una setlist nova</button>
+              )}
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: 12, color: "var(--text-dim)", padding: "3px 6px 7px" }}>
+                Sense setlist assignada{setlists.length > 0 ? ", tria-la:" : "."}
+              </div>
+              {setlists.map((s) => (
+                <button key={s.id} type="button" className="dia-share-menu-item" disabled={assigning} onClick={() => assign(s.id)}>
+                  {assigning ? "…" : s.name}
+                </button>
+              ))}
+              {canEdit && (
+                <button type="button" className="dia-share-menu-item" onClick={() => { setEditorOpen(true); setOpen(false); }}>+ Crea una setlist nova</button>
+              )}
+              {!canEdit && setlists.length === 0 && (
+                <div style={{ fontSize: 12, color: "var(--text-faint)", padding: "0 6px" }}>Encara no hi ha cap setlist al grup.</div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {editorOpen && createPortal(
+        // Amunt del tot amb un portal — .bento-next-poster té una
+        // animació (transform) que converteix aquesta targeta en el marc
+        // de referència de qualsevol position:fixed de dins seu, cosa que
+        // trencava i retallava el modal (es veia superposat/tallat).
+        <SetlistEditor
+          band={band} setlist={null} librarySongs={songs}
+          onClose={() => { setEditorOpen(false); router.refresh(); setOpen(true); }}
+        />,
+        document.body
+      )}
+    </div>
+  );
+}
+// Targeta "Proper concert" de la pestanya Inici: sempre hi és (no només si
+// avui hi ha bolo), amb el mateix estil de pòster que la capçalera de la
+// fitxa del concert (.cd-poster) i uns horaris reduïts a només la primera
+// convocatòria i l'hora del concert — cadascuna amb només l'inici, mai
+// l'interval sencer.
+function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
+  c: Concert; base: string; band: Band; setlists: Setlist[]; songs: Song[]; canEditSetlists: boolean;
+}) {
+  const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
+  const phases = withLiveConcertStart(rs.schedule, c.exactTime).filter((p) => p.phase && p.start);
+  const concertPhase = phases.find((p) => p.phase.trim().toLowerCase() === "concert");
+  const callPhase = phases.find((p) => p !== concertPhase);
+  // Dia concret aquí; l'etiqueta relativa (Avui/Demà...) surt al costat del
+  // títol de la targeta.
+  const dayFull = capitalize(formatDateFull(c.date));
+  // Fons amb els dos colors del grup (principal i complementari) — vegeu
+  // .bento-next-poster a l'estil.
+  const accentVars = { ["--band-accent" as string]: band.color1 || "#8b7bff", ["--band-accent-2" as string]: band.color2 || band.color1 || "#8b7bff" };
+  // Triant "Instagram" al menú de compartir, l'editor del pòster
+  // s'incrusta aquí mateix (en comptes d'obrir-se com a finestra flotant)
+  // — substitueix tot el contingut normal de la targeta fins que es tanca.
+  const [posterEditorOpen, setPosterEditorOpen] = useState(false);
+  if (posterEditorOpen) {
+    return (
+      <div className="cd-poster bento-next-poster bento-next-poster-editor" style={accentVars} onClick={(e) => e.stopPropagation()}>
+        <ConcertPosterEditor concert={c} band={band} onClose={() => setPosterEditorOpen(false)} />
+      </div>
+    );
+  }
+  // Info, full de ruta i compartir només tenen sentit per a un bolo de
+  // veritat — un assaig/reunió/altre només hi té la setlist, i en comptes
+  // del recinte + hora del concert enganxats a la data, hi surt el recinte
+  // en gran (com si fos el títol) i la data i l'hora cada una a la seva
+  // línia.
+  const isBolo = !c.kind || c.kind === "bolo";
+  return (
+    <div className="cd-poster bento-next-poster" style={accentVars} onClick={(e) => e.stopPropagation()}>
+      <div className="cd-poster-glow" aria-hidden="true"></div>
+      <div className="cd-poster-kicker">{c.bandName}</div>
+      <div className="cd-poster-subtitle">{c.festaEntitat || (c.kind && c.kind !== "bolo" ? (c.kind === "reunio" ? "reunió" : c.kind) : "concert")}</div>
+      {isBolo ? (
+        <>
+          {c.city && <div className="cd-poster-title">{c.city.split(",")[0]}</div>}
+          {c.venue && (
+            <a
+              className="cd-poster-place" onClick={(e) => e.stopPropagation()} target="_blank" rel="noopener"
+              href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent([c.venue, c.address, c.city].filter(Boolean).join(", "))}`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+              {c.venue}
+            </a>
+          )}
+          <div className="cd-poster-date">{dayFull}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
+          {(callPhase || concertPhase) && (
+            <div className="bento-next-sched">
+              {callPhase && <div className="bento-next-sched-row"><span>{callPhase.phase}</span><b>{callPhase.start}</b></div>}
+              {concertPhase && <div className="bento-next-sched-row"><span>{concertPhase.phase}</span><b>{concertPhase.start}</b></div>}
             </div>
-          ))}
-        </div>
-        <div className="bento-today-col">
-          <div className="dia-card-title">Lloc i hospitalitat</div>
-          {placeLines.length === 0 ? (
-            <span className="t-dim" style={{ fontSize: 12.5 }}>Res al full de ruta encara.</span>
-          ) : placeLines.map((l, i) => (
-            <div key={i} className="bento-today-line"><b>{l.label}</b><span>{l.value}</span></div>
-          ))}
-        </div>
+          )}
+        </>
+      ) : (
+        <>
+          {(c.venue || c.city) && <div className="cd-poster-title">{c.venue || c.city!.split(",")[0]}</div>}
+          <div className="cd-poster-date">{dayFull}</div>
+          {(c.exactTime || c.time) && <div className="cd-poster-time">{c.exactTime || formatConcertTime(c.time)}</div>}
+        </>
+      )}
+      <div className="bento-next-actions" onClick={(e) => e.stopPropagation()}>
+        {isBolo && <Link className="btn-outline bento-next-icon-btn" href={`/concerts/${c.id}/dia`} title="Dia de bolo"><InfoIcon /></Link>}
+        <SetlistButton c={c} band={band} setlists={setlists} songs={songs} canEdit={canEditSetlists} iconBtnClass="btn-outline bento-next-icon-btn" />
+        {isBolo && <DiaTopActions concert={c} band={band} base={base} iconBtnClass="btn-outline bento-next-icon-btn" onInstagramClick={() => setPosterEditorOpen(true)} />}
       </div>
     </div>
   );
@@ -454,10 +578,13 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // al dia.
   const socialStats: SocialStats = band.socialStats || {};
   const trackedPlatforms = SOCIAL_PLATFORMS.filter((p) => isTracked(p, band.socialTracking, band.socialLinks));
-  const totalFollowers = trackedPlatforms.reduce((sum, p) => sum + (socialStats[FOLLOWERS_KEY[p]] || 0), 0);
-  // Bolos d'avui: la targeta gran d'Inici amb el full de ruta.
-  const todayGigs = concerts.filter((c) => c.date === today && c.status !== "cancel·lat" && (c.kind || "bolo") === "bolo");
-  const [rsPreview, setRsPreview] = useState<Concert | null>(null);
+  const totalFollowers = trackedPlatforms.reduce((sum, p) => {
+    const key = FOLLOWERS_KEY[p];
+    return sum + (key ? socialStats[key] || 0 : 0);
+  }, 0);
+  // Clicar un concert de la llista de "Proper concert" el fa gran (el
+  // pòster), en comptes d'obrir la seva fitxa — per defecte, el més proper.
+  const [selectedGigId, setSelectedGigId] = useState<string | null>(null);
   // Pàgina pública del grup (es crea l'enllaç el primer cop que s'obre).
   const [shareBusy, setShareBusy] = useState(false);
   async function sharePublicPage() {
@@ -504,13 +631,48 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   }
 
   const total = concerts.filter((c) => c.status !== "cancel·lat").length;
-  const upcoming = concerts.filter((c) => c.date >= today && c.status !== "cancel·lat");
-  // KPI de ritme: mitjana de concerts per mes d'enguany.
-  const yearStr = today.slice(0, 4);
-  const yearCount = concerts.filter((c) => c.date.slice(0, 4) === yearStr && c.status !== "cancel·lat").length;
-  const monthsElapsed = parseInt(today.slice(5, 7), 10);
-  const concertsPerMonth = (yearCount / Math.max(1, monthsElapsed)).toFixed(1).replace(".", ",");
-  const monthCount = concerts.filter((c) => c.date.slice(0, 7) === today.slice(0, 7) && c.status !== "cancel·lat").length;
+  const upcoming = concerts
+    .filter((c) => c.date >= today && c.status !== "cancel·lat")
+    .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  // Finestra fixa (els 6 més propers): triar-ne un com a gran no en fa
+  // entrar cap altre de nou a la llista, només li canvia el format al que
+  // ja hi era — l'ordre i el conjunt es queden sempre igual.
+  const shownGigs = upcoming.slice(0, 6);
+  const heroGig = shownGigs.find((c) => c.id === selectedGigId) || shownGigs[0];
+  const heroIdx = Math.max(0, shownGigs.findIndex((c) => c.id === heroGig?.id));
+  // Els anteriors al que es veu gran (cronològicament) surten a sobre seu;
+  // els posteriors, a sota — mai es barregen en una sola llista.
+  const beforeGigs = shownGigs.slice(0, heroIdx);
+  const afterGigs = shownGigs.slice(heroIdx + 1);
+  function renderGigRow(c: Concert) {
+    const myAns = myName ? (c.attendance || {})[myName] : undefined;
+    // Tipus (bolo/assaig/reunió/altres) i el seu color — substitueix
+    // l'estat (confirmat/pendent...) a la insígnia, i tenyeix també la data.
+    const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
+    const km = KIND_META[k];
+    return (
+      <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); setSelectedGigId(c.id); }}>
+        <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>
+        <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
+        {!isMgr && myName ? (
+          <span className="bento-gig-att" onClick={(e) => e.stopPropagation()}>
+            <button
+              type="button" className={"bento-att-btn yes" + (myAns === "yes" ? " active" : "")}
+              title="Hi seré"
+              onClick={async () => { await setMyAttendanceAction(c.id, "yes"); router.refresh(); }}
+            >✓</button>
+            <button
+              type="button" className={"bento-att-btn no" + (myAns === "no" ? " active" : "")}
+              title="No hi seré"
+              onClick={async () => { await setMyAttendanceAction(c.id, "no"); router.refresh(); }}
+            >✗</button>
+          </span>
+        ) : (
+          <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>
+        )}
+      </div>
+    );
+  }
   const linkedByName: Record<string, LinkedMember> = {};
   linkedMembers.forEach((m) => { linkedByName[m.memberName] = m; });
 
@@ -638,111 +800,76 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {tab === "inici" && (
         <BentoGrid
           cards={([
-            // Si avui hi ha bolo, la primera targeta (d'amplada completa) és
-            // el seu full de ruta, a mà.
-            ...(todayGigs.length ? [{
-              key: "avui",
-              label: "Avui",
-              title: todayGigs.length === 1
-                ? `Avui toqueu a ${todayGigs[0].venue || todayGigs[0].city || "un bolo"}`
-                : `Avui teniu ${todayGigs.length} bolos`,
-              description: "Tot el que diu el full de ruta, a mà",
-              colSpan: 4,
-              className: "bento-today",
+            // Primera targeta (amplada completa), sempre hi és: el proper
+            // concert amb l'estil de pòster, i sota, els 5 següents en la
+            // mateixa llista compacta que abans hi havia a "Agenda".
+            {
+              key: "proper",
+              label: upcoming.length
+                ? `Proper concert - ${relativeDayLabel(heroGig.date, today)}`
+                : "Proper concert",
+              title: `${upcoming.length} bolos a la vista`,
+              description: `${total} concerts en total`,
+              colSpan: 2,
+              rowSpan: 2,
+              className: "bento-next",
+              onClick: () => router.push(base + "/agenda"),
               content: (
-                <div className="bento-today-body">
-                  {todayGigs.map((c) => (
-                    <TodayGig key={c.id} c={c} base={base} isMgr={isMgr} onRouteSheet={() => setRsPreview(c)} />
-                  ))}
+                <div className="bento-next-body">
+                  {upcoming.length === 0 ? (
+                    <span className="t-dim" style={{ fontSize: 12.5 }}>Cap bolo programat.</span>
+                  ) : (
+                    <>
+                      {beforeGigs.length > 0 && (
+                        <div className="bento-gigs bento-next-list">
+                          {beforeGigs.map((c) => renderGigRow(c))}
+                        </div>
+                      )}
+                      <NextGigPoster key={heroGig.id} c={heroGig} base={base} band={band} setlists={setlists} songs={songs} canEditSetlists={can.setlists} />
+                      {afterGigs.length > 0 && (
+                        <div className="bento-gigs bento-next-list">
+                          {afterGigs.map((c) => renderGigRow(c))}
+                        </div>
+                      )}
+                    </>
+                  )}
                 </div>
               ),
-            }] : []),
+            },
             {
               key: "xarxes",
               label: "Xarxes socials",
               title: trackedPlatforms.length && totalFollowers ? `${formatNumber(totalFollowers)} seguidors` : "Xarxes socials",
               description: isMgr ? "Connecta les xarxes i mira'n l'evolució mes a mes" : "Seguidors i oients del grup",
               colSpan: 2,
-              rowSpan: 2,
+              // Alt només si hi ha prou xarxes per omplir-lo de veres —
+              // amb 1 o 2 la targeta s'ajusta a la seva pròpia alçada
+              // (vegeu .bento-xarxes, que li treu l'estirament vertical
+              // que fan totes les altres targetes del mosaic).
+              rowSpan: trackedPlatforms.length > 2 ? 2 : 1,
+              className: "bento-xarxes",
               onClick: isMgr ? () => router.push("/grup/xarxes") : undefined,
               content: (
                 <div className="bento-social">
                   {trackedPlatforms.length === 0 ? (
-                    <span className="t-dim" style={{ fontSize: 12.5, gridColumn: "1 / -1" }}>
+                    <span className="t-dim" style={{ fontSize: 12.5 }}>
                       {isMgr ? "Encara no hi ha cap xarxa connectada — toca aquí per afegir-les." : "El grup encara no té cap xarxa connectada."}
                     </span>
-                  ) : trackedPlatforms.flatMap((p) => PLATFORM_META[p].metrics.map((m) => (
-                    <SocialStatBox key={m.key} platform={p} label={`${m.label} ${PLATFORM_META[p].label}`} value={socialStats[m.key]} prev={socialPrev[m.key]} />
-                  )))}
-                </div>
-              ),
-            },
-            {
-              key: "bolos",
-              label: "Agenda",
-              title: `${upcoming.length} bolos a la vista`,
-              description: `${total} concerts en total`,
-              colSpan: 2,
-              rowSpan: 2,
-              onClick: () => router.push(base + "/agenda"),
-              content: (
-                <div className="bento-gigs">
-                  {upcoming.slice(0, 5).map((c) => {
-                    const myAns = myName ? (c.attendance || {})[myName] : undefined;
-                    return (
-                      <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); router.push(`${base}/concerts/${c.id}`); }}>
-                        <span className="bento-gig-date">{formatDate(c.date)}</span>
-                        <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
-                        {!isMgr && myName ? (
-                          <span className="bento-gig-att" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              type="button" className={"bento-att-btn yes" + (myAns === "yes" ? " active" : "")}
-                              title="Hi seré"
-                              onClick={async () => { await setMyAttendanceAction(c.id, "yes"); router.refresh(); }}
-                            >✓</button>
-                            <button
-                              type="button" className={"bento-att-btn no" + (myAns === "no" ? " active" : "")}
-                              title="No hi seré"
-                              onClick={async () => { await setMyAttendanceAction(c.id, "no"); router.refresh(); }}
-                            >✗</button>
-                          </span>
-                        ) : (
-                          <span className="badge" style={{ marginLeft: "auto" }}>{c.status}</span>
-                        )}
+                  ) : trackedPlatforms.map((p) => (
+                    <div key={p} className={"bento-social-platform" + (p === "spotify" || p === "youtube" ? " wide" : "")}>
+                      <div className="bento-social-platform-head">
+                        <span className="bento-social-icon" style={{ background: PLATFORM_META[p].gradient }}>{SOCIAL_ICONS[p]}</span>
+                        <span className="bento-social-platform-name">{PLATFORM_META[p].label}</span>
                       </div>
-                    );
-                  })}
-                  {upcoming.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap bolo programat.</span>}
+                      <div className="bento-social-platform-stats">
+                        {PLATFORM_META[p].metrics.map((m) => (
+                          <SocialStatBox key={m.key} platform={p} label={m.label} value={socialStats[m.key]} prev={socialPrev[m.key]} />
+                        ))}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               ),
-            },
-            {
-              key: "cancons",
-              label: "Repertori",
-              title: `${songs.length} cançons`,
-              description: "Lletres, acords i gravacions",
-              onClick: () => setTab("cancons"),
-            },
-            {
-              key: "riders",
-              label: "Tècnica",
-              title: `${riders.length} riders`,
-              description: "Plànol d'escenari i aprovacions",
-              onClick: () => setTab("documents"),
-            },
-            {
-              key: "setlists",
-              label: "Directe",
-              title: `${setlists.length} setlists`,
-              description: "Amb mode escenari",
-              onClick: () => setTab("cancons"),
-            },
-            {
-              key: "ritme",
-              label: "Ritme",
-              title: `${concertsPerMonth} concerts/mes`,
-              description: `${monthCount} aquest mes · mitjana d'enguany`,
-              onClick: () => router.push(base + "/estadistiques"),
             },
           ] as BentoCard[])}
         />
@@ -1097,15 +1224,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
       {editOpen && (
         <GroupAppearanceModal key={band.id} band={band} onClose={() => setEditOpen(false)} />
-      )}
-
-      {/* Full de ruta del bolo d'avui, tal com s'imprimeix */}
-      {rsPreview && (
-        <RouteSheetPreview
-          concert={rsPreview}
-          onClose={() => setRsPreview(null)}
-          onEdit={() => router.push(`${base}/concerts/${rsPreview.id}`)}
-        />
       )}
     </div>
   );

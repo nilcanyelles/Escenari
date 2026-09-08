@@ -67,7 +67,27 @@ export default function AppShell({
   const [localBand, setLocalBand] = useState<string | null>(null);
   const initials = initialsOf(user.name);
   const activeBand = localBand ?? (selectedBandId || "");
+  const activeBandObj = (bands || []).find((b) => b.id === activeBand) || null;
   const hasRail = Array.isArray(bands);
+
+  // El menú lateral de grups es pot amagar — es recorda entre pàgines
+  // (localStorage, no cookie: és només una preferència visual d'aquest
+  // navegador, no cal que el servidor la conegui).
+  const RAIL_KEY = "escenari_rail_open";
+  const [railOpen, setRailOpen] = useState(true);
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(RAIL_KEY);
+      if (saved !== null) setRailOpen(saved !== "0");
+    } catch { /* localStorage no disponible */ }
+  }, []);
+  function toggleRail() {
+    setRailOpen((v) => {
+      const next = !v;
+      try { window.localStorage.setItem(RAIL_KEY, next ? "1" : "0"); } catch { /* ignore */ }
+      return next;
+    });
+  }
 
   useEffect(() => { setLocalBand(null); }, [selectedBandId]);
 
@@ -126,7 +146,7 @@ export default function AppShell({
     );
   }
 
-  const bandRail = hasRail && (
+  const bandRail = hasRail && railOpen && (
     <aside className="band-rail desktop-only">
       {railLinks && railLinks.length > 0 && (
         <>
@@ -220,10 +240,33 @@ export default function AppShell({
 
         <div className="page-header desktop-only">
           <div className="page-header-brand">
+            {hasRail && (
+              <button
+                type="button" className={"rail-toggle-btn" + (railOpen ? "" : " rail-closed")}
+                onClick={toggleRail} title={railOpen ? "Amaga el menú de grups" : "Mostra el menú de grups"}
+                aria-label={railOpen ? "Amaga el menú de grups" : "Mostra el menú de grups"}
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points={railOpen ? "15 18 9 12 15 6" : "9 18 15 12 9 6"}></polyline>
+                </svg>
+              </button>
+            )}
             <Link href={homeHref} className="brand-lockup brand-link" title="Torna a l'inici">
               <img className="brand-mark" src="/logo-mark.png" alt="" />
               <span className="brand-name">ESCENARI</span>
             </Link>
+            {agency?.logo && (
+              <>
+                <span className="page-header-sep">/</span>
+                <img className="brand-mark page-header-agency" src={agency.logo} alt={agency.name} title={agency.name} />
+              </>
+            )}
+            {activeBandObj && (
+              <>
+                <span className="page-header-sep">/</span>
+                <img className="brand-mark page-header-band" src={activeBandObj.logo || bandPhotoDataUri(activeBandObj)} alt={activeBandObj.name} title={activeBandObj.name} />
+              </>
+            )}
           </div>
           <div className="topnav" ref={topnavRef}>
             <div

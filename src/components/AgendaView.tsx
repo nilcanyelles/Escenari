@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import type { Band, Concert, Invoice } from "@/lib/types";
+import type { Band, Concert, Invoice, Contact } from "@/lib/types";
 import { MONTH_FULL, formatCurrency, formatDate, monthWithPrep } from "@/lib/format";
 import CalendariView from "@/components/CalendariView";
 import ShareMonthModal from "@/components/ShareMonthModal";
 
 // Agenda = resum ràpid + calendari en una sola pàgina (la principal).
-export default function AgendaView({ bands, concerts, invoices, icsToken = "", selectedBandId = "", today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; icsToken?: string; selectedBandId?: string; today: string }) {
+export default function AgendaView({ bands, concerts, invoices, icsToken = "", selectedBandId = "", contacts = [], today }: { bands: Band[]; concerts: Concert[]; invoices: Invoice[]; icsToken?: string; selectedBandId?: string; contacts?: Contact[]; today: string }) {
   const [shareOpen, setShareOpen] = useState(false);
   const ym = today.slice(0, 7);
   const monthIdx = parseInt(today.slice(5, 7), 10) - 1;
@@ -73,7 +73,7 @@ export default function AgendaView({ bands, concerts, invoices, icsToken = "", s
         </button>
       </div>
 
-      <CalendariView bands={bands} concerts={concerts} selectedBandId={selectedBandId} icsToken={icsToken} today={today} />
+      <CalendariView bands={bands} concerts={concerts} selectedBandId={selectedBandId} icsToken={icsToken} contacts={contacts} today={today} />
 
       {shareOpen && (
         <ShareMonthModal bands={bands} concerts={concerts} today={today} onClose={() => setShareOpen(false)} />

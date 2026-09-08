@@ -2,12 +2,13 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Concert } from "@/lib/types";
+import type { Concert, Contact } from "@/lib/types";
 import {
   type RouteSheet, type LlocItem, type ContactItem, type ScheduleItem, type HospitalitatItem, type TecnicItem,
   normalizeRouteSheet, rsBlankItem, rsIsComplete, RS_SECTION_ICONS,
 } from "@/lib/route-sheet";
 import { saveRouteSheetAction } from "@/app/(app)/concerts/actions";
+import ContactAutocomplete from "@/components/ContactAutocomplete";
 
 type Section = "lloc" | "contacts" | "schedule" | "hospitalitat" | "tecnic";
 type DragInfo = { section: Section; index: number };
@@ -65,7 +66,7 @@ function TimePairInput({ value, onChange }: { value: string; onChange: (v: strin
   );
 }
 
-export default function RouteSheetModal({ concert, onClose, onOpenPreview }: { concert: Concert; onClose: () => void; onOpenPreview: () => void }) {
+export default function RouteSheetModal({ concert, onClose, onOpenPreview, contacts = [] }: { concert: Concert; onClose: () => void; onOpenPreview: () => void; contacts?: Contact[] }) {
   const router = useRouter();
   const [rsf, setRsf] = useState<RouteSheet>(() => normalizeRouteSheet(concert.routeSheet as RouteSheet | null, concert));
   const [saving, setSaving] = useState(false);
@@ -79,7 +80,14 @@ export default function RouteSheetModal({ concert, onClose, onOpenPreview }: { c
     setRsf((prev) => ({ ...prev, [section]: [...(prev[section] as unknown[]), rsBlankItem(section)] }));
   }
   function removeItem(section: Section, index: number) {
-    setRsf((prev) => ({ ...prev, [section]: (prev[section] as unknown[]).filter((_, i) => i !== index) }));
+    setRsf((prev) => {
+      const items = prev[section] as unknown[];
+      const removedItem = items[index] as { label?: string; phase?: string };
+      const label = (removedItem?.label || removedItem?.phase || "").trim();
+      const removedDefaults = { ...(prev.removedDefaults || {}) };
+      if (label) removedDefaults[section] = [...(removedDefaults[section] || []), label];
+      return { ...prev, [section]: items.filter((_, i) => i !== index), removedDefaults };
+    });
   }
   function reorder(section: Section, from: number, to: number) {
     setRsf((prev) => {
@@ -167,8 +175,9 @@ export default function RouteSheetModal({ concert, onClose, onOpenPreview }: { c
       <DragHandle onDragStart={() => setDragInfo({ section: "contacts", index: i })} />
       <input className="field-input" type="text" placeholder="Càrrec" value={ct.role}
         onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, role: e.target.value } : x))} />
-      <input className="field-input" type="text" placeholder="Nom" value={ct.name}
-        onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, name: e.target.value } : x))} />
+      <ContactAutocomplete className="field-input" placeholder="Nom" value={ct.name} contacts={contacts}
+        onNameChange={(v) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, name: v } : x))}
+        onPick={(c) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, name: c.name, role: c.role || x.role, phone: c.phone, company: c.company } : x))} />
       <input className="field-input" type="text" placeholder="Empresa" value={ct.company}
         onChange={(e) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, company: e.target.value } : x))} />
       <input className="field-input" type="text" placeholder="Telèfon" value={ct.phone}

@@ -3,10 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Band, Concert, Invoice, CompanyInfo, ClientDetails } from "@/lib/types";
-import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, WEEKDAY_SHORT, pad2, MONTH_FULL } from "@/lib/format";
+import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact } from "@/lib/types";
+import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, pad2, formatConcertTime, formatConcertTimePhrase } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
-import { rsCompletionPercent } from "@/lib/route-sheet";
+import { rsCompletionPercent, withLiveAddress, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
 import { normalize } from "@/lib/text";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, RiderApproval } from "@/lib/material-types";
@@ -15,11 +15,9 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyAssumesExpensesAction, setAgencyPctAction, searchCitiesAction, searchVenuesAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyAssumesExpensesAction, setAgencyPctAction, repeatConcertAction, setSetlistHighlightsAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
-import type { Checklist } from "@/lib/checklists";
-import ChecklistSection from "@/components/ChecklistSection";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
 import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction } from "@/app/(app)/concerts/share-actions";
@@ -35,6 +33,11 @@ import type { BillingInfo } from "@/lib/plans";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import InvoicePreview from "@/components/InvoicePreview";
 import ConcertPosterModal from "@/components/ConcertPosterModal";
+import InlineDatePicker from "@/components/InlineDatePicker";
+import VenueSearchField, { resolvePlaceToVenueFields } from "@/components/VenueSearchField";
+import { KIND_META } from "@/components/CalendariView";
+import TimePeriodBubble from "@/components/TimePeriodBubble";
+import ContactAutocomplete from "@/components/ContactAutocomplete";
 
 const STATUS_CYCLE = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
@@ -53,19 +56,29 @@ function progressColor(percent: number, alpha = 1): string {
 }
 
 // Percentatge d'informació bàsica del concert (per al mesurador "què falta").
-export function infoCompletion(c: Concert): { percent: number; missing: string[] } {
+// "amountFilled" ve a part perquè "0 € (de veres)" i "encara buit" tots dos
+// es guarden com el mateix 0 numèric — només l'estat local de l'input (un
+// text, no un número) sap distingir-los mentre s'edita.
+export function infoCompletion(c: Concert, opts?: { amountFilled?: boolean }): { percent: number; missing: string[] } {
   const checks: [string, boolean][] = [
     ["Data", !!c.date],
-    ["Hora", !!c.time],
-    ["Població", !!c.city.trim()],
-    ["Ubicació", !!c.venue.trim() && c.venue !== "Sala per determinar"],
+    ["Hora", !!c.exactTime],
+    ["Adreça", !!c.address.trim()],
+    ["Recinte", !!c.venue.trim() && c.venue !== "Sala per determinar"],
     ["Festa/entitat", !!(c.festaEntitat || "").trim()],
-    ["Import", c.amount > 0],
-    ["Estat confirmat", c.status === "confirmat"],
+    // No es demanen aquests tres camps als assajos/reunions/altres — no els
+    // hi surten (ni tan sols la casella).
+    ["Import", c.kind && c.kind !== "bolo" ? true : (opts?.amountFilled ?? c.amount > 0)],
+    ["Es pot anunciar?", c.kind && c.kind !== "bolo" ? true : !!c.canAnnounce],
+    ["Tipus d'entrada", c.kind && c.kind !== "bolo" ? true : !!c.ticketType],
+    // Un cancel·lat ja no necessita arribar a "confirmat" — és igualment un
+    // estat resolt/definitiu, no un pendent de decidir.
+    ["Estat confirmat", c.status === "confirmat" || c.status === "cancel·lat"],
   ];
   const filled = checks.filter(([, ok]) => ok).length;
   return { percent: Math.round((filled / checks.length) * 100), missing: checks.filter(([, ok]) => !ok).map(([label]) => label) };
 }
+
 
 function Meter({ label, percent, missing }: { label: string; percent: number; missing: string[] }) {
   const [open, setOpen] = useState(false);
@@ -88,15 +101,107 @@ function Meter({ label, percent, missing }: { label: string; percent: number; mi
   );
 }
 
+function WarnIcon() {
+  return <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ flex: "none" }}><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>;
+}
+function SwapIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
+      <path d="m21 16-4 4-4-4"></path>
+      <path d="M17 20V4"></path>
+      <path d="m3 8 4-4 4 4"></path>
+      <path d="M7 4v16"></path>
+    </svg>
+  );
+}
+function HourglassIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
+      <path d="M5 22h14"></path>
+      <path d="M5 2h14"></path>
+      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+    </svg>
+  );
+}
+
+// Barra de la convocatòria a la capçalera: en comptes d'un sol percentatge,
+// dos trams (sí en verd, no en vermell) sobre el total de membres — el
+// tram restant (sense marcar) es veu com a fons neutre. Els exclosos de la
+// convocatòria d'aquest concert no compten enlloc (ni al total).
+function AttendanceMeter({ people, attendance, excluded, substitutes = {} }: { people: { name: string }[]; attendance: Record<string, string>; excluded: Record<string, boolean>; substitutes?: Record<string, string> }) {
+  const [open, setOpen] = useState(false);
+  const active = people.filter((p) => !excluded[p.name]);
+  const yes = active.filter((p) => attendance[p.name] === "yes");
+  const no = active.filter((p) => attendance[p.name] === "no");
+  const total = active.length;
+  const yesPct = total ? (yes.length / total) * 100 : 0;
+  const noPct = total ? (no.length / total) * 100 : 0;
+  const pending = active.filter((p) => attendance[p.name] !== "yes" && attendance[p.name] !== "no");
+  return (
+    <div className="cd-meter" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+      <div className="cd-meter-head">
+        <span>Assistència</span>
+        <span>
+          <span style={{ color: "oklch(0.72 0.15 155)" }}>{yes.length} sí</span>
+          {no.length > 0 && <span style={{ color: "var(--red)" }}> · {no.length} no</span>}
+          {yes.length === 0 && no.length === 0 && <span className="t-dim"> —</span>}
+        </span>
+      </div>
+      <div className="cd-meter-track cd-att-meter-track">
+        <div className="cd-meter-fill" style={{ width: yesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
+        <div className="cd-meter-fill" style={{ width: noPct + "%", background: "var(--red)" }}></div>
+      </div>
+      {open && total > 0 && (
+        <div className="cd-meter-tip">
+          <div className="cd-meter-tip-title">Assistència:</div>
+          <div className="cd-att-bubbles">
+            {yes.map((p) => <span key={p.name} className="cd-att-bubble yes">✓ {p.name}</span>)}
+            {no.map((p) => {
+              const sub = substitutes[p.name];
+              return (
+                <span key={p.name} className="cd-att-bubble-group">
+                  <span className="cd-att-bubble no" style={sub ? { textDecoration: "line-through" } : undefined}>✕ {p.name}</span>
+                  {sub && <span className="cd-att-bubble sub"><SwapIcon />{sub}</span>}
+                </span>
+              );
+            })}
+            {pending.map((p) => (
+              <span key={p.name} className="cd-att-bubble pending"><HourglassIcon />{p.name}</span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function rsMissingList(c: Concert): string[] {
-  const rs = c.routeSheet as { lloc?: { label: string; value: string }[]; contacts?: { name: string }[]; schedule?: { phase: string; start: string; end: string }[]; hospitalitat?: { label: string; value: string }[]; tecnic?: { label: string; value: string }[] } | null;
+  const rs = c.routeSheet as {
+    lloc?: { label: string; value: string }[]; contacts?: { name: string }[];
+    schedule?: { phase: string; start: string; end: string }[];
+    hospitalitat?: { label: string; value: string; included?: boolean }[];
+    tecnic?: { label: string; value: string; included?: boolean; status?: string }[];
+  } | null;
   if (!rs) return ["Tot el full de ruta"];
   const missing: string[] = [];
-  (rs.lloc || []).forEach((it) => { if (it.label && !String(it.value || "").trim()) missing.push(it.label); });
+  withLiveAddress(rs.lloc, c.address).forEach((it) => { if (it.label && !String(it.value || "").trim()) missing.push(it.label); });
   if (!(rs.contacts || []).some((ct) => ct.name && ct.name.trim())) missing.push("Contactes");
-  (rs.schedule || []).forEach((it) => { if (it.phase && (!it.start || !it.end)) missing.push("Horari: " + it.phase); });
-  (rs.hospitalitat || []).forEach((it) => { if (it.label && !String(it.value || "").trim()) missing.push(it.label); });
-  (rs.tecnic || []).forEach((it) => { if (it.label && it.label.toLowerCase() !== "pantalla led" && !String(it.value || "").trim()) missing.push(it.label); });
+  withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => { if (it.phase && (!it.start || !it.end)) missing.push("Horari: " + it.phase); });
+  // Un "sí"/"no" ja marcat, o un contrarider "aprovat", ja compten com a fets
+  // encara que no s'hi hagi escrit cap detall — mateix criteri que la barra
+  // de progrés, perquè aquesta llista de "què falta" no li contradigui.
+  (rs.hospitalitat || []).forEach((it) => {
+    const done = !!(it.value && String(it.value).trim()) || it.included !== undefined;
+    if (it.label && !done) missing.push(it.label);
+  });
+  (rs.tecnic || []).forEach((it) => {
+    if (!it.label) return;
+    const label = it.label.trim().toLowerCase();
+    if (label === "pantalla led") { if (it.included === undefined) missing.push(it.label); return; }
+    const done = !!(it.value && String(it.value).trim()) || (label === "contra rider" && it.status === "aprovat");
+    if (!done) missing.push(it.label);
+  });
   return missing;
 }
 
@@ -157,7 +262,7 @@ function agencyDefaultSplit(otherNames: string[], pool: number, agencyBasis: num
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
+  concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
   billing, activeLinks, canUpgrade = true,
 }: {
   concert: Concert;
@@ -166,13 +271,13 @@ export default function ConcertDetailView({
   invoice: Invoice | null;
   companyInfo: CompanyInfo;
   clientDetails: Record<string, ClientDetails>;
+  contacts?: Contact[];
   linkedMembers: LinkedMember[];
   shareLinks: ShareLink[];
   backupRequests: BackupRequest[];
   riders: Rider[];
   setlists: Setlist[];
   riderApprovals: RiderApproval[];
-  checklists: Checklist[];
   clashes: string[];
   venueHistory: { date: string; amount: number; invoiceState: string | null; daysToPay: number | null }[];
   concertExpenses: Transaction[];
@@ -187,20 +292,65 @@ export default function ConcertDetailView({
 }) {
   const router = useRouter();
   const [cf, setCf] = useState({
-    date: concert.date, time: concert.time, venue: concert.venue, city: concert.city,
-    festaEntitat: concert.festaEntitat || "", amount: String(concert.amount), status: concert.status as string,
+    date: concert.date, time: concert.time, exactTime: concert.exactTime || "", venue: concert.venue, city: concert.city,
+    address: concert.address || "",
+    festaEntitat: concert.festaEntitat || "", amount: concert.amount > 0 ? String(concert.amount) : "", status: concert.status as string,
+    canAnnounce: concert.canAnnounce || "", announceAfter: concert.announceAfter || "",
+    ticketType: concert.ticketType || "",
   });
-  // Calendari propi (mateix estil que el de crear concert) al costat del
-  // camp de data nadiu, com a manera alternativa de triar-la.
-  const [datePickerOpen, setDatePickerOpen] = useState(false);
-  const [pickerYM, setPickerYM] = useState((concert.date || today).slice(0, 7));
   const [attendance, setAttendance] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutes] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
   const [noSubstitute, setNoSubstitute] = useState<Record<string, boolean>>({ ...(concert.noSubstitute || {}) });
+  // Membres exclosos de la convocatòria d'aquest concert (name -> true):
+  // no s'eliminen del grup, es desactiven només per a aquest bolo.
+  const [convocatoriaExcluded, setConvocatoriaExcluded] = useState<Record<string, boolean>>({ ...(concert.convocatoriaExcluded || {}) });
+  // Contacte principal d'aquest concert (organitzador/promotor).
+  const [contact, setContact] = useState<Concert["contact"]>({ ...(concert.contact || { email: "", name: "", phone: "", company: "" }) });
+  // Còpia en directe del full de ruta (el manté RouteSheetEditor, aquí només
+  // se'n rep un eco) perquè la barra de progrés del bànner i el "què falta"
+  // s'actualitzin a l'instant en editar-lo, sense esperar el desat+refresc.
+  const [liveRs, setLiveRs] = useState<RouteSheet | null>(null);
+  // Avís que l'Adreça d'Informació s'ha omplert sola en triar un recinte —
+  // desapareix en el moment que s'edita a mà.
+  const [addressAutofilled, setAddressAutofilled] = useState(false);
   const [saving, setSaving] = useState(false);
   const [nudging, setNudging] = useState(false);
   const [nudgeResult, setNudgeResult] = useState<string | null>(null);
   const [kind, setKind] = useState<string>(concert.kind || "bolo");
+  // Repetició d'assajos: no és cap dada del concert (cada ocurrència creada
+  // és un concert independent i propi), és només l'acció puntual de
+  // generar-los fins a la data triada.
+  const [repeatFreq, setRepeatFreq] = useState<"cap" | "setmanal" | "quinzenal" | "mensual">("cap");
+  const [repeatUntil, setRepeatUntil] = useState("");
+  const [repeating, setRepeating] = useState(false);
+  const [repeatResult, setRepeatResult] = useState<string | null>(null);
+  // Mateix càlcul que repeatConcertAction (servidor) però només per pintar
+  // al calendari quins dies caurien a la repetició — l'acció real de crear-
+  // los és sempre la del servidor, això és només la previsualització.
+  const repeatOccurrences = useMemo(() => {
+    if (repeatFreq === "cap") return undefined;
+    const p = cf.date.split("-").map(Number);
+    const set = new Set<string>();
+    for (let i = 1; i <= 104; i++) {
+      const d = repeatFreq === "mensual"
+        ? new Date(p[0], p[1] - 1 + i, p[2])
+        : new Date(p[0], p[1] - 1, p[2] + i * (repeatFreq === "quinzenal" ? 14 : 7));
+      set.add(d.getFullYear() + "-" + pad2(d.getMonth() + 1) + "-" + pad2(d.getDate()));
+    }
+    return set;
+  }, [cf.date, repeatFreq]);
+  const REPEAT_KIND_PLURAL: Record<string, string> = { assaig: "assajos", reunio: "reunions", altre: "esdeveniments" };
+  // Triar el dia de "Fins al dia" ja dispara la repetició tota sola (com la
+  // resta del panell, que es desa sol) — no cal cap botó a part per confirmar.
+  async function handleRepeat(untilDate: string) {
+    if (repeatFreq === "cap" || !untilDate) return;
+    setRepeating(true);
+    const { created } = await repeatConcertAction(concert.id, repeatFreq, untilDate);
+    setRepeating(false);
+    setRepeatResult(created > 0 ? `${created} ${REPEAT_KIND_PLURAL[kind] || "esdeveniments"} creats ✓` : "Cap de nou (data massa a prop?)");
+    window.setTimeout(() => setRepeatResult(null), 3000);
+    if (created > 0) router.refresh();
+  }
   const [rsPreviewOpen, setRsPreviewOpen] = useState(false);
   const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
   const [posterOpen, setPosterOpen] = useState(false);
@@ -208,6 +358,13 @@ export default function ConcertDetailView({
   const [generating, setGenerating] = useState(false);
   const saveTimer = useRef<number | null>(null);
   const refreshTimer = useRef<number | null>(null);
+  // Última versió de "cf", sempre al dia — cal per als llocs que combinen
+  // "cf" amb una resolució asíncrona (cerca de recinte/allotjament): si
+  // s'agafés "cf" directament (capturat en el moment de cridar la funció),
+  // un canvi fet mentre la cerca encara està en curs (per exemple la data)
+  // es perdria en tornar i re-escriure tot "cf" amb la versió antiga.
+  const cfRef = useRef(cf);
+  useEffect(() => { cfRef.current = cf; }, [cf]);
 
   // ---- Compartir ----
   const [newLinkOpen, setNewLinkOpen] = useState(false);
@@ -320,6 +477,17 @@ export default function ConcertDetailView({
   const selectedRider = riders.find((r) => r.id === riderId) || null;
   const selectedSetlist = setlists.find((s) => s.id === setlistId) || null;
   const riderMatches = riders.filter((r) => !riderSearch.trim() || normalize(r.name).includes(normalize(riderSearch.trim())));
+  // Cançons destacades d'aquest concert/assaig en concret
+  // (Concert.setlistHighlights) — la mateixa setlist es pot repetir a
+  // altres esdeveniments amb destacades diferents, per això no viu a la
+  // setlist sinó al concert.
+  const [setlistHighlights, setSetlistHighlights] = useState<Record<string, boolean>>(concert.setlistHighlights || {});
+  async function toggleHighlight(title: string) {
+    const next = { ...setlistHighlights };
+    if (next[title]) delete next[title]; else next[title] = true;
+    setSetlistHighlights(next);
+    await setSetlistHighlightsAction(concert.id, next);
+  }
 
   // ---- Aprovació del rider ----
   const [apName, setApName] = useState("");
@@ -373,10 +541,10 @@ export default function ConcertDetailView({
   const venueColor = bandColor("venue:" + (cf.venue || "?"));
   const sc = statusColors(cf.status);
 
-  const liveConcert: Concert = { ...concert, ...cf, amount: parseInt(cf.amount, 10) || 0, status: cf.status as Concert["status"], attendance: attendance as Concert["attendance"], substitutes, noSubstitute };
-  const info = infoCompletion(liveConcert);
-  const rsPercent = rsCompletionPercent(concert);
-  const rsMissing = rsMissingList(concert);
+  const liveConcert: Concert = { ...concert, ...cf, amount: parseInt(cf.amount, 10) || 0, status: cf.status as Concert["status"], attendance: attendance as Concert["attendance"], substitutes, noSubstitute, convocatoriaExcluded, contact, canAnnounce: cf.canAnnounce as Concert["canAnnounce"], ticketType: cf.ticketType as Concert["ticketType"], routeSheet: liveRs ?? concert.routeSheet };
+  const info = infoCompletion(liveConcert, { amountFilled: cf.amount.trim() !== "" });
+  const rsPercent = rsCompletionPercent(liveConcert);
+  const rsMissing = rsMissingList(liveConcert);
 
   const linkedByName: Record<string, LinkedMember> = {};
   linkedMembers.forEach((m) => { linkedByName[m.memberName] = m; });
@@ -387,16 +555,18 @@ export default function ConcertDetailView({
   const crew = band?.crew || [];
   const backups = band?.backups || [];
 
-  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute) {
+  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact) {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(async () => {
       setSaving(true);
       await saveConcertAction({
         id: concert.id,
         bandName: concert.bandName,
-        date: next.date, time: next.time, venue: next.venue, city: next.city,
+        date: next.date, time: next.time, exactTime: next.exactTime, venue: next.venue, city: next.city, address: next.address,
         festaEntitat: next.festaEntitat, amount: parseInt(next.amount, 10) || 0, status: next.status,
-        attendance: att, substitutes: subs, noSubstitute: noSubs,
+        attendance: att, substitutes: subs, noSubstitute: noSubs, convocatoriaExcluded: excl, contact: cont,
+        canAnnounce: next.canAnnounce as Concert["canAnnounce"], announceAfter: next.announceAfter,
+        ticketType: next.ticketType as Concert["ticketType"],
         skipDefaults: true,
       });
       setSaving(false);
@@ -417,66 +587,17 @@ export default function ConcertDetailView({
 
   // Triar un recinte (des d'Informació o des del Full de ruta — el mateix
   // camp, en un sol canvi perquè no es trepitgin entre ells) actualitza
-  // sempre la població si el recinte en sap una.
-  function commitVenue(v: { name: string; city?: string }) {
-    const next = { ...cf, venue: v.name, ...(v.city ? { city: v.city } : {}) };
+  // sempre la població si el recinte en sap una, i empleix l'adreça
+  // (carrer, número i població) si en sap el detall — vegeu
+  // resolvePlaceToVenueFields a VenueSearchField.tsx (compartit amb el modal
+  // ràpid de "Nou esdeveniment").
+  async function commitVenue(v: { name: string; city?: string; street?: string; housenumber?: string; lat?: number | null; lon?: number | null }) {
+    const resolved = await resolvePlaceToVenueFields(v);
+    const next = { ...cfRef.current, ...resolved };
     setCf(next);
     schedulePersist(next);
+    if (resolved.address) setAddressAutofilled(true);
   }
-
-  // Graella del calendari propi (mateixa lògica que el de crear concert).
-  const dpY = parseInt(pickerYM.slice(0, 4), 10), dpMIdx = parseInt(pickerYM.slice(5, 7), 10) - 1;
-  const dpMonthLabel = capitalize(MONTH_FULL[dpMIdx]) + " " + dpY;
-  const dpBase = new Date(dpY, dpMIdx, 1);
-  const dpStartOffset = (dpBase.getDay() + 6) % 7;
-  const dpDaysInMonth = new Date(dpY, dpMIdx + 1, 0).getDate();
-  const dpCells: (number | null)[] = [];
-  for (let i = 0; i < dpStartOffset; i++) dpCells.push(null);
-  for (let d = 1; d <= dpDaysInMonth; d++) dpCells.push(d);
-  while (dpCells.length % 7 !== 0) dpCells.push(null);
-  function shiftPickerMonth(delta: number) {
-    const d = new Date(dpY, dpMIdx + delta, 1);
-    setPickerYM(d.getFullYear() + "-" + pad2(d.getMonth() + 1));
-  }
-
-  // Població i ubicació validades: només es pot desar una població/recinte
-  // real, triat de la llista que retorna la cerca — mai text lliure sense
-  // triar.
-  const [cityDropdownOpen, setCityDropdownOpen] = useState(false);
-  const [citySearch, setCitySearch] = useState("");
-  const [cityResults, setCityResults] = useState<{ description: string; placeId: string }[]>([]);
-  const [citySearching, setCitySearching] = useState(false);
-  const citySearchTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current);
-    const q = citySearch.trim();
-    if (q.length < 2) { setCityResults([]); setCitySearching(false); return; }
-    setCitySearching(true);
-    citySearchTimer.current = window.setTimeout(async () => {
-      const results = await searchCitiesAction(q);
-      setCityResults(results);
-      setCitySearching(false);
-    }, 300);
-    return () => { if (citySearchTimer.current) window.clearTimeout(citySearchTimer.current); };
-  }, [citySearch]);
-
-  const [venueDropdownOpen, setVenueDropdownOpen] = useState(false);
-  const [venueSearch, setVenueSearch] = useState("");
-  const [venueResults, setVenueResults] = useState<{ description: string; name: string; city: string; placeId: string }[]>([]);
-  const [venueSearching, setVenueSearching] = useState(false);
-  const venueSearchTimer = useRef<number | null>(null);
-  useEffect(() => {
-    if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current);
-    const q = venueSearch.trim();
-    if (q.length < 2) { setVenueResults([]); setVenueSearching(false); return; }
-    setVenueSearching(true);
-    venueSearchTimer.current = window.setTimeout(async () => {
-      const results = await searchVenuesAction(q);
-      setVenueResults(results);
-      setVenueSearching(false);
-    }, 300);
-    return () => { if (venueSearchTimer.current) window.clearTimeout(venueSearchTimer.current); };
-  }, [venueSearch]);
 
   function setAttendanceFor(name: string, val: "yes" | "no" | null) {
     const att = { ...attendance };
@@ -493,6 +614,29 @@ export default function ConcertDetailView({
     if (sub) delete noSubs[name];
     setNoSubstitute(noSubs);
     schedulePersist(cf, attendance, subs, noSubs);
+  }
+
+  // Treu (o torna a afegir) un membre de la convocatòria d'aquest concert
+  // en concret — mai del grup: només es desactiva visualment i queda fora
+  // del recompte de la capçalera per a aquest bolo.
+  function setExcludedFor(name: string, excluded: boolean) {
+    const excl = { ...convocatoriaExcluded };
+    if (excluded) excl[name] = true; else delete excl[name];
+    setConvocatoriaExcluded(excl);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, excl);
+  }
+
+  function setContactField(field: keyof Concert["contact"], v: string) {
+    const next = { ...contact, [field]: v };
+    setContact(next);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, next);
+  }
+  // En triar un suggeriment de l'autocompletat, s'omplen tots els camps
+  // d'una sola vegada (no camp a camp) perquè no quedin desincronitzats.
+  function pickContact(c: Contact) {
+    const next = { name: c.name, phone: c.phone, email: c.email, company: c.company };
+    setContact(next);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, next);
   }
 
   // ---- Repartiment ----
@@ -738,7 +882,6 @@ export default function ConcertDetailView({
         <Link href="/concerts" className="cd-back">← Concerts</Link>
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
           {saving && <span className="t-dim" style={{ fontSize: 12 }}>Desant…</span>}
-          <Link href={`/concerts/${concert.id}/dia`} className="cd-back" title="Tota la info del dia del bolo en una sola pantalla de mòbil">📱 Vista dia de bolo</Link>
         </div>
       </div>
 
@@ -752,17 +895,18 @@ export default function ConcertDetailView({
       {/* Pòster: capçalera tipogràfica del concert */}
       <div className="cd-poster">
         <div className="cd-poster-glow" aria-hidden="true"></div>
-        <div className="cd-poster-kicker">
+        <div className="cd-poster-kicker">{concert.bandName}</div>
+        <div className="cd-poster-subtitle">
           {cf.festaEntitat || (kind === "bolo" ? "concert" : kind === "reunio" ? "reunió" : kind)}
         </div>
-        <div className="cd-poster-title">{concert.bandName}</div>
-        <div className="cd-poster-date">{capitalize(formatDateFull(cf.date))}{cf.time ? ` — ${cf.time}h` : ""}</div>
-        {(cf.venue || cf.city) && (
+        {cf.city && <div className="cd-poster-title">{cf.city.split(",")[0]}</div>}
+        {cf.venue && (
           <div className="cd-poster-place">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
-            {[cf.venue, cf.city.split(",")[0]].filter(Boolean).join(" · ")}
+            {cf.venue}
           </div>
         )}
+        <div className="cd-poster-date">{capitalize(formatDateFull(cf.date))}{cf.exactTime ? ` — ${cf.exactTime}` : cf.time ? ` — ${formatConcertTime(cf.time)}` : ""}</div>
         <div className="cd-poster-foot">
           <button
             type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
@@ -772,167 +916,178 @@ export default function ConcertDetailView({
           <div className="cd-meters">
             <Meter label="Informació" percent={info.percent} missing={info.missing} />
             <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} />
+            {(members.length > 0 || crew.length > 0) && (
+              <AttendanceMeter people={[...members, ...crew]} attendance={attendance} excluded={convocatoriaExcluded} substitutes={substitutes} />
+            )}
           </div>
-          <button type="button" className="btn-outline cd-poster-share" onClick={() => setPosterOpen(true)}
-            title="Genera un pòster transparent per a Instagram amb el mapa i les dades del concert">📸 Pòster IG</button>
+          <div className="cd-poster-actions">
+            <Link href={`/concerts/${concert.id}/dia`} className="cd-poster-icon-btn" title="Tota la info del dia del bolo en una sola pantalla de mòbil">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+            </Link>
+            <button type="button" className="cd-poster-icon-btn" onClick={() => setPosterOpen(true)}
+              title="Genera un pòster transparent per a Instagram amb el mapa i les dades del concert">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Subpestanyes */}
       <div className="stats-tabs cd-tabs">
-        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Assistència"], ["facturacio", "Despeses i facturació"]] as const).map(([k, label]) => (
+        {([["info", "Informació"], ["ruta", "Full de ruta"], ["assistencia", "Convocatòria"], ["facturacio", "Despeses i facturació"]] as const).map(([k, label]) => (
           <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
         ))}
       </div>
 
       {/* Informació */}
       {tab === "info" && (<>
+      <div className="panel cd-section" id="cd-contact">
+        <div className="panel-title cd-section-title">Contacte</div>
+        <div className="cd-contact-row">
+          <ContactAutocomplete className="field-input form-field" placeholder="Nom" value={contact.name} onNameChange={(v) => setContactField("name", v)} onPick={pickContact} contacts={contacts} />
+          <input className="field-input form-field" type="text" placeholder="Telèfon" value={contact.phone} onChange={(e) => setContactField("phone", e.target.value)} />
+          <input className="field-input form-field" type="email" placeholder="Correu" value={contact.email} onChange={(e) => setContactField("email", e.target.value)} />
+          <input className="field-input form-field" type="text" placeholder="Empresa" value={contact.company} onChange={(e) => setContactField("company", e.target.value)} />
+        </div>
+      </div>
       <div className="panel cd-section" id="cd-info">
-        <div className="panel-title cd-section-title">Informació</div>
+        <div className="panel-title cd-section-title">Informació general</div>
         <div className="cd-info-grid">
-          <div className="cd-field" style={{ position: "relative" }}>
-            <label className="form-label">Data</label>
-            <div style={{ position: "relative" }}>
-              <input type="date" className="field-input form-field cd-date-input" value={cf.date} onChange={(e) => setField("date", e.target.value)} />
-              <button
-                type="button" className="cd-date-icon-btn" title="Tria del calendari" aria-label="Tria del calendari"
-                onClick={() => { setPickerYM((cf.date || today).slice(0, 7)); setDatePickerOpen((v) => !v); }}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="5" width="18" height="16" rx="2"></rect>
-                  <line x1="3" y1="10" x2="21" y2="10"></line>
-                  <line x1="8" y1="3" x2="8" y2="7"></line>
-                  <line x1="16" y1="3" x2="16" y2="7"></line>
-                </svg>
-              </button>
-            </div>
-            {datePickerOpen && (
-              <>
-                <div className="year-picker-overlay" onClick={() => setDatePickerOpen(false)}></div>
-                <div className="year-dropdown cf-datepicker" onClick={(e) => e.stopPropagation()}>
-                  <div className="cf-dp-header">
-                    <button type="button" className="cal-nav-btn" onClick={() => shiftPickerMonth(-1)}>‹</button>
-                    <div className="cf-dp-month-label">{dpMonthLabel}</div>
-                    <button type="button" className="cal-nav-btn" onClick={() => shiftPickerMonth(1)}>›</button>
-                  </div>
-                  <div className="cf-dp-grid">
-                    {WEEKDAY_SHORT.map((w) => <div key={w} className="cf-dp-weekday">{w}</div>)}
-                  </div>
-                  <div className="cf-dp-grid">
-                    {dpCells.map((dd, i) => {
-                      if (!dd) return <button key={i} type="button" className="cf-dp-day empty" disabled></button>;
-                      const dateStr = dpY + "-" + pad2(dpMIdx + 1) + "-" + pad2(dd);
-                      const selected = cf.date === dateStr;
-                      const isToday = dateStr === today;
-                      return (
-                        <button key={i} type="button" className={"cf-dp-day" + (selected ? " selected" : "") + (isToday ? " today" : "")}
-                          onClick={() => { setField("date", dateStr); setDatePickerOpen(false); }}>{dd}</button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Hora</label>
-            <input type="time" className="field-input form-field" value={cf.time} onChange={(e) => setField("time", e.target.value)} />
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Títol</label>
-            <input className="field-input form-field" value={cf.festaEntitat} onChange={(e) => setField("festaEntitat", e.target.value)} placeholder="Festa major, ajuntament…" />
-          </div>
-          <div className="cd-field" style={{ position: "relative" }}>
-            <label className="form-label">Ubicació / sala</label>
-            <input
-              className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca un recinte…"
-              value={venueDropdownOpen ? venueSearch : cf.venue}
-              onFocus={() => { setVenueSearch(cf.venue); setVenueDropdownOpen(true); }}
-              onChange={(e) => setVenueSearch(e.target.value)}
-            />
-            {venueDropdownOpen && (
-              <>
-                <div className="year-picker-overlay" onClick={() => { if (!venueSearch.trim() && cf.venue) setField("venue", ""); setVenueDropdownOpen(false); }}></div>
-                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
-                  {venueSearch.trim().length < 2 ? (
-                    <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
-                  ) : venueSearching ? (
-                    <div className="cf-band-noresults">Cercant…</div>
-                  ) : venueResults.length ? [...venueResults].sort((a, b) => {
-                      // Si ja hi ha població triada, primer els recintes que hi són a dins.
-                      if (!cf.city.trim()) return 0;
-                      const aIn = a.city && normalize(cf.city).includes(normalize(a.city)) ? 0 : 1;
-                      const bIn = b.city && normalize(cf.city).includes(normalize(b.city)) ? 0 : 1;
-                      return aIn - bIn;
-                    }).map((v) => (
-                    <button key={v.placeId} type="button" className={"year-option" + (v.name === cf.venue ? " active" : "")}
-                      onClick={() => { commitVenue(v); setVenueDropdownOpen(false); }}>{v.description}</button>
-                  )) : <div className="cf-band-noresults">Cap recinte coincideix</div>}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="cd-field" style={{ position: "relative" }}>
-            <label className="form-label">Població</label>
-            <input
-              className="field-input form-field" type="text" autoComplete="off" placeholder="Cerca una població…"
-              value={cityDropdownOpen ? citySearch : cf.city}
-              onFocus={() => { setCitySearch(cf.city); setCityDropdownOpen(true); }}
-              onChange={(e) => setCitySearch(e.target.value)}
-            />
-            {cityDropdownOpen && (
-              <>
-                <div className="year-picker-overlay" onClick={() => { if (!citySearch.trim() && cf.city) setField("city", ""); setCityDropdownOpen(false); }}></div>
-                <div className="year-dropdown cf-band-dropdown" onClick={(e) => e.stopPropagation()}>
-                  {citySearch.trim().length < 2 ? (
-                    <div className="cf-band-noresults">Escriu almenys 2 lletres… (o deixa-ho buit i tanca per esborrar)</div>
-                  ) : citySearching ? (
-                    <div className="cf-band-noresults">Cercant…</div>
-                  ) : cityResults.length ? cityResults.map((c) => (
-                    <button key={c.placeId} type="button" className={"year-option" + (c.description === cf.city ? " active" : "")}
-                      onClick={() => { setField("city", c.description); setCityDropdownOpen(false); }}>{c.description}</button>
-                  )) : <div className="cf-band-noresults">Cap població coincideix</div>}
-                </div>
-              </>
-            )}
-          </div>
-          <div className="cd-field">
-            <label className="form-label">Import (sense IVA)</label>
-            <input type="number" className="field-input form-field" value={cf.amount} onChange={(e) => setField("amount", e.target.value)} />
-          </div>
           <div className="cd-field">
             <label className="form-label">Tipus d&apos;esdeveniment</label>
-            <select
-              className="field-input form-field" value={kind}
-              onChange={async (e) => {
-                const v = e.target.value as "bolo" | "assaig" | "reunio" | "altre";
+            <button
+              type="button" className="cd-kind-bubble" style={{ background: KIND_META[kind]?.bg, color: KIND_META[kind]?.color }}
+              onClick={async () => {
+                const order = ["bolo", "assaig", "reunio", "altre"];
+                const v = order[(order.indexOf(kind) + 1) % order.length] as "bolo" | "assaig" | "reunio" | "altre";
                 setKind(v);
                 await setConcertKindAction(concert.id, v);
                 router.refresh();
               }}
             >
-              <option value="bolo">Bolo</option>
-              <option value="assaig">Assaig</option>
-              <option value="reunio">Reunió</option>
-              <option value="altre">Altre</option>
-            </select>
+              {KIND_META[kind]?.label || kind}
+            </button>
           </div>
+          <div className="cd-field">
+            <label className="form-label">Títol</label>
+            <input className="field-input form-field" value={cf.festaEntitat} onChange={(e) => setField("festaEntitat", e.target.value)} placeholder="Festa major, ajuntament…" />
+          </div>
+          <div className="cd-field">
+            <label className="form-label">Data</label>
+            <InlineDatePicker value={cf.date} onChange={(v) => setField("date", v)} today={today} />
+          </div>
+          <div className="cd-field cd-time-pair-field">
+            <div className="cd-time-pair-row">
+              <div className="cd-time-pair-col" style={{ flex: 1.2 }}>
+                <label className="form-label">Hora aproximada</label>
+                <div className="cd-time-pair-col-body">
+                  <TimePeriodBubble time={cf.time} onChange={(v) => setField("time", v)} />
+                </div>
+              </div>
+              <div className="cd-time-pair-col grow">
+                <label className="form-label">Hora exacta</label>
+                <div className="cd-time-pair-col-body">
+                  <input type="time" className="field-input form-field" value={cf.exactTime} onChange={(e) => setField("exactTime", e.target.value)} />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="cd-field">
+            <label className="form-label">Recinte</label>
+            <VenueSearchField venue={cf.venue} onCommit={(v) => { const next = { ...cfRef.current, ...v }; setCf(next); schedulePersist(next); if (v.address) setAddressAutofilled(true); }} />
+          </div>
+          <div className="cd-field">
+            <label className="form-label">Adreça</label>
+            <input
+              className="field-input form-field" type="text" placeholder="S'empleix en triar un recinte…"
+              value={cf.address} onChange={(e) => { setField("address", e.target.value); setAddressAutofilled(false); }}
+            />
+            {addressAutofilled && (
+              <div className="rs-autofill-note" style={{ marginTop: 4 }}><WarnIcon />Adreça generada automàticament, comprova que sigui correcta</div>
+            )}
+          </div>
+          {kind === "bolo" && (
+            <>
+              <div className="cd-field">
+                <label className="form-label">Import (sense IVA)</label>
+                <input type="number" className="field-input form-field" value={cf.amount} onChange={(e) => setField("amount", e.target.value)} />
+              </div>
+              <div className="cd-field cd-time-pair-field">
+                <div className="cd-time-pair-row">
+                  <div className="cd-time-pair-col">
+                    <label className="form-label">Es pot anunciar?</label>
+                    <div className="cd-time-pair-col-body">
+                      <div className="cd-att-controls">
+                        <button type="button" className={"cd-att-btn yes" + (cf.canAnnounce === "yes" ? " active" : "")} onClick={() => setField("canAnnounce", cf.canAnnounce === "yes" ? "" : "yes")}>Sí</button>
+                        <button type="button" className={"cd-att-btn no" + (cf.canAnnounce === "no" ? " active" : "")} onClick={() => setField("canAnnounce", cf.canAnnounce === "no" ? "" : "no")}>No</button>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Sempre muntada (només s'amaga) perquè revelar-la no faci
+                      créixer la fila i desplaci el títol/pestanyes de sí/no. */}
+                  <div className="cd-time-pair-col grow" style={{ visibility: cf.canAnnounce === "no" ? "visible" : "hidden" }} aria-hidden={cf.canAnnounce !== "no"}>
+                    <label className="form-label">Fins al dia</label>
+                    <div className="cd-time-pair-col-body">
+                      <InlineDatePicker value={cf.announceAfter} onChange={(v) => setField("announceAfter", v)} today={today} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="cd-field">
+                <label className="form-label">Tipus d&apos;entrada</label>
+                <div className="cd-att-controls">
+                  <button type="button" className={"cd-att-btn neutral" + (cf.ticketType === "gratuit" ? " active" : "")} onClick={() => setField("ticketType", cf.ticketType === "gratuit" ? "" : "gratuit")}>Gratuïta</button>
+                  <button type="button" className={"cd-att-btn neutral" + (cf.ticketType === "pagament" ? " active" : "")} onClick={() => setField("ticketType", cf.ticketType === "pagament" ? "" : "pagament")}>De pagament</button>
+                </div>
+              </div>
+            </>
+          )}
+          {(kind === "assaig" || kind === "reunio" || kind === "altre") && (
+            <div className="cd-field cd-time-pair-field">
+              <div className="cd-time-pair-row">
+                <div className="cd-time-pair-col">
+                  <label className="form-label">Es repeteix</label>
+                  <div className="cd-time-pair-col-body">
+                    <select className="field-input form-field" value={repeatFreq} onChange={(e) => setRepeatFreq(e.target.value as typeof repeatFreq)}>
+                      <option value="cap">No es repeteix</option>
+                      <option value="setmanal">Cada setmana</option>
+                      <option value="quinzenal">Cada 2 setmanes</option>
+                      <option value="mensual">Cada mes</option>
+                    </select>
+                  </div>
+                </div>
+                {/* Sempre muntada (només s'amaga) perquè triar una freqüència
+                    no faci créixer la fila ni desplaci el títol/selector. */}
+                <div className="cd-time-pair-col grow" style={{ visibility: repeatFreq !== "cap" ? "visible" : "hidden" }} aria-hidden={repeatFreq === "cap"}>
+                  <label className="form-label">Fins al dia</label>
+                  <div className="cd-time-pair-col-body">
+                    <InlineDatePicker
+                      value={repeatUntil} onChange={(v) => { setRepeatUntil(v); handleRepeat(v); }} today={today}
+                      minDate={cf.date} initialMonth={cf.date} highlightDates={repeatOccurrences}
+                    />
+                  </div>
+                  {(repeating || repeatResult) && (
+                    <div className="t-dim" style={{ fontSize: 11.5, marginTop: 4 }}>{repeating ? "Creant…" : repeatResult}</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
-
-      <ChecklistSection
-        concertId={concert.id}
-        checklists={checklists}
-        memberNames={members.map((m) => m.name)}
-        managerName={managerName}
-      />
       </>)}
 
       {/* Assistència */}
       {tab === "assistencia" && (
       <div className="panel cd-section" id="cd-assistencia">
+        {/* Compartida per tots els camps de substitut d'aquesta pestanya —
+            suggereix els suplents de confiança del grup, però deixa
+            escriure qualsevol altre nom que encara no hi sigui guardat. */}
+        <datalist id="cd-backups-list">
+          {backups.map((b) => <option key={b.name} value={b.name} />)}
+        </datalist>
         <div className="panel-header-row cd-section-title">
-          <div className="panel-title">Assistència</div>
+          <div className="panel-title">Convocatòria</div>
           <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
             {linkedMembers.some((lm) => attendance[lm.memberName] !== "yes" && attendance[lm.memberName] !== "no") && (
               <button
@@ -960,8 +1115,9 @@ export default function ConcertDetailView({
               const att = attendance[m.name];
               const req = requestByMember[m.name];
               const inss = instrumentsFor(m);
+              const excluded = !!convocatoriaExcluded[m.name];
               return (
-                <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
+                <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
                   <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                   <div className="cd-att-main">
                     <div className="member-name">
@@ -975,20 +1131,28 @@ export default function ConcertDetailView({
                       })}
                     </div>
                   </div>
-                  <div className="cd-att-controls">
-                    <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
-                    <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
-                  </div>
-                  {att === "no" && (
+                  {!excluded && (
+                    <div className="cd-att-controls">
+                      <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
+                      <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
+                    </div>
+                  )}
+                  <button type="button" className="cd-att-exclude-btn" title={excluded ? "Torna a la convocatòria" : "Treu de la convocatòria d'aquest bolo"}
+                    onClick={() => setExcludedFor(m.name, !excluded)}>
+                    {excluded ? (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                    ) : (
+                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                    )}
+                  </button>
+                  {!excluded && att === "no" && (
                     <div className="cd-att-sub">
-                      <select
+                      <input
                         className="field-input compact-field"
+                        type="text" list="cd-backups-list" placeholder="Nom del suplent…"
                         value={substitutes[m.name] || ""}
                         onChange={(e) => setSubstituteFor(m.name, e.target.value)}
-                      >
-                        <option value="">Tria suplent…</option>
-                        {backups.map((b) => <option key={b.name} value={b.name}>{b.name}{b.instruments.length ? ` (${b.instruments.join(", ")})` : ""}</option>)}
-                      </select>
+                      />
                       {!substitutes[m.name] && !req && (
                         <button
                           type="button" className="btn-outline cd-publish-btn"
@@ -1015,9 +1179,11 @@ export default function ConcertDetailView({
           </div>
         )}
 
-        {/* Crew: mateix seguiment d'assistència que els músics, però sense
-            repartiment ni cerca de suplents entre backups (això és cosa dels
-            músics) — només si "no", un nom de substitut en text lliure. */}
+        {/* Crew: mateix seguiment d'assistència i mateixa cerca de suplent
+            que els músics (tria entre els backups del grup o publica una
+            cerca oberta a la borsa) — sense repartiment, que és cosa dels
+            músics. La cerca oberta hi busca un "càrrec" (m.role) en comptes
+            d'instruments. */}
         {crew.length > 0 && (
           <>
             <div className="panel-header-row cd-section-title" style={{ marginTop: 24 }}>
@@ -1030,8 +1196,10 @@ export default function ConcertDetailView({
               {crew.map((m) => {
                 const linked = linkedByName[m.name];
                 const att = attendance[m.name];
+                const req = requestByMember[m.name];
+                const excluded = !!convocatoriaExcluded[m.name];
                 return (
-                  <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
+                  <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
                     <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                     <div className="cd-att-main">
                       <div className="member-name">
@@ -1040,19 +1208,46 @@ export default function ConcertDetailView({
                       </div>
                       {m.role && <div className="member-instruments"><span className="member-instrument-chip">{m.role}</span></div>}
                     </div>
-                    <div className="cd-att-controls">
-                      <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
-                      <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
-                    </div>
-                    {att === "no" && (
+                    {!excluded && (
+                      <div className="cd-att-controls">
+                        <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
+                        <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
+                      </div>
+                    )}
+                    <button type="button" className="cd-att-exclude-btn" title={excluded ? "Torna a la convocatòria" : "Treu de la convocatòria d'aquest bolo"}
+                      onClick={() => setExcludedFor(m.name, !excluded)}>
+                      {excluded ? (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>
+                      ) : (
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                      )}
+                    </button>
+                    {!excluded && att === "no" && (
                       <div className="cd-att-sub">
                         <input
                           className="field-input compact-field"
-                          type="text"
-                          placeholder="Nom del substitut"
+                          type="text" list="cd-backups-list" placeholder="Nom del suplent…"
                           value={substitutes[m.name] || ""}
                           onChange={(e) => setSubstituteFor(m.name, e.target.value)}
                         />
+                        {!substitutes[m.name] && !req && (
+                          <button
+                            type="button" className="btn-outline cd-publish-btn"
+                            onClick={async () => {
+                              await publishBackupRequestAction({
+                                bandId: concert.bandId, concertId: concert.id, memberName: m.name,
+                                role: m.role, note: "",
+                              });
+                              router.refresh();
+                            }}
+                          >Publica cerca de suplent</button>
+                        )}
+                        {req && (
+                          <span className="cd-search-open">
+                            Cerca publicada · {req.applications.length} candidatures
+                            <button type="button" className="link-btn" onClick={async () => { await setBackupRequestStatusAction(req.id, "cancel·lada"); router.refresh(); }}>retira</button>
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1072,13 +1267,21 @@ export default function ConcertDetailView({
                 Qui no tingui compte se&apos;l crea en un moment i queda vinculat al grup.
               </div>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              <button type="button" className="btn-outline" disabled={attBusy} onClick={copyAttLink}>
-                {attCopied ? "Copiat ✓" : attBusy ? "Creant…" : "Copia l'enllaç"}
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <button type="button" className="btn-save cd-send-convocatoria-btn" disabled={attBusy} onClick={waAttLink}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                {attBusy ? "Creant…" : "Enviar convocatòria"}
               </button>
-              <button type="button" className="btn-outline cd-wa-btn" disabled={attBusy} onClick={waAttLink}>WhatsApp</button>
+              <button type="button" className="btn-outline cd-copy-link-btn" disabled={attBusy} onClick={copyAttLink}>
+                {attCopied ? (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                ) : (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                )}
+                {attCopied ? "Copiat ✓" : "Copia l'enllaç"}
+              </button>
               {attToken && (
-                <button type="button" className="btn-outline" onClick={() => window.open(`/conf/${attToken}`, "_blank")}>Obre</button>
+                <button type="button" className="link-btn" onClick={() => window.open(`/conf/${attToken}`, "_blank")}>Obre</button>
               )}
             </div>
           </div>
@@ -1093,13 +1296,13 @@ export default function ConcertDetailView({
           <div className="panel-title">Full de ruta</div>
           <button type="button" className="btn-outline" onClick={() => setRsPreviewOpen(true)}>Previsualitza</button>
         </div>
-        <RouteSheetEditor concert={concert} venue={cf.venue} city={cf.city} onVenueCityChange={commitVenue} vehicles={band?.vehicles || []} bandDefaultRouteSheet={band?.defaultRouteSheet || null} />
+        <RouteSheetEditor concert={concert} venue={cf.venue} city={cf.city} onVenueCityChange={commitVenue} address={cf.address} onAddressChange={(v) => setField("address", v)} exactTime={cf.exactTime} onExactTimeChange={(v) => setField("exactTime", v)} vehicles={band?.vehicles || []} bandDefaultRouteSheet={band?.defaultRouteSheet || null} contacts={contacts} onRouteSheetChange={setLiveRs} />
       </div>
       )}
 
       {/* Rider i setlist */}
       {tab === "info" && (
-      <FoldPanel id="cd-material" title="Rider i setlist" summary={`${selectedRider ? selectedRider.name : "sense rider"} · ${selectedSetlist ? selectedSetlist.name : "sense setlist"}`} defaultOpen={!!(selectedRider || selectedSetlist)}>
+      <FoldPanel id="cd-material" title="Documents" summary={`${selectedRider ? selectedRider.name : "sense rider"} · ${selectedSetlist ? selectedSetlist.name : "sense setlist"}`} defaultOpen={!!(selectedRider || selectedSetlist)}>
         <div className="cd-material-grid">
           <div className="cd-material-col">
             <div className="cd-subtitle">
@@ -1234,6 +1437,23 @@ export default function ConcertDetailView({
             ) : (
               <div className="t-dim" style={{ fontSize: 12 }}>
                 {setlists.length ? "Tria la setlist d'aquest concert per poder-la enviar." : "Aquest grup encara no té setlists — crea-les a la pestanya Setlists del grup."}
+              </div>
+            )}
+            {(kind === "assaig" || kind === "bolo") && selectedSetlist && (
+              <div className="cd-highlights">
+                <div className="cd-subtitle" style={{ marginTop: 14 }}>Cançons destacades d&apos;aquest {kind === "assaig" ? "assaig" : "concert"}</div>
+                {selectedSetlist.songs.filter((s) => s.title.trim()).length === 0 ? (
+                  <div className="t-dim" style={{ fontSize: 12 }}>Aquesta setlist encara no té cap cançó.</div>
+                ) : (
+                  <div className="cd-highlight-list">
+                    {selectedSetlist.songs.filter((s) => s.title.trim()).map((s) => (
+                      <label key={s.title} className={"cd-highlight-item" + (setlistHighlights[s.title] ? " on" : "")}>
+                        <input type="checkbox" checked={!!setlistHighlights[s.title]} onChange={() => toggleHighlight(s.title)} />
+                        {s.title}
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1630,6 +1850,9 @@ export default function ConcertDetailView({
                   <option value={14}>14 dies</option>
                   <option value={30}>30 dies</option>
                   <option value={60}>60 dies</option>
+                  <option value={Math.max(1, Math.min(90, Math.ceil((new Date(concert.date + "T00:00:00").getTime() - Date.now()) / 86400000)))}>
+                    Fins al dia de l&apos;actuació
+                  </option>
                 </select>
               </div>
             </div>

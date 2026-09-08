@@ -208,6 +208,7 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
 }) {
   const router = useRouter();
   const [creating, setCreating] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
 
   async function handleNewRider() {
     setCreating(true);
@@ -215,9 +216,57 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
     router.push(`/rider/${id}`);
   }
 
+  // Un "drag" intern de l'app mai porta fitxers de debò — "Files" a
+  // dataTransfer.types només hi és quan l'origen és el sistema
+  // (Finder/Explorador).
+  function isFileDrag(e: React.DragEvent) {
+    return Array.from(e.dataTransfer?.types || []).includes("Files");
+  }
+
+  // Arrossegar un PDF ja fet a sobre de la llista el desa directament com a
+  // rider nou (una única pàgina d'annex amb el document tal qual, com a la
+  // pestanya "Annexos" de l'editor) — sense passar per l'editor. Es queda
+  // a la llista, llest per obrir/compartir en PDF amb els botons de sempre.
+  async function createRiderFromFile(file: File) {
+    const fd = new FormData();
+    fd.append("bandId", band.id);
+    fd.append("file", file);
+    const res = await fetch("/api/rider-annex/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || "No s'ha pogut pujar " + file.name); return; }
+    const content = emptyRiderContent();
+    const title = (file.name || "Document").replace(/\.[a-zA-Z0-9]+$/, "");
+    content.pages = [{
+      id: "pg" + Date.now() + Math.floor(Math.random() * 1000),
+      title, body: "",
+      fileUrl: data.url, fileMime: data.mime, fileName: data.name,
+    }];
+    await saveRiderAction({ id: null, bandId: band.id, name: title || "Rider tècnic", content });
+  }
+  async function handleDropFiles(files: File[]) {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) { alert("Només es poden pujar documents PDF"); return; }
+    setCreating(true);
+    try {
+      for (const f of pdfs) await createRiderFromFile(f);
+      router.refresh();
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="panel">
+      <div className={"panel" + (dragOver ? " studio-section-dragover" : "")}
+        onDragEnter={(e) => { if (canEdit && isFileDrag(e)) { e.preventDefault(); setDragOver(true); } }}
+        onDragOver={(e) => { if (canEdit && isFileDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setDragOver(true); } }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setDragOver(false); }}
+        onDrop={(e) => {
+          if (!canEdit || !isFileDrag(e)) return;
+          e.preventDefault();
+          setDragOver(false);
+          handleDropFiles(Array.from(e.dataTransfer.files));
+        }}>
         <div className="panel-header-row" style={{ marginBottom: 12 }}>
           <div className="panel-title">Riders tècnics</div>
           {canEdit && (
@@ -229,7 +278,9 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
           El rider és el document que reps la sala o el festival abans del bolo: escenari, entrades de so, backline,
           monitors i hospitalitat. Crea&apos;n un per cada format del grup (banda completa, acústic…) i assigna&apos;l a cada concert.
+          {canEdit && <> També pots arrossegar aquí un PDF ja fet per desar-lo directament com a rider.</>}
         </div>
+        {dragOver && <div className="studio-dropzone-hint">Deixa anar per crear un rider amb aquest document (PDF)</div>}
         {riders.length === 0 ? (
           <div className="empty-state">Encara no hi ha cap rider.</div>
         ) : (

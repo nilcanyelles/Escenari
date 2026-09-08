@@ -2,12 +2,13 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, Concert } from "@/lib/types";
-import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep } from "@/lib/format";
+import type { Band, Concert, Contact } from "@/lib/types";
+import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep, timePeriodFor } from "@/lib/format";
 import { rsIsComplete } from "@/lib/route-sheet";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import NewEventButton from "@/components/NewEventButton";
+import { TimePeriodIcon } from "@/components/TimePeriodBubble";
 
 // Tipus d'esdeveniment amb el seu color (la "Legend" del calendari).
 export const KIND_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -32,7 +33,7 @@ function groupByDate(list: Concert[]) {
   return { byDate, dates };
 }
 
-export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; today: string }) {
+export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", contacts = [], today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; today: string }) {
   const router = useRouter();
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week" | "year">("month");
@@ -129,6 +130,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
         <div className="calx-evs">
           {evs.map((c) => {
             const k = kindOf(c);
+            const period = c.time ? timePeriodFor(c.time) : null;
             return (
               <button
                 key={c.id}
@@ -143,7 +145,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
                     ? KIND_META[kindOf(c)].label + (c.festaEntitat ? ` · ${c.festaEntitat}` : "")
                     : (c.city || c.venue || c.bandName).split(",")[0]}
                 </span>
-                {c.time && <span className="calx-ev-time">{c.time}</span>}
+                {period && <span className="calx-ev-time"><TimePeriodIcon period={period} /></span>}
               </button>
             );
           })}
@@ -222,9 +224,6 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
       ? (bands.find((b) => b.id === calBandFilter[0])?.name || "1 grup")
       : calBandFilter.length + " grups";
 
-  // Mini calendari del mes (a la barra de la llegenda).
-  const miniCells = cells;
-
   const rsModalConcert = rsModalConcertId ? concerts.find((c) => c.id === rsModalConcertId) || null : null;
   const rsPreviewConcert = rsPreviewConcertId ? concerts.find((c) => c.id === rsPreviewConcertId) || null : null;
 
@@ -260,13 +259,6 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
             )}
           </div>
           )}
-        </div>
-        <div className="stats-tabs">
-          <button className={"stats-tab" + (calViewMode === "month" ? " active" : "")} onClick={() => setCalViewMode("month")}>Mes</button>
-          <button className={"stats-tab" + (calViewMode === "week" ? " active" : "")} onClick={() => setCalViewMode("week")}>Setmana</button>
-          <button className={"stats-tab" + (calViewMode === "year" ? " active" : "")} onClick={() => setCalViewMode("year")}>Any</button>
-        </div>
-        <div className="cal-view-pills-right">
           {icsToken && (
             <button
               type="button" className="gcal-btn"
@@ -279,14 +271,21 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
               }}
             >📅 Afegeix-ho tot a Google Calendar</button>
           )}
-          {canCreate && <NewEventButton bands={bands} concerts={concerts} selectedBandId={selectedBandId} allowBolo={allowBolo} defaultDate={calSelectedDate || today} />}
+        </div>
+        <div className="stats-tabs">
+          <button className={"stats-tab" + (calViewMode === "month" ? " active" : "")} onClick={() => setCalViewMode("month")}>Mes</button>
+          <button className={"stats-tab" + (calViewMode === "week" ? " active" : "")} onClick={() => setCalViewMode("week")}>Setmana</button>
+          <button className={"stats-tab" + (calViewMode === "year" ? " active" : "")} onClick={() => setCalViewMode("year")}>Any</button>
+        </div>
+        <div className="cal-view-pills-right">
+          {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo} defaultDate={calSelectedDate || today} />}
         </div>
       </div>
 
       <div className="calx-layout">
-        {/* Llegenda + mini mes */}
+        {/* Llegenda */}
         <aside className="calx-sidebar">
-          <div className="calx-side-title">Legend</div>
+          <div className="calx-side-title">Llegenda</div>
           <div className="calx-legend">
             {KIND_ORDER.map((k) => (
               <button
@@ -301,26 +300,6 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
                 <span className="calx-legend-swatch" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>{KIND_META[k].label}</span>
               </button>
             ))}
-          </div>
-
-          <div className="calx-mini">
-            <div className="calx-mini-title">{capitalize(MONTH_FULL[mIdx])} {y}</div>
-            <div className="calx-mini-grid">
-              {WEEKDAY_SHORT.map((w) => <span key={w} className="calx-mini-wd">{w[0]}</span>)}
-              {miniCells.map((d, i) => {
-                if (!d) return <span key={"e" + i}></span>;
-                const dateStr = y + "-" + pad2(mIdx + 1) + "-" + pad2(d);
-                const has = (eventsByDate[dateStr] || []).length > 0;
-                return (
-                  <button
-                    key={dateStr}
-                    type="button"
-                    className={"calx-mini-day" + (dateStr === today ? " today" : "") + (dateStr === calSelectedDate ? " selected" : "") + (has ? " has" : "")}
-                    onClick={() => setCalSelectedDate(dateStr)}
-                  >{d}</button>
-                );
-              })}
-            </div>
           </div>
         </aside>
 
@@ -411,6 +390,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
           concert={rsModalConcert}
           onClose={() => setRsModalConcertId(null)}
           onOpenPreview={() => { setRsModalConcertId(null); setRsPreviewConcertId(rsModalConcert.id); }}
+          contacts={contacts}
         />
       )}
       {rsPreviewConcert && (

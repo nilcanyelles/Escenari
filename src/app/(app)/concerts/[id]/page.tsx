@@ -1,11 +1,10 @@
 import { notFound } from "next/navigation";
 import ConcertDetailView from "@/components/ConcertDetailView";
-import { getBands, getConcerts, getInvoices, getCompanyInfo, getClientDetails } from "@/lib/data";
+import { getBands, getConcerts, getInvoices, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
 import { getLinkedMembers } from "@/lib/group-data";
 import { getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
-import { getChecklists, ensureDefaultChecklist } from "@/lib/checklists";
 import { getTransactions } from "@/lib/finance";
 import { normalize } from "@/lib/text";
 import { daysBetween } from "@/lib/format";
@@ -19,30 +18,26 @@ export const dynamic = "force-dynamic";
 export default async function ConcertDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { workspaceId, name: managerName, agencyOwner } = await requireManager();
-  const [bands, concerts, invoices, companyInfo, clientDetails, billing, links] = await Promise.all([
-    getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getCompanyInfo(workspaceId), getClientDetails(workspaceId),
+  const [bands, concerts, invoices, companyInfo, clientDetails, contacts, billing, links] = await Promise.all([
+    getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getCompanyInfo(workspaceId), getClientDetails(workspaceId), getContacts(workspaceId),
     getWorkspaceBilling(workspaceId), activeLinksForConcert(workspaceId, id),
   ]);
   const concert = concerts.find((c) => c.id === id);
   if (!concert) notFound();
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
-  // Cada concert ha de tenir sempre la checklist de sèrie (enviar rider,
-  // rider aprovat?) — es crea aquí si encara no hi és, abans de llegir-la.
-  await ensureDefaultChecklist(workspaceId, id, managerName);
   // Aquestes consultes són totes independents entre si (cap depèn del
   // resultat de cap altra), així que van juntes en un sol Promise.all en
   // comptes d'esperar-les una darrere l'altra — abans transactions i les
   // fotos de perfil s'esperaven a part, afegint dues volteres més de
   // llatència a cada càrrega de la pàgina.
-  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, checklists, transactions, photoRows] = await Promise.all([
+  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, transactions, photoRows] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     getShareLinks(workspaceId, id),
     getBackupRequests(workspaceId, { concertId: id }),
     band ? getRiders(band.id) : Promise.resolve([]),
     band ? getSetlists(band.id) : Promise.resolve([]),
     getRiderApprovals(workspaceId, id),
-    getChecklists(workspaceId, id),
     getTransactions(workspaceId),
     (async () => {
       // Fotos reals de perfil per a les llistes d'assistència i repartiment.
@@ -102,13 +97,13 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       invoice={invoices.find((i) => i.concertId === id) || null}
       companyInfo={companyInfo}
       clientDetails={clientDetails}
+      contacts={contacts}
       linkedMembers={linkedMembers}
       shareLinks={shareLinks}
       backupRequests={backupRequests}
       riders={riders}
       setlists={setlists}
       riderApprovals={riderApprovals}
-      checklists={checklists}
       clashes={clashes}
       venueHistory={venueHistory}
       concertExpenses={concertExpenses}

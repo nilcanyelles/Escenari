@@ -363,6 +363,11 @@ export default function RiderStudio({
   const isFirst = useRef(true);
   const [uploadingAnnex, setUploadingAnnex] = useState(false);
   const annexFileInput = useRef<HTMLInputElement>(null);
+  // Ressalt de la zona d'Annexos mentre s'hi arrossega un fitxer del
+  // sistema per sobre (arrossegar una fila per reordenar és un altre tipus
+  // de "drag", intern — es distingeixen per "Files" a dataTransfer.types,
+  // que el navegador només hi posa quan l'origen és de debò un fitxer).
+  const [annexDragOver, setAnnexDragOver] = useState(false);
   // Contacte en preparació (encara no desat a la llista): null = tancat.
   const [contactDraft, setContactDraft] = useState<RiderContent["contacts"][number] | null>(null);
   const emptyContactDraft = { role: "", name: "", phone: "", email: "" };
@@ -441,24 +446,49 @@ export default function RiderStudio({
   // Puja un document (contracte, plànol del recinte…) a la pestanya
   // Annexos: es guarda al magatzem privat i s'incorpora tal qual — les
   // seves pròpies pàgines — al PDF final del rider.
+  // Fa servir la forma funcional de setContent (no "set", que llegiria
+  // "content.pages" tal com era en obrir la funció): en pujar-ne diversos
+  // d'un cop, cada un s'espera abans del següent, i si es llegís
+  // l'instantània antiga cada resposta trepitjaria la pàgina que acabava
+  // d'afegir la resposta anterior.
   async function uploadAnnexFile(file: File) {
-    setUploadingAnnex(true);
-    try {
-      const fd = new FormData();
-      fd.append("bandId", bandId);
-      fd.append("file", file);
-      const res = await fetch("/api/rider-annex/upload", { method: "POST", body: fd });
-      const data = await res.json();
-      if (!data.ok) { alert(data.error || "No s'ha pogut pujar el document"); return; }
-      set("pages", content.pages.concat([{
+    const fd = new FormData();
+    fd.append("bandId", bandId);
+    fd.append("file", file);
+    const res = await fetch("/api/rider-annex/upload", { method: "POST", body: fd });
+    const data = await res.json();
+    if (!data.ok) { alert(data.error || "No s'ha pogut pujar " + file.name); return; }
+    setContent((prev) => ({
+      ...prev,
+      pages: prev.pages.concat([{
         id: nextId(),
         title: (file.name || "Document").replace(/\.[a-zA-Z0-9]+$/, ""),
         body: "",
         fileUrl: data.url, fileMime: data.mime, fileName: data.name,
-      }]));
+      }]),
+    }));
+  }
+
+  // Punt d'entrada tant del botó "+ Puja un document" (un o més fitxers
+  // triats a l'explorador) com d'arrossegar-los des del Finder/Explorador
+  // a sobre d'Annexos — un darrere l'altre, no en paral·lel.
+  async function uploadAnnexFiles(files: File[]) {
+    const pdfs = files.filter((f) => f.type === "application/pdf" || /\.pdf$/i.test(f.name));
+    if (!pdfs.length) { alert("Només es poden pujar documents PDF"); return; }
+    setUploadingAnnex(true);
+    try {
+      for (const f of pdfs) await uploadAnnexFile(f);
     } finally {
       setUploadingAnnex(false);
     }
+  }
+
+  // Un "drag" intern (reordenar files arrossegant l'nansa ⠿) mai porta
+  // fitxers de debò — "Files" a dataTransfer.types només hi és quan
+  // l'origen és el sistema (Finder/Explorador), independentment del que
+  // faci el nostre propi JS.
+  function isFileDrag(e: React.DragEvent) {
+    return Array.from(e.dataTransfer?.types || []).includes("Files");
   }
 
   // En afegir un instrument a l'escenari, genera de seguida el(s) seu(s)
@@ -475,6 +505,10 @@ export default function RiderStudio({
     return [{ ch: "", source: label, mic: "", stand: "", notes: "" }];
   }
 
+  // Es fa servir a mà (no escampat directament al contenidor) perquè
+  // Annexos necessita distingir abans si el "drag" és un fitxer del
+  // sistema o una fila pròpia — vegeu la secció "pagines" més avall.
+  const pageReorder = pageDrag.containerHandlers();
 
   const sectionBody: Record<SectionId, React.ReactNode> = {
     escenari: <StageCanvas stage={content.stage} onChange={(s) => set("stage", s)}
@@ -709,18 +743,31 @@ export default function RiderStudio({
     ),
 
     pagines: (
-      <div className="studio-section" {...pageDrag.containerHandlers()}>
+      <div className={"studio-section" + (annexDragOver ? " studio-section-dragover" : "")}
+        onDragEnter={(e) => { if (isFileDrag(e)) { e.preventDefault(); setAnnexDragOver(true); } }}
+        onDragOver={(e) => {
+          if (isFileDrag(e)) { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; setAnnexDragOver(true); }
+          else pageReorder.onDragOver(e);
+        }}
+        onDragLeave={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setAnnexDragOver(false); }}
+        onDrop={(e) => {
+          if (isFileDrag(e)) { e.preventDefault(); setAnnexDragOver(false); uploadAnnexFiles(Array.from(e.dataTransfer.files)); }
+          else pageReorder.onDrop(e);
+        }}>
         <div className="rider-block-head">
           <div className="rider-block-title">Annexos (pàgines extra del PDF)</div>
           <div style={{ display: "flex", gap: 8 }}>
-            <input ref={annexFileInput} type="file" accept="application/pdf" style={{ display: "none" }}
-              onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) uploadAnnexFile(f); }} />
+            <input ref={annexFileInput} type="file" accept="application/pdf" multiple style={{ display: "none" }}
+              onChange={(e) => { const files = Array.from(e.target.files || []); e.target.value = ""; if (files.length) uploadAnnexFiles(files); }} />
             <button type="button" className="btn-outline" disabled={uploadingAnnex} onClick={() => annexFileInput.current?.click()}>
               {uploadingAnnex ? "Pujant…" : "+ Puja un document"}
             </button>
             <button type="button" className="btn-outline" onClick={() => set("pages", content.pages.concat([{ id: nextId(), title: "Nova pàgina", body: "" }]))}>+ Afegeix pàgina</button>
           </div>
         </div>
+        {annexDragOver && (
+          <div className="studio-dropzone-hint">Deixa anar per pujar-lo als Annexos (PDF)</div>
+        )}
         {content.pages.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>
             Afegeix pàgines lliures al final del rider: contracte tècnic, mapa d&apos;accés, plànol del recinte…
