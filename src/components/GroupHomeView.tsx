@@ -10,11 +10,13 @@ import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColo
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import type { Song, BandFile } from "@/lib/songs";
-import { saveBandBackupsAction, saveBandVehiclesAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
+import { saveBandBackupsAction, saveBandVehiclesAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, moveMemberToBackupsAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
 import { openBandPublicPageAction } from "@/app/g/actions";
 import { generateJoinCodeAction } from "@/app/(app)/grups/actions";
 import { setMyAttendanceAction } from "@/app/(artist)/actions";
-import { memberPerms, PERM_LABELS } from "@/lib/perms";
+import { memberPerms, PERM_LABELS, DEFAULT_PERMS, ALL_PERMS } from "@/lib/perms";
+import VerifiedTick from "@/components/VerifiedTick";
+import { logoBox } from "@/lib/logo";
 import type { MemberPerms, Vehicle, SocialStats, SocialPlatform } from "@/lib/types";
 import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, isTracked, formatNumber, formatHeroNumber } from "@/lib/social-history";
 import { normalizeRouteSheet, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
@@ -410,7 +412,13 @@ function personChromaItem(
 // Pestanya Permisos (gestor): taula amb tothom del grup a les files i cada
 // permís de l'app a les columnes — cada casella és un interruptor que dona
 // o treu aquell permís a l'instant.
-function PermsMatrix({ band, photosByName }: { band: Band; photosByName: Record<string, string> }) {
+function PermsMatrix({ band, photosByName, linkedNames, isManager, myName }: {
+  band: Band;
+  photosByName: Record<string, string>;
+  linkedNames: Set<string>; // noms normalitzats amb compte vinculat
+  isManager: boolean;
+  myName: string;
+}) {
   const router = useRouter();
   const people = useMemo(() => {
     const seen = new Set<string>();
@@ -424,7 +432,13 @@ function PermsMatrix({ band, photosByName }: { band: Band; photosByName: Record<
   const c1 = band.color1 || bandColor(band.id).color;
   const c2 = band.color2 || bandColor(band.id + "x").color;
 
+  // Un membre amb el permís "Permisos" (no gestor) pot canviar els dels
+  // altres, mai els seus — si no, es donaria tots els permisos a si mateix.
+  function canEdit(name: string): boolean {
+    return isManager || normalize(name) !== normalize(myName);
+  }
   async function toggle(name: string, key: keyof MemberPerms) {
+    if (!canEdit(name)) return;
     const v = !perms[name]?.[key];
     setPerms((prev) => ({ ...prev, [name]: { ...(prev[name] || memberPerms(null)), [key]: v } }));
     setBusy(name + key);
@@ -438,6 +452,8 @@ function PermsMatrix({ band, photosByName }: { band: Band; photosByName: Record<
       <div className="panel-title" style={{ marginBottom: 4 }}>Permisos</div>
       <div className="t-dim" style={{ fontSize: 12.5, marginBottom: 14 }}>
         Què pot fer cada persona del grup dins l&apos;app. Toca un interruptor per donar o treure el permís — s&apos;aplica a l&apos;instant.
+        <strong> Admin</strong> ho inclou tot; <strong>Permisos</strong> deixa veure aquesta pestanya i canviar els permisos dels altres;
+        <strong> Treure gent</strong> mostra el botó &ldquo;Edita membres&rdquo; a l&apos;equip.
       </div>
       {people.length === 0 ? (
         <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té ningú a l&apos;equip.</div>
@@ -460,20 +476,25 @@ function PermsMatrix({ band, photosByName }: { band: Band; photosByName: Record<
                       <div className="perm-person">
                         <img src={photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(p.name, c1, c2)} alt="" />
                         <div style={{ minWidth: 0 }}>
-                          <div className="member-name">{p.name}</div>
+                          <div className="member-name">{p.name}{linkedNames.has(normalize(p.name)) && <VerifiedTick size={12} />}</div>
                           <div className="t-dim" style={{ fontSize: 11 }}>{sub}</div>
                         </div>
                       </div>
                     </td>
                     {PERM_LABELS.map((l) => {
-                      const on = !!perms[p.name]?.[l.key];
+                      // "Admin" ho inclou tot: la resta d'interruptors es veuen
+                      // encesos però no es poden tocar mentre sigui admin.
+                      const isAdmin = !!perms[p.name]?.admin;
+                      const implied = isAdmin && l.key !== "admin";
+                      const on = implied || !!perms[p.name]?.[l.key];
+                      const locked = implied || !canEdit(p.name);
                       return (
                         <td key={l.key}>
                           <button
                             type="button" role="switch" aria-checked={on}
-                            className={"perm-switch" + (on ? " on" : "")}
-                            disabled={busy === p.name + l.key}
-                            title={`${l.label}: ${on ? "sí (toca per treure)" : "no (toca per donar)"}`}
+                            className={"perm-switch" + (on ? " on" : "") + (implied ? " implied" : "")}
+                            disabled={locked || busy === p.name + l.key}
+                            title={implied ? "Inclòs a Admin" : !canEdit(p.name) ? "No pots canviar els teus propis permisos" : `${l.label}: ${on ? "sí (toca per treure)" : "no (toca per donar)"}`}
                             onClick={() => toggle(p.name, l.key)}
                           >
                             <span className="perm-switch-knob"></span>
@@ -535,9 +556,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const searchParams = useSearchParams();
   const isMgr = viewer === "manager";
   const base = isMgr ? "" : "/artista"; // rutes de l'àrea d'artista
-  const can: MemberPerms = isMgr
-    ? { songs: true, riders: true, setlists: true, members: true, events: true }
-    : (caps || { songs: true, riders: true, setlists: true, members: false, events: false });
+  const can: MemberPerms = isMgr ? { ...ALL_PERMS } : (caps || { ...DEFAULT_PERMS });
   // La pestanya inicial es pot indicar per URL (p. ex. ?tab=cancons), com
   // quan es torna de l'editor d'una cançó cap a l'apartat de cançons del grup.
   const initialTabParam = searchParams.get("tab");
@@ -596,6 +615,44 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const [addKind, setAddKind] = useState<"member" | "crew" | null>(null);
   const [addForm, setAddForm] = useState<{ name: string; instruments: string[]; role: string; phone: string; email: string }>({ name: "", instruments: [], role: "", phone: "", email: "" });
   const [addSaving, setAddSaving] = useState(false);
+  // "Edita membres" (pestanya Equip): en mode edició, clicar una targeta
+  // obre el diàleg per treure la persona del grup o passar-la a suplents
+  // (només els músics) — cal el permís "Treure gent".
+  const [teamEdit, setTeamEdit] = useState(false);
+  const [teamTarget, setTeamTarget] = useState<{ person: Person; kind: "member" | "crew" } | null>(null);
+  const [teamStep, setTeamStep] = useState<"choose" | "remove">("choose");
+  const [teamBusy, setTeamBusy] = useState(false);
+  function openTeamTarget(person: Person, kind: "member" | "crew") {
+    cancelHoverOpen();
+    setHoveredTeam(null);
+    setTeamTarget({ person, kind });
+    setTeamStep("choose");
+  }
+  async function removeTeamPerson() {
+    if (!teamTarget) return;
+    setTeamBusy(true);
+    try {
+      await removeBandPersonAction(band.id, teamTarget.kind, teamTarget.person.name);
+      setTeamTarget(null);
+      router.refresh();
+    } catch (err) {
+      alert(String(err instanceof Error ? err.message : err));
+    }
+    setTeamBusy(false);
+  }
+  async function moveTeamPersonToBackups() {
+    if (!teamTarget) return;
+    setTeamBusy(true);
+    try {
+      const res = await moveMemberToBackupsAction(band.id, teamTarget.person.name);
+      setBackups(res.backups);
+      setTeamTarget(null);
+      router.refresh();
+    } catch (err) {
+      alert(String(err instanceof Error ? err.message : err));
+    }
+    setTeamBusy(false);
+  }
   const [joinCopied, setJoinCopied] = useState(false);
   const [codeBusy, setCodeBusy] = useState(false);
   // Genera el codi d'unió (i el regenera: el codi anterior deixa de valer).
@@ -675,6 +732,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   }
   const linkedByName: Record<string, LinkedMember> = {};
   linkedMembers.forEach((m) => { linkedByName[m.memberName] = m; });
+  const linkedNameSet = new Set(linkedMembers.map((m) => normalize(m.memberName)));
 
   const openRequests = backupRequests.filter((r) => r.status === "oberta");
   const concertsById: Record<string, Concert> = {};
@@ -739,10 +797,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             backgroundImage: band.coverUrl
               ? `url(${band.coverUrl})`
               : `linear-gradient(120deg, ${band.color1 || "#8b7bff"}, ${band.color2 || "#3b3358"})`,
+            backgroundPosition: band.coverPos || "50% 50%",
           }}
         ></div>
         <div className="group-hero-li-row">
-          <img className="group-hero-li-logo" src={band.logo || bandPhotoDataUri(band)} alt={band.name} />
+          <img className="group-hero-li-logo" style={logoBox(band.logoAspect, 96)} src={band.logo || bandPhotoDataUri(band)} alt={band.name} />
           <div className="group-hero-li-main">
             <div className="group-hero-name">{band.name}</div>
             <div className="group-hero-tags">
@@ -767,7 +826,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <button className={"stats-tab" + (tab === "equip" ? " active" : "")} onClick={() => setTab("equip")}>Equip</button>
         <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
         <button className={"stats-tab" + (tab === "documents" ? " active" : "")} onClick={() => setTab("documents")}>Documents</button>
-        {isMgr && <button className={"stats-tab" + (tab === "permisos" ? " active" : "")} onClick={() => setTab("permisos")}>Permisos</button>}
+        {(isMgr || can.perms) && <button className={"stats-tab" + (tab === "permisos" ? " active" : "")} onClick={() => setTab("permisos")}>Permisos</button>}
       </div>
 
       {/* Targeta grossa flotant en passar el ratolí per una targeta petita
@@ -962,7 +1021,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         </div>
       )}
 
-      {tab === "permisos" && isMgr && <PermsMatrix band={band} photosByName={photosByName} />}
+      {tab === "permisos" && (isMgr || can.perms) && (
+        <PermsMatrix band={band} photosByName={photosByName} linkedNames={linkedNameSet} isManager={isMgr} myName={myName} />
+      )}
 
       {tab === "equip" && (<>
       {/* KPIs */}
@@ -984,6 +1045,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 ✉️ Correu a tot el grup
               </a>
             )}
+            {can.removeMembers && (band.members.length > 0 || band.crew.length > 0) && (
+              <button type="button" className="btn-outline" onClick={() => { setTeamEdit((v) => !v); setTeamTarget(null); }}>{teamEdit ? "Fet" : "Edita membres"}</button>
+            )}
             {can.members && addKind !== "member" && <button type="button" className="btn-outline" onClick={() => setAddKind("member")}>+ Afegeix membre</button>}
           </div>
         </div>
@@ -991,25 +1055,29 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest grup encara no té membres — afegeix-ne amb el botó de dalt.</div>
         ) : (
           band.members.length > 0 && (
-            <TeamRow
-              people={band.members}
-              cardWidth={76}
-              radius={12}
-              visibleCount={8}
-              renderItem={(m) => {
-                const item = personChromaItem(
-                  m, band, openProfile, photosByName, igByName,
-                  !!linkedByName[m.name], isMgr ? handleInvite : undefined,
-                  undefined,
-                  copiedEmailKey, copyEmail,
-                );
-                return {
-                  ...item,
-                  onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
-                  onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
-                };
-              }}
-            />
+            <div className={teamEdit ? "team-editing" : undefined}>
+              {teamEdit && <div className="team-edit-hint">Clica una persona per treure-la del grup o passar-la a suplents.</div>}
+              <TeamRow
+                people={band.members}
+                cardWidth={76}
+                radius={12}
+                visibleCount={8}
+                renderItem={(m) => {
+                  const item = personChromaItem(
+                    m, band, openProfile, photosByName, igByName,
+                    !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                    undefined,
+                    copiedEmailKey, copyEmail,
+                  );
+                  if (teamEdit) return { ...item, actions: [], onClick: () => openTeamTarget(m, "member") };
+                  return {
+                    ...item,
+                    onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
+                    onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
+                  };
+                }}
+              />
+            </div>
           )
         )}
         {addKind === "member" && (
@@ -1036,6 +1104,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
           <div className="panel-title">Crew</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {can.removeMembers && band.crew.length > 0 && (
+              <button type="button" className="btn-outline" onClick={() => { setTeamEdit((v) => !v); setTeamTarget(null); }}>{teamEdit ? "Fet" : "Edita membres"}</button>
+            )}
             {can.members && addKind !== "crew" && <button type="button" className="btn-outline" onClick={() => setAddKind("crew")}>+ Afegeix tècnic</button>}
           </div>
         </div>
@@ -1043,25 +1114,29 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="t-dim" style={{ fontSize: 13 }}>Sense equip tècnic encara.</div>
         ) : (
           band.crew.length > 0 && (
-            <TeamRow
-              people={band.crew}
-              cardWidth={76}
-              radius={12}
-              visibleCount={8}
-              renderItem={(m) => {
-                const item = personChromaItem(
-                  m, band, openProfile, photosByName, igByName,
-                  !!linkedByName[m.name], isMgr ? handleInvite : undefined,
-                  undefined,
-                  copiedEmailKey, copyEmail,
-                );
-                return {
-                  ...item,
-                  onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
-                  onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
-                };
-              }}
-            />
+            <div className={teamEdit ? "team-editing" : undefined}>
+              {teamEdit && <div className="team-edit-hint">Clica una persona per treure-la del grup.</div>}
+              <TeamRow
+                people={band.crew}
+                cardWidth={76}
+                radius={12}
+                visibleCount={8}
+                renderItem={(m) => {
+                  const item = personChromaItem(
+                    m, band, openProfile, photosByName, igByName,
+                    !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                    undefined,
+                    copiedEmailKey, copyEmail,
+                  );
+                  if (teamEdit) return { ...item, actions: [], onClick: () => openTeamTarget(m, "crew") };
+                  return {
+                    ...item,
+                    onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
+                    onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
+                  };
+                }}
+              />
+            </div>
           )
         )}
         {addKind === "crew" && (
@@ -1197,7 +1272,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                         <div key={a.clerkUserId} className="backup-app-row">
                           <img className="member-photo backup-photo" src={personPhotoDataUri(a.name)} alt="" />
                           <div className="backup-row-main">
-                            <div className="member-name">{a.name}</div>
+                            <div className="member-name">{a.name}<VerifiedTick size={12} /></div>
                             <InstrumentChips items={a.instruments} />
                             {a.message && <div className="t-dim" style={{ fontSize: 12 }}>&ldquo;{a.message}&rdquo;</div>}
                           </div>
@@ -1224,6 +1299,39 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
       {editOpen && (
         <GroupAppearanceModal key={band.id} band={band} onClose={() => setEditOpen(false)} />
+      )}
+
+      {/* "Edita membres": què fer amb la persona clicada */}
+      {teamTarget && (
+        <div className="modal-overlay cf-confirm-overlay" onClick={(e) => { e.stopPropagation(); if (!teamBusy) setTeamTarget(null); }}>
+          <div className="modal cf-confirm-modal" role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
+            <div className="cf-confirm-title">{teamTarget.person.name}</div>
+            {teamStep === "choose" ? (
+              <>
+                <div className="cf-confirm-message">Què vols fer amb {teamTarget.person.name.split(" ")[0]}?</div>
+                <div className="team-edit-actions">
+                  {teamTarget.kind === "member" && (
+                    <button type="button" className="btn-outline" disabled={teamBusy} onClick={moveTeamPersonToBackups}>
+                      {teamBusy ? "Un moment…" : "Passa a suplent de confiança"}
+                    </button>
+                  )}
+                  <button type="button" className="btn-danger-outline" disabled={teamBusy} onClick={() => setTeamStep("remove")}>Treu del grup</button>
+                  <button type="button" className="link-btn" disabled={teamBusy} onClick={() => setTeamTarget(null)}>Cancel·la</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="cf-confirm-message">
+                  Segur que vols treure <strong>{teamTarget.person.name}</strong> del grup? Si té compte d&apos;Escenari, deixarà de veure-hi el grup.
+                </div>
+                <div className="modal-actions cf-confirm-actions">
+                  <button type="button" className="btn-outline" disabled={teamBusy} onClick={() => setTeamStep("choose")}>Enrere</button>
+                  <button type="button" className="btn-danger-outline" disabled={teamBusy} onClick={removeTeamPerson}>{teamBusy ? "Un moment…" : "Treu del grup"}</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

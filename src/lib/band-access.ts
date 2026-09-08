@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { getProfile, type Profile } from "./current-user";
 import { normalize } from "./text";
-import { memberPerms } from "./perms";
+import { memberPerms, ALL_PERMS } from "./perms";
 import type { MemberPerms, Person } from "./types";
 
 export type BandAccess = {
@@ -23,7 +23,7 @@ export async function requireBandAccess(bandId: string, perm?: keyof MemberPerms
   if (profile.role === "manager" && profile.workspaceId === band.workspace_id) {
     return {
       profile, workspaceId: band.workspace_id, isManager: true, memberName: "",
-      perms: { songs: true, riders: true, setlists: true, members: true, events: true },
+      perms: { ...ALL_PERMS },
     };
   }
 

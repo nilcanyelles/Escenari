@@ -3,6 +3,7 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import InstrumentPicker from "@/components/InstrumentPicker";
+import BackLink from "@/components/BackLink";
 import { completeArtistOnboardingAction, completeAgencyOnboardingAction } from "./actions";
 
 type Step = "role" | "artist" | "agency" | "agency-done";
@@ -133,7 +134,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
 
       {step === "artist" && (
         <div className="onboarding-form">
-          <button className="onboarding-back" onClick={() => setStep("role")}>← Torna enrere</button>
+          <BackLink className="onboarding-back" onClick={() => setStep("role")}>Torna enrere</BackLink>
           <h1 className="onboarding-title">El teu perfil d&apos;artista</h1>
           <div className="field-group">
             <label className="field-label">El teu nom</label>
@@ -158,7 +159,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
 
       {step === "agency" && (
         <div className="onboarding-form">
-          <button className="onboarding-back" onClick={() => setStep("role")}>← Torna enrere</button>
+          <BackLink className="onboarding-back" onClick={() => setStep("role")}>Torna enrere</BackLink>
           <h1 className="onboarding-title">La teva agència</h1>
 
           {/* L'agència: és qui té tots els grups a dins i surt a dalt de la

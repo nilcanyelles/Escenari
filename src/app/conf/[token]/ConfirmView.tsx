@@ -1,15 +1,17 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { SignOutButton } from "@clerk/nextjs";
-import { respondConfAction } from "@/app/conf/actions";
+import { respondConfAction, searchSubstituteCandidatesAction, proposeSubstituteAction, createSubstituteLinkAction } from "@/app/conf/actions";
+import { logoBox } from "@/lib/logo";
 import { personPhotoDataUri } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { formatDateFull, capitalize, formatConcertTime, WEEKDAY_FULL, MONTH_ABBR } from "@/lib/format";
 import type { Concert, Band } from "@/lib/types";
 import DiaBody from "@/components/DiaBody";
+import VerifiedTick from "@/components/VerifiedTick";
 
 export type ConfMember = {
   name: string;
@@ -31,6 +33,14 @@ export type ConfViewer = {
   linkedMemberName: string;
 };
 
+// Cerca de suplent oberta per a un membre i un concert: qui s'hi ha
+// presentat (o ha estat proposat) i l'enllaç del suplent, si n'hi ha.
+export type ConfSubInfo = {
+  requestId: string;
+  token: string;
+  applications: { name: string; status: "pendent" | "acceptada" | "rebutjada" }[];
+};
+
 // Què cal per poder respondre, un cop triat qui ets.
 type Gate = "signin" | "signup" | "wrong-account" | "manager" | "table";
 
@@ -43,16 +53,20 @@ function rowDate(date: string): string {
   return `${WEEKDAY_FULL[dt.getDay()].slice(0, 3)} ${p[2]} ${MONTH_ABBR[p[1] - 1]}${sameYear ? "" : " " + p[0]}`;
 }
 
-export default function ConfirmView({ token, single, allFuture, band, concerts, diaBand, members, viewer, preselect }: {
+export default function ConfirmView({ token, single, allFuture, band, concerts, diaBand, members, linkedNames = [], subs = {}, viewer, preselect }: {
   token: string;
   // Enllaç d'un sol concert (els de sempre): es mostra el pòster i els
   // detalls del dia a dalt de tot, com fins ara.
   single: boolean;
   allFuture: boolean;
-  band: { name: string; logo: string; color1: string; color2: string };
+  band: { name: string; logo: string; logoAspect?: string; color1: string; color2: string };
+  // Cerques de suplent obertes: concert → membre (normalitzat) → info.
+  subs?: Record<string, Record<string, ConfSubInfo>>;
   concerts: Concert[];
   diaBand: Band | null;
   members: ConfMember[];
+  // Noms amb compte vinculat, per al tick lila de "Qui ve" (DiaBody).
+  linkedNames?: string[];
   viewer: ConfViewer;
   preselect: string;
 }) {
@@ -69,6 +83,74 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
+  // ---- Proposar un suplent (quan es diu que no) ----
+  const [subsLocal, setSubsLocal] = useState(subs);
+  const [subPanel, setSubPanel] = useState<{ concertId: string; mode: "menu" | "search" | "link" } | null>(null);
+  const [subQ, setSubQ] = useState("");
+  const [subResults, setSubResults] = useState<{ clerkUserId: string; name: string; instruments: string[] }[]>([]);
+  const [subSearching, setSubSearching] = useState(false);
+  const [subBusy, setSubBusy] = useState(false);
+  const [subError, setSubError] = useState<string | null>(null);
+  const [subLink, setSubLink] = useState<string | null>(null);
+  const [subCopied, setSubCopied] = useState(false);
+  useEffect(() => {
+    if (!subPanel || subPanel.mode !== "search") return;
+    const q = subQ.trim();
+    if (q.length < 2) { setSubResults([]); return; }
+    setSubSearching(true);
+    const t = window.setTimeout(async () => {
+      const r = await searchSubstituteCandidatesAction(token, q);
+      setSubResults(r);
+      setSubSearching(false);
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [subQ, subPanel, token]);
+
+  function openSubPanel(concertId: string, mode: "menu" | "search" | "link") {
+    setSubPanel({ concertId, mode });
+    setSubQ("");
+    setSubResults([]);
+    setSubError(null);
+    setSubCopied(false);
+  }
+  function addLocalApplication(concertId: string, memberName: string, name: string, tokenValue?: string) {
+    setSubsLocal((prev) => {
+      const byMember = { ...(prev[concertId] || {}) };
+      const key = normalize(memberName);
+      const cur = byMember[key] || { requestId: "", token: "", applications: [] };
+      byMember[key] = {
+        ...cur,
+        token: tokenValue ?? cur.token,
+        applications: name && !cur.applications.some((a) => a.name === name) ? [...cur.applications, { name, status: "pendent" as const }] : cur.applications,
+      };
+      return { ...prev, [concertId]: byMember };
+    });
+  }
+  async function proposeCandidate(concertId: string, memberName: string, cand: { clerkUserId: string; name: string }) {
+    setSubBusy(true);
+    setSubError(null);
+    const res = await proposeSubstituteAction(token, concertId, memberName, cand.clerkUserId);
+    setSubBusy(false);
+    if (!res.ok) { setSubError(res.error || "No s'ha pogut proposar."); return; }
+    addLocalApplication(concertId, memberName, res.name || cand.name);
+    setSubPanel(null);
+    router.refresh();
+  }
+  async function makeSubLink(concertId: string, memberName: string) {
+    setSubBusy(true);
+    setSubError(null);
+    const res = await createSubstituteLinkAction(token, concertId, memberName);
+    setSubBusy(false);
+    if (!res.ok || !res.path) { setSubError(res.error || "No s'ha pogut crear l'enllaç."); return; }
+    const url = `${window.location.origin}${res.path}`;
+    setSubLink(url);
+    addLocalApplication(concertId, memberName, "", res.path.replace("/s/", ""));
+    setSubPanel({ concertId, mode: "link" });
+  }
+  function subWaText(url: string, c: Concert, memberName: string) {
+    return `Hola! ${memberName} no pot venir al bolo de ${band.name} el ${capitalize(formatDateFull(c.date))}${c.city ? " a " + c.city.split(",")[0] : ""} i t'ha proposat com a suplent. Presenta-t'hi aquí: ${url}`;
+  }
 
   const sel = members.find((m) => m.name === selected) || null;
   const c1 = band.color1 || "#8b7bff";
@@ -122,6 +204,87 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
     return { label: `${answered}/${concerts.length} respostos`, cls: "pending" };
   }
 
+  // Bloc de suplent d'una fila on s'ha dit que no: què hi ha (suplent
+  // confirmat pel gestor, proposats pendents, enllaç) i el botó per
+  // proposar-ne un — buscant-lo per compte o generant-li un enllaç.
+  function renderSubBlock(c: Concert, memberName: string) {
+    const confirmedSub = (c.substitutes || {})[memberName];
+    const info = subsLocal[c.id]?.[normalize(memberName)];
+    const apps = info?.applications || [];
+    const panelHere = subPanel?.concertId === c.id ? subPanel : null;
+    const linkUrl = info?.token ? `${window.location.origin}/s/${info.token}` : null;
+    return (
+      <div className="cfm-sub">
+        {confirmedSub && <div className="cfm-sub-line yes">✓ Suplent confirmat pel gestor: <strong>{confirmedSub}</strong></div>}
+        {apps.map((ap, i) => (
+          <div key={i} className="cfm-sub-line">
+            Proposat: <strong>{ap.name}</strong>
+            <span className={"cfm-badge " + (ap.status === "acceptada" ? "yes" : ap.status === "rebutjada" ? "no" : "pending")}>
+              {ap.status === "pendent" ? "pendent del gestor" : ap.status}
+            </span>
+          </div>
+        ))}
+        {linkUrl && !panelHere && (
+          <div className="cfm-sub-line">
+            Enllaç per al suplent:
+            <button type="button" className="link-btn" onClick={() => { navigator.clipboard.writeText(linkUrl); setSubCopied(true); window.setTimeout(() => setSubCopied(false), 1500); }}>{subCopied ? "copiat ✓" : "copia"}</button>
+            ·
+            <button type="button" className="link-btn" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(subWaText(linkUrl, c, memberName))}`, "_blank")}>WhatsApp</button>
+          </div>
+        )}
+        {!confirmedSub && !panelHere && (
+          <button type="button" className="cfm-sub-btn" onClick={() => openSubPanel(c.id, "menu")}>Proposa un suplent</button>
+        )}
+        {panelHere && (
+          <div className="cfm-sub-panel">
+            {panelHere.mode === "menu" && (
+              <>
+                <div className="cfm-note">El suplent té compte a Escenari?</div>
+                <div className="cfm-gate-btns">
+                  <button type="button" className="btn-outline" onClick={() => openSubPanel(c.id, "search")}>Sí — busca&apos;l</button>
+                  <button type="button" className="btn-outline" disabled={subBusy} onClick={() => makeSubLink(c.id, memberName)}>{subBusy ? "Un moment…" : "No — genera-li un enllaç"}</button>
+                  <button type="button" className="link-btn" onClick={() => setSubPanel(null)}>Cancel·la</button>
+                </div>
+              </>
+            )}
+            {panelHere.mode === "search" && (
+              <>
+                <input className="field-input" type="text" placeholder="Nom del suplent…" value={subQ} onChange={(e) => setSubQ(e.target.value)} autoFocus />
+                <div className="cfm-sub-results">
+                  {subResults.map((r) => (
+                    <button key={r.clerkUserId} type="button" className="cfm-sub-result" disabled={subBusy} onClick={() => proposeCandidate(c.id, memberName, r)}>
+                      <span>{r.name}</span>
+                      <span className="t-dim">{r.instruments.slice(0, 2).join(", ")}</span>
+                    </button>
+                  ))}
+                  {subQ.trim().length >= 2 && !subSearching && subResults.length === 0 && (
+                    <div className="t-dim" style={{ fontSize: 12.5 }}>
+                      Cap compte amb aquest nom — <button type="button" className="link-btn" disabled={subBusy} onClick={() => makeSubLink(c.id, memberName)}>genera-li un enllaç</button>
+                    </div>
+                  )}
+                  {subSearching && <div className="t-dim" style={{ fontSize: 12.5 }}>Cercant…</div>}
+                </div>
+                <button type="button" className="link-btn" style={{ alignSelf: "flex-start" }} onClick={() => setSubPanel(null)}>Cancel·la</button>
+              </>
+            )}
+            {panelHere.mode === "link" && subLink && (
+              <>
+                <div className="cfm-note">Envia-li aquest enllaç: s&apos;hi crearà el compte i es presentarà com a suplent; el gestor ho confirmarà.</div>
+                <div className="cfm-sub-linkbox">{subLink}</div>
+                <div className="cfm-gate-btns">
+                  <button type="button" className="btn-outline" onClick={() => { navigator.clipboard.writeText(subLink); setSubCopied(true); window.setTimeout(() => setSubCopied(false), 1500); }}>{subCopied ? "Copiat ✓" : "Copia l'enllaç"}</button>
+                  <button type="button" className="btn-outline" onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(subWaText(subLink, c, memberName))}`, "_blank")}>WhatsApp</button>
+                  <button type="button" className="link-btn" onClick={() => setSubPanel(null)}>Fet</button>
+                </div>
+              </>
+            )}
+            {subError && <div className="cfm-error">{subError}</div>}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   const place = one ? [one.venue, one.address].filter(Boolean).join(" · ") : "";
   const mapsQuery = one ? encodeURIComponent([one.venue, one.address, one.city].filter(Boolean).join(", ")) : "";
   const firstName = sel ? sel.name.split(" ")[0] : "";
@@ -132,7 +295,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
         {one ? (
           <div className="cd-poster">
             <div className="cd-poster-glow" aria-hidden="true"></div>
-            {band.logo && <img className="cfm-poster-logo" src={band.logo} alt="" />}
+            {band.logo && <img className="cfm-poster-logo" style={logoBox(band.logoAspect, 44)} src={band.logo} alt="" />}
             <div className="cd-poster-kicker">{band.name}</div>
             <div className="cd-poster-subtitle">
               {one.festaEntitat || (one.kind === "bolo" ? "concert" : one.kind === "reunio" ? "reunió" : one.kind)}
@@ -151,7 +314,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
           </div>
         ) : (
           <div className="cfm-band-head">
-            {band.logo && <img src={band.logo} alt="" />}
+            {band.logo && <img style={logoBox(band.logoAspect, 64)} src={band.logo} alt="" />}
             <div className="cfm-band-kicker">{band.name}</div>
             <div className="cfm-band-title">Propers concerts</div>
             <div className="cfm-band-sub">
@@ -163,7 +326,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
 
         {one && (
           <div className="dia" style={{ padding: 0, margin: 0, maxWidth: "none" }}>
-            <DiaBody concert={one} band={diaBand} />
+            <DiaBody concert={one} band={diaBand} linkedNames={linkedNames} />
           </div>
         )}
 
@@ -181,7 +344,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
                   >
                     <img src={m.photoId ? `/api/file/${m.photoId}` : personPhotoDataUri(m.name)} alt="" />
                     <span className="cfm-member-main">
-                      <span className="cfm-member-name">{m.name}{m.isMe ? " (tu)" : ""}</span>
+                      <span className="cfm-member-name">{m.name}{m.isMe ? " (tu)" : ""}{m.linked && <VerifiedTick size={12} />}</span>
                       {m.instruments.length > 0 && <span className="cfm-member-ins">{m.instruments.slice(0, 2).join(", ")}</span>}
                     </span>
                     <span className={"cfm-badge " + badge.cls}>{badge.label}</span>
@@ -195,7 +358,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
             <div className="cfm-identity">
               <img src={sel.photoId ? `/api/file/${sel.photoId}` : personPhotoDataUri(sel.name)} alt="" />
               <div className="cfm-identity-main">
-                <div className="cfm-identity-name">{sel.name}{sel.isMe ? " (tu)" : ""}</div>
+                <div className="cfm-identity-name">{sel.name}{sel.isMe ? " (tu)" : ""}{sel.linked && <VerifiedTick size={12} />}</div>
                 {sel.instruments.length > 0 && <div className="cfm-identity-sub">{sel.instruments.slice(0, 2).join(", ")}</div>}
               </div>
               {!sel.isMe && (
@@ -277,6 +440,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
                         <button type="button" className={"cfm-row-btn yes" + (a === "yes" ? " active" : "")} disabled={busy === c.id} onClick={() => respond(c.id, "yes")}>✓ Hi seré</button>
                         <button type="button" className={"cfm-row-btn no" + (a === "no" ? " active" : "")} disabled={busy === c.id} onClick={() => respond(c.id, "no")}>✗ No hi seré</button>
                       </div>
+                      {a === "no" && renderSubBlock(c, sel.name)}
                       {!single && (
                         <button type="button" className="cfm-row-expand" onClick={() => setExpanded((p) => ({ ...p, [c.id]: !p[c.id] }))}>
                           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" style={{ transform: expanded[c.id] ? "rotate(180deg)" : "none" }}><polyline points="6 9 12 15 18 9"></polyline></svg>
@@ -285,7 +449,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
                       )}
                       {!single && expanded[c.id] && (
                         <div className="cfm-row-details dia">
-                          <DiaBody concert={c} band={diaBand} />
+                          <DiaBody concert={c} band={diaBand} linkedNames={linkedNames} />
                         </div>
                       )}
                     </div>

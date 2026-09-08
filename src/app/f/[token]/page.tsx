@@ -27,7 +27,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ to
     return (
       <div className="pf-screen">
         <div className="pf-dead">
-          <div className="pf-brand">ESCENARI</div>
+          <div className="pf-brand"><img className="pf-logo" src="/logo-escenari.png" alt="Escenari" /></div>
           <div className="pf-dead-icon">🔒</div>
           <h1>Aquest enllaç ja no és actiu</h1>
           <p>
@@ -47,7 +47,7 @@ export default async function PublicSharePage({ params }: { params: Promise<{ to
     return (
       <div className="pf-screen">
         <div className="pf-dead">
-          <div className="pf-brand">ESCENARI</div>
+          <div className="pf-brand"><img className="pf-logo" src="/logo-escenari.png" alt="Escenari" /></div>
           <h1>Aquest concert ja no existeix</h1>
         </div>
       </div>

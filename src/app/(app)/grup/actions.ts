@@ -5,10 +5,20 @@ import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { normalize } from "@/lib/text";
-import type { MemberPerms, Vehicle, SocialLinks } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialLinks, Person } from "@/lib/types";
 import { uploadFileBlob } from "@/lib/blob-storage";
+import { instrumentsFor } from "@/lib/tags";
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
+
+// Tot el que mostra l'equip d'un grup (gestor i músics).
+function revalidateGroup() {
+  revalidatePath("/grup");
+  revalidatePath("/grups");
+  revalidatePath("/concerts");
+  revalidatePath("/artista");
+  revalidatePath("/artista/grup");
+}
 
 // Desa la llista de suplents de confiança d'un grup.
 export async function saveBandBackupsAction(bandId: string, backups: BackupPerson[]) {
@@ -69,20 +79,30 @@ export async function uploadBandImageAction(formData: FormData): Promise<{ ok: b
     [id, workspaceId, bandId, file.name || kind, file.type, file.size, blobUrl]
   );
   const url = `/api/file/${id}`;
-  await db().query(
-    kind === "cover" ? "update bands set cover_url=$1 where id=$2" : "update bands set logo=$1 where id=$2",
-    [url, bandId]
-  );
+  if (kind === "cover") {
+    await db().query("update bands set cover_url=$1 where id=$2", [url, bandId]);
+  } else {
+    // La proporció amb què s'ha retallat el logo (vegeu LOGO_ASPECTS) es
+    // desa amb ell, perquè es mostri sencer a la capçalera i a la pàgina
+    // pública.
+    const aspect = String(formData.get("logoAspect") || "");
+    await db().query("update bands set logo=$1, logo_aspect=coalesce(nullif($2,''), logo_aspect) where id=$3", [url, aspect, bandId]);
+  }
   revalidatePath("/grup");
+  revalidatePath("/agencia");
   return { ok: true, url };
 }
 
-export async function saveBandAppearanceAction(bandId: string, input: { name: string; color1: string; color2: string; tags: string[] }) {
+export async function saveBandAppearanceAction(bandId: string, input: { name: string; color1: string; color2: string; tags: string[]; logoAspect?: string; coverPos?: string }) {
   const { workspaceId } = await requireManagerAction();
   const name = (input.name || "").trim();
+  // El punt focal de la portada només s'accepta en format "X% Y%".
+  const coverPos = /^\d{1,3}% \d{1,3}%$/.test(input.coverPos || "") ? input.coverPos! : "";
   await db().query(
-    "update bands set name=coalesce(nullif($1,''), name), color1=$2, color2=$3, tags=$4 where id=$5 and workspace_id=$6",
-    [name, input.color1 || "", input.color2 || "", JSON.stringify(input.tags || []), bandId, workspaceId]
+    `update bands set name=coalesce(nullif($1,''), name), color1=$2, color2=$3, tags=$4,
+       logo_aspect=coalesce(nullif($5,''), logo_aspect), cover_pos=coalesce(nullif($6,''), cover_pos)
+     where id=$7 and workspace_id=$8`,
+    [name, input.color1 || "", input.color2 || "", JSON.stringify(input.tags || []), input.logoAspect || "", coverPos, bandId, workspaceId]
   );
   if (name) await db().query("update concerts set band_name=$1 where band_id=$2 and workspace_id=$3", [name, bandId, workspaceId]);
   revalidatePath("/grup");
@@ -116,16 +136,66 @@ export async function addBandPersonAction(bandId: string, kind: "member" | "crew
   revalidatePath("/grup");
 }
 
+// Treu una persona del grup (músic o crew) — gestor, o membre amb el permís
+// "Treure gent". També se'n desfà el vincle de compte (band_members) i
+// qualsevol invitació pendent per reclamar el perfil.
 export async function removeBandPersonAction(bandId: string, kind: "member" | "crew", name: string) {
-  const { workspaceId } = await requireManagerAction();
-  const band = (await db().query("select members, crew from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  await requireBandAccess(bandId, "removeMembers");
+  const pool = db();
+  const band = (await pool.query("select members, crew from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
   const col = kind === "member" ? "members" : "crew";
   const list = ((kind === "member" ? band.members : band.crew) || []).filter(
-    (p: { name: string }) => p.name.trim().toLowerCase() !== name.trim().toLowerCase()
+    (p: { name: string }) => normalize(p.name) !== normalize(name)
   );
-  await db().query(`update bands set ${col}=$1 where id=$2`, [JSON.stringify(list), bandId]);
-  revalidatePath("/grup");
+  await pool.query(`update bands set ${col}=$1 where id=$2`, [JSON.stringify(list), bandId]);
+  await pool.query("delete from band_members where band_id=$1 and lower(member_name)=lower($2)", [bandId, name.trim()]);
+  await pool.query("delete from invitations where band_id=$1 and lower(name)=lower($2) and status='pendent'", [bandId, name.trim()]);
+  revalidateGroup();
+}
+
+// Passa un músic del grup a la llista de suplents de confiança (mai la
+// crew): surt de la formació (i del vincle de compte, si en tenia) i entra
+// als suplents amb els seus instruments i contacte, si no hi era ja.
+export async function moveMemberToBackupsAction(bandId: string, name: string): Promise<{ backups: BackupPerson[] }> {
+  await requireBandAccess(bandId, "removeMembers");
+  const pool = db();
+  const band = (await pool.query("select members, backups from bands where id=$1", [bandId])).rows[0];
+  if (!band) throw new Error("Grup no trobat");
+  const members: Person[] = band.members || [];
+  const person = members.find((p) => normalize(p.name) === normalize(name));
+  if (!person) throw new Error("Aquesta persona no és músic del grup");
+  const backups: BackupPerson[] = band.backups || [];
+  if (!backups.some((b) => normalize(b.name) === normalize(person.name))) {
+    backups.push({ name: person.name, instruments: instrumentsFor(person), phone: person.phone || "", email: person.email || "" });
+  }
+  await pool.query(
+    "update bands set members=$1, backups=$2 where id=$3",
+    [JSON.stringify(members.filter((p) => p !== person)), JSON.stringify(backups), bandId]
+  );
+  await pool.query("delete from band_members where band_id=$1 and lower(member_name)=lower($2)", [bandId, person.name]);
+  revalidateGroup();
+  revalidatePath("/suplents");
+  return { backups };
+}
+
+// Noms dels membres d'un grup que tenen compte d'Escenari vinculat — per
+// pintar-hi el tick lila on no arriba la llista completa (popup d'esdeveniment...).
+export async function listLinkedMemberNamesAction(bandId: string): Promise<string[]> {
+  await requireBandAccess(bandId);
+  const { rows } = await db().query("select member_name from band_members where band_id=$1", [bandId]);
+  return rows.map((r) => r.member_name as string);
+}
+
+// Té compte vinculat aquesta persona en algun grup de l'agència? (fitxa de
+// persona del gestor, que no sap de quin grup ve).
+export async function isPersonLinkedAction(name: string): Promise<boolean> {
+  const { workspaceId } = await requireManagerAction();
+  const { rows } = await db().query(
+    "select 1 from band_members bm join bands b on b.id = bm.band_id where b.workspace_id=$1 and lower(bm.member_name)=lower($2) limit 1",
+    [workspaceId, (name || "").trim()]
+  );
+  return rows.length > 0;
 }
 
 // ---------- Permisos per membre (el gestor decideix què pot fer) ----------
@@ -133,9 +203,14 @@ export async function removeBandPersonAction(bandId: string, kind: "member" | "c
 // La persona pot ser tant un músic com de l'equip tècnic — es busca a
 // totes dues llistes i s'actualitza la que la tingui (mai cal saber-ho
 // d'entrada des d'on es truca).
+// Gestor, o membre amb el permís "Permisos" — que pot canviar els dels
+// altres, mai els seus (si no, es donaria tots els permisos a si mateix).
 export async function setMemberPermAction(bandId: string, memberName: string, key: keyof MemberPerms, on: boolean) {
-  const { workspaceId } = await requireManagerAction();
-  const band = (await db().query("select members, crew from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  const access = await requireBandAccess(bandId, "perms");
+  if (!access.isManager && normalize(access.memberName) === normalize(memberName) && !access.perms.admin) {
+    throw new Error("No pots canviar els teus propis permisos");
+  }
+  const band = (await db().query("select members, crew from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
   const setPerm = (list: { name: string; perms?: Partial<MemberPerms> }[]) =>
     list.map((m) => (normalize(m.name) !== normalize(memberName) ? m : { ...m, perms: { ...(m.perms || {}), [key]: on } }));

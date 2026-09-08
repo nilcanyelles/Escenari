@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Band } from "@/lib/types";
 import { personPhotoDataUri, personColorHue, bandColor, splitInstruments } from "@/lib/tags";
 import { instrumentIconKey } from "@/lib/instruments";
@@ -9,6 +9,8 @@ import { updatePersonContactAction, updateMembershipRoleAction } from "@/app/(ap
 import InstrumentPicker, { InstrumentIcon } from "@/components/InstrumentPicker";
 import { isValidEmail, isValidPhone } from "@/lib/validation";
 import { CrewRoleSvg, crewRoleIconKey } from "@/lib/crewRoles";
+import { isPersonLinkedAction } from "@/app/(app)/grup/actions";
+import VerifiedTick from "@/components/VerifiedTick";
 
 function contactActions(phone: string) {
   const digits = phone.replace(/[^\d+]/g, "");
@@ -38,6 +40,13 @@ export default function MemberProfileModal({
   const [isEditing, setIsEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editName, setEditName] = useState(name);
+  // Té compte d'Escenari vinculat en algun grup? (tick lila al costat del nom)
+  const [linked, setLinked] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    isPersonLinkedAction(name).then((v) => { if (alive) setLinked(v); }).catch(() => {});
+    return () => { alive = false; };
+  }, [name]);
 
   const memberships = useMemo(() => {
     const out: { bandId: string; bandName: string; role: string; listType: "members" | "crew" }[] = [];
@@ -157,7 +166,7 @@ export default function MemberProfileModal({
               <input className="field-input" style={{ fontFamily: "'Space Grotesk',sans-serif", fontSize: 17, fontWeight: 700 }}
                 type="text" value={editName} onChange={(e) => setEditName(e.target.value)} />
             ) : (
-              <div className="band-modal-name">{name}</div>
+              <div className="band-modal-name">{name}{linked && <VerifiedTick size={14} />}</div>
             )}
             <div style={{ fontSize: 13.5, color: "var(--text-faint)", marginTop: 6 }}>{concertCount} {concertCount === 1 ? "concert" : "concerts"} fets</div>
           </div>

@@ -15,7 +15,7 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyAssumesExpensesAction, setAgencyPctAction, repeatConcertAction, setSetlistHighlightsAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyPctAction, repeatConcertAction, setSetlistHighlightsAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
@@ -24,9 +24,9 @@ import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction 
 import { createAttendanceLinkAction, listAttendanceLinkConcertsAction } from "@/app/conf/actions";
 import AttendanceLinkModal, { type AttendanceLinkIntent } from "@/components/AttendanceLinkModal";
 import type { AttendanceLinkConcert } from "@/app/conf/actions";
-import { publishBackupRequestAction, setBackupRequestStatusAction, saveDefaultPayoutSplitAction } from "@/app/(app)/grup/actions";
-import type { Transaction } from "@/lib/finance";
-import { saveTransactionAction, deleteTransactionAction } from "@/app/(app)/estadistiques/finance-actions";
+import { publishBackupRequestAction, setBackupRequestStatusAction, saveDefaultPayoutSplitAction, respondBackupApplicationAction } from "@/app/(app)/grup/actions";
+import { EXPENSE_PAYER_LABELS, type Transaction, type ExpensePayer } from "@/lib/finance";
+import { saveTransactionAction, deleteTransactionAction, setTransactionPayerAction } from "@/app/(app)/estadistiques/finance-actions";
 import RouteSheetEditor from "@/components/RouteSheetEditor";
 import FoldPanel from "@/components/FoldPanel";
 import ContractPanel from "@/components/ContractPanel";
@@ -40,6 +40,9 @@ import VenueSearchField, { resolvePlaceToVenueFields } from "@/components/VenueS
 import { KIND_META } from "@/components/CalendariView";
 import TimePeriodBubble from "@/components/TimePeriodBubble";
 import ContactAutocomplete from "@/components/ContactAutocomplete";
+import VerifiedTick from "@/components/VerifiedTick";
+import ConfirmDialog from "@/components/ConfirmDialog";
+import BackLink from "@/components/BackLink";
 
 const STATUS_CYCLE = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
@@ -82,10 +85,18 @@ export function infoCompletion(c: Concert, opts?: { amountFilled?: boolean }): {
 }
 
 
-function Meter({ label, percent, missing }: { label: string; percent: number; missing: string[] }) {
+// Mesurador del bànner (Informació, Full de ruta): en passar-hi el ratolí
+// surt què falta amb el mateix format de bombolles que el d'Assistència, i
+// clicar-lo porta a la pestanya corresponent.
+function Meter({ label, percent, missing, onClick }: { label: string; percent: number; missing: string[]; onClick?: () => void }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="cd-meter" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div
+      className={"cd-meter" + (onClick ? " clickable" : "")} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+      role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? `${label}: ${percent}% — obre la pestanya` : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="cd-meter-head">
         <span>{label}</span>
         <span style={{ color: progressColor(percent) }}>{percent}%</span>
@@ -93,10 +104,14 @@ function Meter({ label, percent, missing }: { label: string; percent: number; mi
       <div className="cd-meter-track">
         <div className="cd-meter-fill" style={{ width: percent + "%", background: progressColor(percent) }}></div>
       </div>
-      {open && missing.length > 0 && (
+      {open && (
         <div className="cd-meter-tip">
-          <div className="cd-meter-tip-title">Falta:</div>
-          {missing.map((m) => <div key={m} className="cd-meter-tip-row">· {m}</div>)}
+          <div className="cd-meter-tip-title">{missing.length ? "Falta:" : label + ":"}</div>
+          <div className="cd-att-bubbles">
+            {missing.length
+              ? missing.map((m) => <span key={m} className="cd-att-bubble pending"><HourglassIcon />{m}</span>)
+              : <span className="cd-att-bubble yes">✓ Tot complet</span>}
+          </div>
         </div>
       )}
     </div>
@@ -131,7 +146,7 @@ function HourglassIcon() {
 // dos trams (sí en verd, no en vermell) sobre el total de membres — el
 // tram restant (sense marcar) es veu com a fons neutre. Els exclosos de la
 // convocatòria d'aquest concert no compten enlloc (ni al total).
-function AttendanceMeter({ people, attendance, excluded, substitutes = {} }: { people: { name: string }[]; attendance: Record<string, string>; excluded: Record<string, boolean>; substitutes?: Record<string, string> }) {
+function AttendanceMeter({ people, attendance, excluded, substitutes = {}, onClick }: { people: { name: string }[]; attendance: Record<string, string>; excluded: Record<string, boolean>; substitutes?: Record<string, string>; onClick?: () => void }) {
   const [open, setOpen] = useState(false);
   const active = people.filter((p) => !excluded[p.name]);
   const yes = active.filter((p) => attendance[p.name] === "yes");
@@ -141,7 +156,12 @@ function AttendanceMeter({ people, attendance, excluded, substitutes = {} }: { p
   const noPct = total ? (no.length / total) * 100 : 0;
   const pending = active.filter((p) => attendance[p.name] !== "yes" && attendance[p.name] !== "no");
   return (
-    <div className="cd-meter" onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+    <div
+      className={"cd-meter" + (onClick ? " clickable" : "")} onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}
+      role={onClick ? "button" : undefined} tabIndex={onClick ? 0 : undefined} aria-label={onClick ? "Assistència — obre la convocatòria" : undefined}
+      onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } } : undefined}
+    >
       <div className="cd-meter-head">
         <span>Assistència</span>
         <span>
@@ -207,7 +227,76 @@ function rsMissingList(c: Concert): string[] {
   return missing;
 }
 
+// Cerca de suplent oberta d'un membre: d'on ve (borsa o enllaç de
+// confirmació), l'enllaç del suplent proposat (per copiar-lo) i les
+// candidatures, que el gestor accepta o rebutja aquí mateix — en acceptar,
+// la persona passa a suplent d'aquest concert i a suplent de confiança.
+function SubRequestBox({ req, onDecided, onWithdraw }: {
+  req: BackupRequest;
+  onDecided: (app: BackupRequest["applications"][number], status: "acceptada" | "rebutjada") => void;
+  onWithdraw: () => void;
+}) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  async function decide(app: BackupRequest["applications"][number], status: "acceptada" | "rebutjada") {
+    setBusy(app.clerkUserId + status);
+    await respondBackupApplicationAction(req.id, app.clerkUserId, status);
+    setBusy(null);
+    onDecided(app, status);
+  }
+  const n = req.applications.length;
+  return (
+    <div className="cd-sub-box">
+      <span className="cd-search-open">
+        {req.proposedBy ? "Suplent proposat des de l'enllaç de confirmació" : "Cerca publicada"} · {n} {n === 1 ? "candidatura" : "candidatures"}
+        {req.token && (
+          <button type="button" className="link-btn" onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/s/${req.token}`); setCopied(true); window.setTimeout(() => setCopied(false), 1500); }}>
+            {copied ? "enllaç copiat ✓" : "copia l'enllaç del suplent"}
+          </button>
+        )}
+        <button type="button" className="link-btn" onClick={onWithdraw}>retira</button>
+      </span>
+      {n > 0 && (
+        <div className="cd-sub-apps">
+          {req.applications.map((a) => (
+            <div key={a.clerkUserId} className="cd-sub-app">
+              <span className="cd-sub-app-name">
+                {a.name}<VerifiedTick size={11} />
+                {a.instruments.length > 0 && <span className="t-dim"> · {a.instruments.slice(0, 2).join(", ")}</span>}
+              </span>
+              {a.message && <span className="cd-sub-app-msg t-dim">&ldquo;{a.message}&rdquo;</span>}
+              {a.status === "pendent" ? (
+                <span className="cd-sub-app-actions">
+                  <button type="button" className="btn-save" disabled={!!busy} onClick={() => decide(a, "acceptada")}>{busy === a.clerkUserId + "acceptada" ? "…" : "Accepta"}</button>
+                  <button type="button" className="btn-outline" disabled={!!busy} onClick={() => decide(a, "rebutjada")}>Rebutja</button>
+                </span>
+              ) : (
+                <span className={"cfm-badge " + (a.status === "acceptada" ? "yes" : "no")}>{a.status}</span>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const AGENCY_PAYOUT_NAME = "Agència";
+
+// Qui paga cada despesa — les d'abans d'existir el camp (sense "paidBy")
+// segueixen el criteri antic del concert: "tots dos" si l'agència assumia
+// despeses, "grup" si no.
+function expensePayer(t: Transaction, legacyAgencyAssumes: boolean): ExpensePayer {
+  const p = t.paidBy;
+  if (p === "agencia" || p === "grup" || p === "ambdos" || p === "altre") return p;
+  return legacyAgencyAssumes ? "ambdos" : "grup";
+}
+function splitExpenses(list: Transaction[], legacyAgencyAssumes: boolean): Record<ExpensePayer, number> {
+  const out: Record<ExpensePayer, number> = { agencia: 0, grup: 0, ambdos: 0, altre: 0 };
+  list.forEach((t) => { out[expensePayer(t, legacyAgencyAssumes)] += t.amount; });
+  return out;
+}
+const EXPENSE_PAYER_KEYS = Object.keys(EXPENSE_PAYER_LABELS) as ExpensePayer[];
 // Els imports del repartiment es mouen en cèntims per dins (nombres
 // enters), perquè un repartiment entre 3 persones (33,33 / 33,33 / 33,34)
 // no arrossegui errors d'arrodoniment de coma flotant — es converteixen a
@@ -379,19 +468,26 @@ export default function ConcertDetailView({
   const [copied, setCopied] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<Record<string, string>>({});
 
-  // ---- Despeses (es resten del caixet abans de repartir-lo) ----
-  const [expenseForm, setExpenseForm] = useState({ title: "", amount: "" });
+  // ---- Despeses ----
+  // Cada despesa diu qui la paga: l'agència (surt de la seva comissió), el
+  // grup (del que es reparteixen músics i crew), tots dos (redueix el caixet
+  // abans de calcular res — el % de l'agència s'aplica al net) o altres (el
+  // promotor, la sala... — no és cap cost del bolo).
+  const agencyAssumesExpenses = concert.agencyAssumesExpenses !== false; // criteri antic per a les despeses sense "paidBy"
+  const [expenseForm, setExpenseForm] = useState<{ title: string; amount: string; payer: ExpensePayer }>({ title: "", amount: "", payer: "ambdos" });
   const [expenseSaving, setExpenseSaving] = useState(false);
-  const totalExpenses = expenseList.reduce((s, t) => s + t.amount, 0);
+  const expenseSplit = splitExpenses(expenseList, agencyAssumesExpenses);
+  // Cost real del bolo: tot menys el que paga algú altre.
+  const totalExpenses = expenseSplit.agencia + expenseSplit.grup + expenseSplit.ambdos;
   async function addExpense() {
     const amount = parseInt(expenseForm.amount, 10) || 0;
     if (!amount || !expenseForm.title.trim()) return;
     setExpenseSaving(true);
     await saveTransactionAction({
       id: null, kind: "despesa", category: expenseForm.title.trim(), amount, date: concert.date,
-      concertId: concert.id, member: "", fund: "", notes: "",
+      concertId: concert.id, member: "", fund: "", notes: "", paidBy: expenseForm.payer,
     });
-    setExpenseForm({ title: "", amount: "" });
+    setExpenseForm({ title: "", amount: "", payer: expenseForm.payer });
     router.refresh();
     setExpenseSaving(false);
   }
@@ -399,8 +495,11 @@ export default function ConcertDetailView({
     await deleteTransactionAction(id);
     router.refresh();
   }
+  async function changeExpensePayer(id: string, payer: ExpensePayer) {
+    await setTransactionPayerAction(id, payer);
+    router.refresh();
+  }
 
-  const [agencyAssumesExpenses, setAgencyAssumesExpenses] = useState(concert.agencyAssumesExpenses !== false);
   // El % de l'agència es guarda fix (no derivat de l'import): si canvien
   // les despeses o el caixet, només varia l'import en €, mai el %.
   const [agencyPct, setAgencyPct] = useState(concert.agencyPct ?? AGENCY_DEFAULT_PCT);
@@ -414,11 +513,15 @@ export default function ConcertDetailView({
   // l'usuari toqui res.
   const [payouts, setPayouts] = useState<Record<string, number>>(() => {
     if (Object.keys(concert.payouts || {}).length) return { ...concert.payouts };
-    const net = Math.max(0, (concert.amount || 0) - expenseList.reduce((s, t) => s + t.amount, 0));
+    // Mateixa aritmètica que més avall: les despeses compartides surten del
+    // caixet abans de res; les del grup, del que es reparteixen músics i crew.
+    const exp0 = splitExpenses(expenseList, concert.agencyAssumesExpenses !== false);
+    const sharedNet0 = Math.max(0, (concert.amount || 0) - exp0.ambdos);
+    const groupPool0 = Math.max(0, sharedNet0 - exp0.grup);
     const split = band?.defaultPayoutSplit;
     if (split && Object.keys(split).length) {
       const out: Record<string, number> = {};
-      Object.entries(split).forEach(([n, pct]) => { out[n] = round2((pct / 100) * net); });
+      Object.entries(split).forEach(([n, pct]) => { out[n] = round2((pct / 100) * groupPool0); });
       return out;
     }
     const initialAttending: string[] = [];
@@ -431,8 +534,7 @@ export default function ConcertDetailView({
       }
     });
     const otherNames = [...initialAttending, ...(band?.crew || []).map((m) => m.name)];
-    const gross = concert.amount || 0;
-    return agencyDefaultSplit(otherNames, net, agencyAssumesExpenses ? net : gross);
+    return agencyDefaultSplit(otherNames, groupPool0, sharedNet0);
   });
   const [payoutsSaving, setPayoutsSaving] = useState(false);
   const [savingDefaultSplit, setSavingDefaultSplit] = useState(false);
@@ -452,6 +554,10 @@ export default function ConcertDetailView({
   // grup té més concerts propers a part d'aquest; si no, l'enllaç d'aquest
   // concert es crea (o es recupera) directament.
   const [attModal, setAttModal] = useState<{ intent: AttendanceLinkIntent; others: AttendanceLinkConcert[] } | null>(null);
+
+  // ---- Eliminar l'esdeveniment sencer (zona de perill, al peu) ----
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   function attWaText(url: string, multi: boolean): string {
     if (multi) {
@@ -678,20 +784,17 @@ export default function ConcertDetailView({
   }, [members, attendance, substitutes]);
 
   const amountNum = parseInt(cf.amount, 10) || 0;
-  // El que hi ha per repartir és el caixet menys les despeses del bolo —
-  // sempre net, mai brut... EXCEPTE la part de l'agència quan no assumeix
-  // les despeses (vegeu agencyBasis): aleshores cobra sobre el brut.
-  const netPayoutAmount = Math.max(0, amountNum - totalExpenses);
-  const agencyBasis = agencyAssumesExpenses ? netPayoutAmount : amountNum;
+  // Base de la comissió de l'agència: el caixet menys les despeses
+  // compartides ("agència i grup"). Les que paga l'agència surten de la
+  // seva comissió; les que paga el grup, del que es reparteixen músics i
+  // crew; les d'altres no compten enlloc.
+  const sharedNet = Math.max(0, amountNum - expenseSplit.ambdos);
   // L'import de l'agència sempre es deriva del seu % (fix) i la base
   // vigent — mai a l'inrevés. Si canvien les despeses o el caixet, el %
   // no es toca; només varia aquest import.
-  const agencyAmt = round2((agencyPct / 100) * agencyBasis);
-  async function setAgencyAssumesExpensesValue(value: boolean) {
-    setAgencyAssumesExpenses(value);
-    await setAgencyAssumesExpensesAction(concert.id, value);
-    router.refresh();
-  }
+  const agencyAmt = round2((agencyPct / 100) * sharedNet);
+  // El que de veres li queda a l'agència un cop pagades les seves despeses.
+  const agencyNet = round2(agencyAmt - expenseSplit.agencia);
   async function persistAgencyPct(pct: number) {
     setAgencyPct(pct);
     await setAgencyPctAction(concert.id, pct);
@@ -714,7 +817,7 @@ export default function ConcertDetailView({
   // sempre sumen 100% entre ells mateixos, no es dilueixen amb el de
   // l'agència.
   const bandNames = [...attendingNames, ...crew.map((m) => m.name)];
-  const bandPool = Math.max(0, netPayoutAmount - agencyAmt);
+  const bandPool = Math.max(0, sharedNet - agencyAmt - expenseSplit.grup);
   const bandTotal = bandNames.reduce((s, n) => s + (payouts[n] || 0), 0);
   // Instrument/càrrec de cadascú, al costat del nom (els substituts, que no
   // són cap Person registrat del grup, senzillament no en mostren cap).
@@ -731,7 +834,7 @@ export default function ConcertDetailView({
     // sobre un caixet de 1000€ (0,5%) es convertia en 0% o 1% (0€ o 10€) i
     // no es podia escriure l'import de veres — el % es guarda amb tota la
     // precisió que calgui perquè l'import reconstruït sigui exacte.
-    const pct = agencyBasis ? (value / agencyBasis) * 100 : agencyPct;
+    const pct = sharedNet ? (value / sharedNet) * 100 : agencyPct;
     persistAgencyPct(pct);
   }
   function editAgencyPct(pct: number) {
@@ -903,7 +1006,7 @@ export default function ConcertDetailView({
 
       {/* Capçalera */}
       <div className="cd-topbar">
-        <Link href="/concerts" className="cd-back">← Concerts</Link>
+        <BackLink href="/concerts">Concerts</BackLink>
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
           {saving && <span className="t-dim" style={{ fontSize: 12 }}>Desant…</span>}
         </div>
@@ -936,12 +1039,18 @@ export default function ConcertDetailView({
             type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
             onClick={() => setField("status", STATUS_CYCLE[(STATUS_CYCLE.indexOf(cf.status) + 1) % STATUS_CYCLE.length])}
           >{cf.status}</button>
-          <div className="cd-hero-amount">{formatCurrency(amountNum)}</div>
+          {/* El caixet i els mesuradors són clicables: cadascun porta a la
+              seva pestanya (facturació, informació, full de ruta, convocatòria). */}
+          <div
+            className="cd-hero-amount clickable" role="button" tabIndex={0} aria-label="Caixet — obre Despeses i facturació"
+            onClick={() => setTab("facturacio")}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setTab("facturacio"); } }}
+          >{formatCurrency(amountNum)}</div>
           <div className="cd-meters">
-            <Meter label="Informació" percent={info.percent} missing={info.missing} />
-            <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} />
+            <Meter label="Informació" percent={info.percent} missing={info.missing} onClick={() => setTab("info")} />
+            <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} onClick={() => setTab("ruta")} />
             {(members.length > 0 || crew.length > 0) && (
-              <AttendanceMeter people={[...members, ...crew]} attendance={attendance} excluded={convocatoriaExcluded} substitutes={substitutes} />
+              <AttendanceMeter people={[...members, ...crew]} attendance={attendance} excluded={convocatoriaExcluded} substitutes={substitutes} onClick={() => setTab("assistencia")} />
             )}
           </div>
           <div className="cd-poster-actions">
@@ -1146,7 +1255,7 @@ export default function ConcertDetailView({
                   <div className="cd-att-main">
                     <div className="member-name">
                       {m.name}
-                      {linked && <span className="member-linked" title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`}><img src="/logo-mark.png" alt="Escenari" /></span>}
+                      {linked && <VerifiedTick size={13} title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`} />}
                     </div>
                     <div className="member-instruments">
                       {inss.slice(0, 3).map((ins) => {
@@ -1190,10 +1299,11 @@ export default function ConcertDetailView({
                         >Publica cerca de suplent</button>
                       )}
                       {req && (
-                        <span className="cd-search-open">
-                          Cerca publicada · {req.applications.length} candidatures
-                          <button type="button" className="link-btn" onClick={async () => { await setBackupRequestStatusAction(req.id, "cancel·lada"); router.refresh(); }}>retira</button>
-                        </span>
+                        <SubRequestBox
+                          req={req}
+                          onDecided={(app, status) => { if (status === "acceptada") setSubstitutes((prev) => ({ ...prev, [m.name]: app.name })); router.refresh(); }}
+                          onWithdraw={async () => { await setBackupRequestStatusAction(req.id, "cancel·lada"); router.refresh(); }}
+                        />
                       )}
                     </div>
                   )}
@@ -1228,7 +1338,7 @@ export default function ConcertDetailView({
                     <div className="cd-att-main">
                       <div className="member-name">
                         {m.name}
-                        {linked && <span className="member-linked" title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`}><img src="/logo-mark.png" alt="Escenari" /></span>}
+                        {linked && <VerifiedTick size={13} title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`} />}
                       </div>
                       {m.role && <div className="member-instruments"><span className="member-instrument-chip">{m.role}</span></div>}
                     </div>
@@ -1267,10 +1377,11 @@ export default function ConcertDetailView({
                           >Publica cerca de suplent</button>
                         )}
                         {req && (
-                          <span className="cd-search-open">
-                            Cerca publicada · {req.applications.length} candidatures
-                            <button type="button" className="link-btn" onClick={async () => { await setBackupRequestStatusAction(req.id, "cancel·lada"); router.refresh(); }}>retira</button>
-                          </span>
+                          <SubRequestBox
+                            req={req}
+                            onDecided={(app, status) => { if (status === "acceptada") setSubstitutes((prev) => ({ ...prev, [m.name]: app.name })); router.refresh(); }}
+                            onWithdraw={async () => { await setBackupRequestStatusAction(req.id, "cancel·lada"); router.refresh(); }}
+                          />
                         )}
                       </div>
                     )}
@@ -1667,17 +1778,29 @@ export default function ConcertDetailView({
         <FoldPanel title="Despeses" summary={expenseList.length ? `${expenseList.length} · ${formatCurrency(totalExpenses)}${expenseSaving ? " · desant…" : ""}` : "Cap despesa"} defaultOpen={expenseList.length > 0}>
         {expenseList.length > 0 && (
           <div className="cd-payout-list" style={{ marginBottom: 10 }}>
-            {expenseList.map((t) => (
-              <div key={t.id} className="cd-payout-row">
-                <span className="cd-payout-name">{t.category}{t.notes ? " — " + t.notes : ""}</span>
-                <span style={{ fontSize: 13 }}>{formatCurrency(t.amount)}</span>
-                <button type="button" className="row-delete-btn" title="Elimina la despesa" onClick={() => removeExpense(t.id)}>✕</button>
-              </div>
-            ))}
+            {expenseList.map((t) => {
+              const payer = expensePayer(t, agencyAssumesExpenses);
+              return (
+                <div key={t.id} className="cd-payout-row cd-expense-row">
+                  <span className="cd-payout-name">{t.category}{t.notes ? " — " + t.notes : ""}</span>
+                  <select
+                    className="field-input compact-field cd-expense-payer" value={payer} title="Qui es fa càrrec d'aquesta despesa"
+                    onChange={(e) => changeExpensePayer(t.id, e.target.value as ExpensePayer)}
+                  >
+                    {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>{EXPENSE_PAYER_LABELS[k]}</option>)}
+                  </select>
+                  <span style={{ fontSize: 13 }} className={payer === "altre" ? "t-dim" : ""}>{formatCurrency(t.amount)}</span>
+                  <button type="button" className="row-delete-btn" title="Elimina la despesa" onClick={() => removeExpense(t.id)}>✕</button>
+                </div>
+              );
+            })}
             <div className="cd-payout-total">
-              <span>Total despeses</span>
+              <span>Total despeses del bolo</span>
               <span>{formatCurrency(totalExpenses)}</span>
             </div>
+            {expenseSplit.altre > 0 && (
+              <div className="t-dim" style={{ fontSize: 12 }}>+ {formatCurrency(expenseSplit.altre)} a càrrec d&apos;altres (no compten al repartiment)</div>
+            )}
           </div>
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
@@ -1693,7 +1816,17 @@ export default function ConcertDetailView({
             value={expenseForm.amount}
             onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
           />
+          <select
+            className="field-input compact-field cd-expense-payer" value={expenseForm.payer} title="Qui es fa càrrec d'aquesta despesa"
+            onChange={(e) => setExpenseForm({ ...expenseForm, payer: e.target.value as ExpensePayer })}
+          >
+            {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>A càrrec de: {EXPENSE_PAYER_LABELS[k]}</option>)}
+          </select>
           <button type="button" className="btn-outline" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>+ Afegeix despesa</button>
+        </div>
+        <div className="t-dim" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
+          <strong>Agència</strong>: es descompta de la seva comissió · <strong>Grup</strong>: del repartiment de músics i crew ·{" "}
+          <strong>Agència i grup</strong>: del caixet, abans de calcular res · <strong>Altres</strong>: la paga algú altre (promotor, sala…) i no compta.
         </div>
 
         </FoldPanel>
@@ -1701,20 +1834,6 @@ export default function ConcertDetailView({
         {/* Comissió de l'agència: sempre a part, mai barrejada amb el
             repartiment de músics i crew. */}
         <FoldPanel title="Comissió de l'agència" summary={`${formatCurrency(agencyAmt || 0)}${agencyPct != null ? ` · ${round2(agencyPct)} %` : ""}${payoutsSaving ? " · desant…" : ""}`} defaultOpen={false}>
-        {totalExpenses > 0 && (
-          <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, margin: "6px 0 10px" }}>
-            <input
-              type="checkbox" checked={agencyAssumesExpenses}
-              onChange={(e) => setAgencyAssumesExpensesValue(e.target.checked)}
-            />
-            L&apos;agència assumeix despeses?
-            <span className="t-dim">
-              {agencyAssumesExpenses
-                ? "— el seu % es calcula sobre el caixet net, com tothom"
-                : "— cobra el seu % sobre el caixet brut; les despeses les absorbeix la resta"}
-            </span>
-          </label>
-        )}
         <div className="cd-payout-list" style={{ maxWidth: 400 }}>
           <div className="cd-payout-row cd-payout-row-agency">
             <span className="cd-payout-agency-icon" aria-hidden="true">🏢</span>
@@ -1734,12 +1853,39 @@ export default function ConcertDetailView({
                 style={{ width: 44, textAlign: "right", fontSize: 12 }}
                 value={agencyPct != null ? round2(agencyPct) : ""}
                 placeholder="0"
-                title={`Percentatge fix del caixet ${agencyAssumesExpenses ? "net" : "brut"} — no varia encara que canviïn les despeses o el caixet`}
+                title="Percentatge fix sobre el caixet net de despeses compartides — no varia encara que canviïn les despeses o el caixet"
                 onChange={(e) => editAgencyPct(parseInt(e.target.value, 10) || 0)}
               />
               <span className="t-dim" style={{ fontSize: 12 }}>%</span>
             </div>
           </div>
+        </div>
+        {/* Desglossament: d'on surt la comissió, què hi resta l'agència en
+            despeses, i què queda per al grup (i quin % del caixet és). */}
+        <div className="cd-comm-breakdown">
+          <div>
+            <span className="t-dim">Base de la comissió</span>
+            <span>
+              {formatCurrency(sharedNet)}
+              {expenseSplit.ambdos > 0 && <span className="t-dim"> · caixet − {formatCurrency(expenseSplit.ambdos)} de despeses compartides</span>}
+            </span>
+          </div>
+          <div><span className="t-dim">Comissió ({round2(agencyPct)} %)</span><span>{formatCurrency(agencyAmt)}</span></div>
+          {expenseSplit.agencia > 0 && (
+            <div><span className="t-dim">Despeses a càrrec de l&apos;agència</span><span className="fin-neg">−{formatCurrency(expenseSplit.agencia)}</span></div>
+          )}
+          <div className="t-strong">
+            <span>Net per a l&apos;agència</span>
+            <span className={agencyNet >= 0 ? "fin-pos" : "fin-neg"}>{formatCurrency(agencyNet)}</span>
+          </div>
+          <div className="cd-comm-sep"></div>
+          <div>
+            <span className="t-dim">Queda per al grup</span>
+            <span><strong>{formatCurrency(bandPool)}</strong><span className="t-dim"> · {amountNum ? Math.round((bandPool / amountNum) * 100) : 0} % del caixet</span></span>
+          </div>
+          {expenseSplit.grup > 0 && (
+            <div><span className="t-dim">Despeses a càrrec del grup (ja descomptades)</span><span className="fin-neg">−{formatCurrency(expenseSplit.grup)}</span></div>
+          )}
         </div>
 
         </FoldPanel>
@@ -1756,6 +1902,11 @@ export default function ConcertDetailView({
             </button>
           )}
         </div>
+        {expenseSplit.grup > 0 && (
+          <div className="t-dim" style={{ fontSize: 12.5, marginBottom: 8 }}>
+            Despeses a càrrec del grup: <span className="fin-neg">−{formatCurrency(expenseSplit.grup)}</span> — ja descomptades del que es reparteix ({formatCurrency(bandPool)}).
+          </div>
+        )}
         {bandNames.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Sense participants: marca l&apos;assistència per repartir.</div>
         ) : (
@@ -1764,7 +1915,7 @@ export default function ConcertDetailView({
               <PayoutDonut
                 segments={[
                   { color: "rgba(255,255,255,0.14)", pct: amountNum ? (totalExpenses / amountNum) * 100 : 0, label: "Despeses" },
-                  { color: "rgba(255,255,255,0.32)", pct: amountNum ? (agencyAmt / amountNum) * 100 : 0, label: AGENCY_PAYOUT_NAME },
+                  { color: "rgba(255,255,255,0.32)", pct: amountNum ? (Math.max(0, agencyNet) / amountNum) * 100 : 0, label: AGENCY_PAYOUT_NAME },
                   ...bandNames.map((n, i) => ({
                     color: `oklch(0.68 0.16 ${(i * 47 + 250) % 360})`,
                     pct: amountNum ? ((payouts[n] || 0) / amountNum) * 100 : 0,
@@ -1783,6 +1934,7 @@ export default function ConcertDetailView({
                       <img className="member-photo" style={{ width: 28, height: 28, borderRadius: 8 }} src={photosByName[normalize(n)] ? `/api/file/${photosByName[normalize(n)]}` : personPhotoDataUri(n)} alt="" />
                       <span className="cd-payout-name">
                         {n}
+                        {linkedByName[n] && <VerifiedTick size={12} />}
                         {roleLabel && <span className="cd-payout-role t-dim"> · {roleLabel}</span>}
                       </span>
                       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
@@ -1817,14 +1969,21 @@ export default function ConcertDetailView({
               </div>
             </div>
             <div className="t-dim" style={{ fontSize: 12, marginTop: 8 }}>
-              Els pagaments dins de l&apos;app arribaran més endavant — de moment aquest repartiment és el full de càlcul de referència. El 100% és el caixet net menys la comissió de l&apos;agència.
+              Els pagaments dins de l&apos;app arribaran més endavant — de moment aquest repartiment és el full de càlcul de referència. El 100% és el caixet menys les despeses compartides i les del grup, i menys la comissió de l&apos;agència.
             </div>
           </>
         )}
         </FoldPanel>
 
         {/* Contracte d'actuació: amb les dades del concert, per enviar al client */}
-        <FoldPanel title="Contracte" summary={!billing.caps.contracts ? "Pla Grup" : concert.contract ? (concert.contractToken ? "Generat · amb enllaç" : "Redactat") : "Sense generar"} defaultOpen={false}>
+        <FoldPanel title="Contracte" summary={<><span className="beta-badge">Beta</span>{!billing.caps.contracts ? "Pla Grup" : concert.contract ? (concert.contractToken ? "Generat · amb enllaç" : "Redactat") : "Properament"}</>} defaultOpen={false}>
+          <div className="beta-note">
+            <span aria-hidden="true">🚧</span>
+            <div>
+              <strong>En fase beta — properament.</strong> El contracte d&apos;actuació encara l&apos;estem acabant: ja es pot redactar, previsualitzar i
+              compartir, però revisa&apos;l bé abans d&apos;enviar-lo a un client.
+            </div>
+          </div>
           {billing.caps.contracts ? (
             <ContractPanel concert={liveConcert} companyInfo={companyInfo} client={{ name: clientKey, nom: clientForm.nom, cif: clientForm.cif, address: clientForm.address }} emailReady={emailReady} />
           ) : (
@@ -1938,6 +2097,29 @@ export default function ConcertDetailView({
           </div>
         )}
       </FoldPanel>
+      )}
+
+      {/* Zona de perill: eliminar l'esdeveniment sencer */}
+      <div className="panel cd-section cd-danger-zone">
+        <div>
+          <div className="panel-title" style={{ marginBottom: 4 }}>Elimina aquest {kind === "bolo" ? "concert" : "esdeveniment"}</div>
+          <div className="t-dim" style={{ fontSize: 12.5 }}>S&apos;esborra del tot, amb el full de ruta, el repartiment i la factura que hi hagi. No es pot desfer.</div>
+        </div>
+        <button type="button" className="btn-danger-outline" onClick={() => setDeleteOpen(true)}>Elimina</button>
+      </div>
+      {deleteOpen && (
+        <ConfirmDialog
+          title={kind === "bolo" ? "Eliminar el concert?" : "Eliminar l'esdeveniment?"}
+          message={<>S&apos;eliminarà <strong>{cf.festaEntitat || cf.city || cf.venue || capitalize(formatDateFull(cf.date))}</strong> ({capitalize(formatDateFull(cf.date))}) amb tot el que hi ha a dins. No es pot desfer.</>}
+          confirmLabel="Elimina" busy={deleting}
+          onCancel={() => setDeleteOpen(false)}
+          onConfirm={async () => {
+            setDeleting(true);
+            await deleteConcertAction(concert.id);
+            router.push("/concerts");
+            router.refresh();
+          }}
+        />
       )}
 
       {rsPreviewOpen && (

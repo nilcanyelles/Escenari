@@ -15,28 +15,46 @@ export type SaveTransactionInput = {
   member: string;
   fund: string;
   notes: string;
+  // Qui es fa càrrec (només despeses de concert): agencia | grup | ambdos | altre.
+  paidBy?: string;
 };
+
+const PAYERS = ["agencia", "grup", "ambdos", "altre"];
+function cleanPayer(v: string | undefined): string {
+  return v && PAYERS.includes(v) ? v : "";
+}
 
 export async function saveTransactionAction(input: SaveTransactionInput): Promise<{ id: string }> {
   const { workspaceId } = await requireManagerAction();
   const pool = db();
   if (input.id) {
     await pool.query(
-      `update transactions set kind=$1, category=$2, amount=$3, tdate=$4, concert_id=$5, member=$6, fund=$7, notes=$8
+      `update transactions set kind=$1, category=$2, amount=$3, tdate=$4, concert_id=$5, member=$6, fund=$7, notes=$8,
+         paid_by = case when $11 = '' then paid_by else $11 end
        where id=$9 and workspace_id=$10`,
-      [input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", input.id, workspaceId]
+      [input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", input.id, workspaceId, cleanPayer(input.paidBy)]
     );
     revalidatePath("/estadistiques");
     return { id: input.id };
   }
   const id = "tx" + Date.now();
   await pool.query(
-    `insert into transactions (id, workspace_id, kind, category, amount, tdate, concert_id, member, fund, notes)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-    [id, workspaceId, input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || ""]
+    `insert into transactions (id, workspace_id, kind, category, amount, tdate, concert_id, member, fund, notes, paid_by)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [id, workspaceId, input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", cleanPayer(input.paidBy)]
   );
   revalidatePath("/estadistiques");
   return { id };
+}
+
+// Canvia qui es fa càrrec d'una despesa ja desada (fitxa del concert).
+export async function setTransactionPayerAction(id: string, paidBy: string) {
+  const { workspaceId } = await requireManagerAction();
+  const v = cleanPayer(paidBy);
+  if (!v) throw new Error("Valor no vàlid");
+  await db().query("update transactions set paid_by=$1 where id=$2 and workspace_id=$3", [v, id, workspaceId]);
+  revalidatePath("/estadistiques");
+  revalidatePath("/concerts");
 }
 
 export async function deleteTransactionAction(id: string) {

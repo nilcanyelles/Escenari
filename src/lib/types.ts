@@ -1,4 +1,10 @@
-export type MemberPerms = { songs: boolean; riders: boolean; setlists: boolean; members: boolean; events: boolean };
+// removeMembers: pot treure gent del grup (o passar-la a suplents);
+// perms: veu la pestanya Permisos i pot canviar els dels altres;
+// admin: ho pot tot (vegeu memberPerms a perms.ts).
+export type MemberPerms = {
+  songs: boolean; riders: boolean; setlists: boolean; members: boolean; events: boolean;
+  removeMembers: boolean; perms: boolean; admin: boolean;
+};
 
 export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[]; perms?: Partial<MemberPerms> };
 
@@ -46,6 +52,11 @@ export type Band = {
   backups?: BackupPerson[];
   showFees?: boolean;
   coverUrl?: string;
+  // Proporció del logo (clau de LOGO_ASPECTS: "1:1", "4:3", "16:9", "3:1")
+  // i punt focal de la portada (background-position, p. ex. "50% 30%") —
+  // triats a "Edita el grup".
+  logoAspect?: string;
+  coverPos?: string;
   // Percentatges de repartiment del caixet predeterminats (nom -> %),
   // aplicats als concerts que encara no tinguin cap repartiment desat.
   defaultPayoutSplit?: Record<string, number>;

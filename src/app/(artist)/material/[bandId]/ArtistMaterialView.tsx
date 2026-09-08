@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import type { Band } from "@/lib/types";
 import type { Rider, Setlist } from "@/lib/material-types";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
@@ -18,7 +18,7 @@ export default function ArtistMaterialView({ band, riders, setlists, canRiders, 
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
         <div className="artist-section-title" style={{ margin: 0 }}>{band.name} — material</div>
-        <Link href="/els-meus-grups" className="cd-back">← Els meus grups</Link>
+        <BackLink href="/els-meus-grups">Els meus grups</BackLink>
       </div>
       <div className="stats-tabs" style={{ alignSelf: "flex-start" }}>
         <button className={"stats-tab" + (tab === "riders" ? " active" : "")} onClick={() => setTab("riders")}>Riders</button>

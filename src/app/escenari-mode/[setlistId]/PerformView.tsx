@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { LyricsView } from "@/components/SongsPanel";
 import { instrumentIconFor } from "@/lib/tags";
 import PdfViewer from "@/components/PdfViewer";
@@ -516,7 +516,7 @@ export default function PerformView({
       <div className="perform">
         <div className="perform-empty">
           <p>Aquesta setlist no té cançons amb títol.</p>
-          <Link href={backHref} className="cd-back">← Torna</Link>
+          <BackLink href={backHref}>Torna</BackLink>
         </div>
       </div>
     );
@@ -526,7 +526,7 @@ export default function PerformView({
     return (
       <div className="perform perform-intro">
         <div className="perform-topbar">
-          <Link href={backHref} className="cd-back">← Surt</Link>
+          <BackLink href={backHref}>Surt</BackLink>
         </div>
         <div className="perform-intro-body">
           <h1 className="perform-intro-title">{name}</h1>
@@ -590,7 +590,7 @@ export default function PerformView({
   return (
     <div className="perform">
       <div className="perform-topbar">
-        <Link href={backHref} className="cd-back">← Surt</Link>
+        <BackLink href={backHref}>Surt</BackLink>
         <button type="button" className="perform-title" onClick={() => setListOpen((v) => !v)}>
           {name} · {idx + 1}/{songs.length} ▾
         </button>

@@ -77,7 +77,9 @@ function bandBadgesFor(name: string, allBands: Band[]) {
   return { inBands, isMusician, isCrew, instruments, functions, bandNames };
 }
 
-export default function ContactesView({ contacts, allBands, concertCountByPerson, interactions = [] }: { contacts: Contact[]; allBands: Band[]; concertCountByPerson: Record<string, number>; interactions?: ContactInteraction[] }) {
+// "embedded": dins d'una altra pàgina (pestanya Contactes de l'Agència) —
+// sense el fons "glow" propi, que ja el posa la pàgina que la conté.
+export default function ContactesView({ contacts, allBands, concertCountByPerson, interactions = [], embedded = false }: { contacts: Contact[]; allBands: Band[]; concertCountByPerson: Record<string, number>; interactions?: ContactInteraction[]; embedded?: boolean }) {
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<"tots" | ContactKind>("tots");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -126,8 +128,8 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
   }
 
   return (
-    <div className="glow" style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-      <div className="glow-blooms" aria-hidden="true"></div>
+    <div className={embedded ? undefined : "glow"} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      {!embedded && <div className="glow-blooms" aria-hidden="true"></div>}
       <ContactFollowups contacts={contacts} interactions={interactions} />
       <div className="filter-bar contactes-filterbar">
         <input className="input search" type="text" placeholder="Cerca nom, instrument, tipus, grup, empresa, telèfon, correu…" value={search} onChange={(e) => setSearch(e.target.value)} />

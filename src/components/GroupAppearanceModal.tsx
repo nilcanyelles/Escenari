@@ -1,11 +1,14 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import { bandPhotoDataUri } from "@/lib/tags";
 import { uploadBandImageAction, saveBandAppearanceAction } from "@/app/(app)/grup/actions";
 import { removeSimpleBackground } from "@/lib/image-bg-remove";
+import { LOGO_ASPECTS, logoRatio } from "@/lib/logo";
+import ImageCropModal from "@/components/ImageCropModal";
+
 function CameraIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -14,9 +17,15 @@ function CameraIcon() {
   );
 }
 
-// Editor d'aparença del grup: nom, logo, portada (estil LinkedIn), colors i
-// etiquetes lliures — les xarxes socials es gestionen a la seva pròpia
-// pestanya (/grup/xarxes).
+function parsePos(p: string): { x: number; y: number } {
+  const m = (p || "").match(/([\d.]+)%\s+([\d.]+)%/);
+  return m ? { x: parseFloat(m[1]), y: parseFloat(m[2]) } : { x: 50, y: 50 };
+}
+
+// Editor d'aparença del grup: nom, logo (amb la proporció que es triï i
+// retallat a mà), portada (estil LinkedIn, arrossegable per triar què es
+// veu), colors i etiquetes lliures — les xarxes socials es gestionen a la
+// seva pròpia pestanya (/grup/xarxes).
 export default function GroupAppearanceModal({ band, onClose }: { band: Band; onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(band.name);
@@ -27,8 +36,25 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [logoAspect, setLogoAspect] = useState(band.logoAspect || "1:1");
+  const [coverPos, setCoverPos] = useState(band.coverPos || "50% 50%");
+  // Fitxer de logo pendent de retallar (obre ImageCropModal).
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
   const coverInput = useRef<HTMLInputElement>(null);
+  const coverRef = useRef<HTMLDivElement>(null);
+  // Mida real de la portada: per saber quant "sobra" i, per tant, quant es
+  // pot desplaçar en arrossegar.
+  const [coverNat, setCoverNat] = useState<{ w: number; h: number } | null>(null);
+  const coverDrag = useRef<{ x: number; y: number; px: number; py: number; moved: boolean } | null>(null);
+
+  const coverSrc = coverPreview || band.coverUrl || "";
+  useEffect(() => {
+    if (!coverSrc) { setCoverNat(null); return; }
+    const img = new Image();
+    img.onload = () => setCoverNat({ w: img.naturalWidth, h: img.naturalHeight });
+    img.src = coverSrc;
+  }, [coverSrc]);
 
   async function upload(kind: "logo" | "cover", file: File) {
     setUploading(kind);
@@ -39,15 +65,44 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
     fd.set("bandId", band.id);
     fd.set("kind", kind);
     fd.set("file", finalFile);
+    if (kind === "logo") fd.set("logoAspect", logoAspect);
     const res = await uploadBandImageAction(fd);
     if (!res.ok) alert(res.error);
     else {
       const preview = URL.createObjectURL(finalFile);
-      if (kind === "logo") setLogoPreview(preview); else setCoverPreview(preview);
+      if (kind === "logo") setLogoPreview(preview); else { setCoverPreview(preview); setCoverPos("50% 50%"); }
     }
     router.refresh();
     setUploading(null);
   }
+
+  async function onCropped(blob: Blob) {
+    setCropFile(null);
+    await upload("logo", new File([blob], "logo.png", { type: "image/png" }));
+  }
+
+  // Arrossegar la portada mou el punt focal (background-position): X%
+  // desplaça la imatge X% del que sobra, així que moure el dit cap a la
+  // dreta porta el punt focal cap a l'esquerra.
+  function onCoverPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    if (!coverSrc) { coverInput.current?.click(); return; }
+    const p = parsePos(coverPos);
+    coverDrag.current = { x: e.clientX, y: e.clientY, px: p.x, py: p.y, moved: false };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function onCoverPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    const d = coverDrag.current;
+    if (!d || !coverRef.current || !coverNat) return;
+    const dx = e.clientX - d.x, dy = e.clientY - d.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) d.moved = true;
+    const r = coverRef.current.getBoundingClientRect();
+    const scale = Math.max(r.width / coverNat.w, r.height / coverNat.h);
+    const overX = coverNat.w * scale - r.width, overY = coverNat.h * scale - r.height;
+    const nx = overX > 1 ? Math.min(100, Math.max(0, d.px - (dx / overX) * 100)) : 50;
+    const ny = overY > 1 ? Math.min(100, Math.max(0, d.py - (dy / overY) * 100)) : 50;
+    setCoverPos(`${Math.round(nx)}% ${Math.round(ny)}%`);
+  }
+  function onCoverPointerUp() { coverDrag.current = null; }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -64,28 +119,46 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
             <input className="field-input" type="text" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
 
+          {/* Proporció del logo: s'aplica al retallar-lo en pujar-lo */}
+          <div>
+            <div className="form-label" style={{ marginBottom: 8 }}>Forma del logo</div>
+            <div className="ga-aspect">
+              {LOGO_ASPECTS.map((a) => (
+                <button key={a.key} type="button" className={"ga-aspect-btn" + (logoAspect === a.key ? " active" : "")} onClick={() => setLogoAspect(a.key)}>{a.label}</button>
+              ))}
+              <span className="t-dim" style={{ fontSize: 12 }}>Tria la forma i puja el logo per retallar-lo.</span>
+            </div>
+          </div>
+
           {/* Portada + logo, previsualitzats com a la pàgina */}
           <div className="ga-preview">
             <div
-              className="ga-cover"
+              ref={coverRef}
+              className={"ga-cover" + (coverSrc ? " draggable" : "")}
               style={{
-                backgroundImage: coverPreview || band.coverUrl
-                  ? `url(${coverPreview || band.coverUrl})`
-                  : `linear-gradient(120deg, ${color1}, ${color2})`,
+                backgroundImage: coverSrc ? `url(${coverSrc})` : `linear-gradient(120deg, ${color1}, ${color2})`,
+                backgroundPosition: coverPos,
               }}
-              onClick={() => coverInput.current?.click()}
-              title="Canvia la portada"
+              title={coverSrc ? "Arrossega per triar quina part es veu" : "Puja una portada"}
+              onPointerDown={onCoverPointerDown} onPointerMove={onCoverPointerMove} onPointerUp={onCoverPointerUp} onPointerCancel={onCoverPointerUp}
             >
-              <span className="ga-cover-hint">{uploading === "cover" ? "Pujant…" : <><CameraIcon /> Canvia la portada</>}</span>
+              {coverSrc && <span className="ga-cover-pos-hint">Arrossega per enquadrar</span>}
+              <button
+                type="button" className="ga-cover-hint"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={(e) => { e.stopPropagation(); coverInput.current?.click(); }}
+              >
+                {uploading === "cover" ? "Pujant…" : <><CameraIcon /> {coverSrc ? "Canvia la portada" : "Puja una portada"}</>}
+              </button>
             </div>
             <div className="ga-logo-wrap" onClick={() => logoInput.current?.click()} title="Canvia el logo">
-              <img className="ga-logo" src={logoPreview || band.logo || bandPhotoDataUri(band)} alt="" />
+              <img className="ga-logo" style={{ width: Math.round(76 * logoRatio(logoAspect)), height: 76 }} src={logoPreview || band.logo || bandPhotoDataUri(band)} alt="" />
               <span className="ga-logo-hint">{uploading === "logo" ? "…" : <CameraIcon />}</span>
             </div>
             <input ref={coverInput} type="file" hidden accept="image/*"
               onChange={(e) => { const f = e.target.files?.[0]; if (f) upload("cover", f); e.target.value = ""; }} />
             <input ref={logoInput} type="file" hidden accept="image/*"
-              onChange={(e) => { const f = e.target.files?.[0]; if (f) upload("logo", f); e.target.value = ""; }} />
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) setCropFile(f); e.target.value = ""; }} />
           </div>
 
           {/* Colors */}
@@ -125,7 +198,7 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
             <button className="btn-save" disabled={saving}
               onClick={async () => {
                 setSaving(true);
-                await saveBandAppearanceAction(band.id, { name, color1, color2, tags: tags.map((t) => t.trim()).filter(Boolean) });
+                await saveBandAppearanceAction(band.id, { name, color1, color2, tags: tags.map((t) => t.trim()).filter(Boolean), logoAspect, coverPos });
                 router.refresh();
                 setSaving(false);
                 onClose();
@@ -133,6 +206,13 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
           </div>
         </div>
       </div>
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile} aspect={logoRatio(logoAspect)}
+          title={`Retalla el logo (${LOGO_ASPECTS.find((a) => a.key === logoAspect)?.label || logoAspect})`}
+          onCancel={() => setCropFile(null)} onDone={onCropped}
+        />
+      )}
     </div>
   );
 }

@@ -37,6 +37,8 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
     backups: r.backups || [],
     showFees: !!r.show_fees,
     coverUrl: r.cover_url || "",
+    logoAspect: r.logo_aspect || "1:1",
+    coverPos: r.cover_pos || "50% 50%",
     defaultPayoutSplit: r.default_payout_split || {},
     vehicles: r.vehicles || [],
     defaultRouteSheet: r.default_route_sheet || null,

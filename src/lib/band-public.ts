@@ -14,6 +14,8 @@ export type PublicMember = {
   role: string;
   photoFileId: string | null;
   igHandle: string;
+  // Té compte d'Escenari vinculat (tick lila).
+  linked: boolean;
 };
 
 export type BandPublicData = {
@@ -22,7 +24,9 @@ export type BandPublicData = {
   workspaceId: string;
   name: string;
   logo: string;
+  logoAspect: string;
   coverUrl: string;
+  coverPos: string;
   color1: string;
   color2: string;
   tags: string[];
@@ -62,7 +66,7 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
   const b = (await pool.query("select * from bands where public_token=$1", [token])).rows[0];
   if (!b) return null;
 
-  const [profRows, concertRows, accountRows] = await Promise.all([
+  const [profRows, concertRows, accountRows, linkedRows] = await Promise.all([
     pool.query("select person_name, photo_file_id, ig_handle from person_profiles where workspace_id=$1", [b.workspace_id]),
     pool.query(
       `select to_char(date, 'YYYY-MM-DD') as date from concerts
@@ -70,7 +74,9 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
       [b.id]
     ),
     pool.query("select platform from band_social_accounts where band_id=$1", [b.id]),
+    pool.query("select member_name from band_members where band_id=$1", [b.id]),
   ]);
+  const linkedSet = new Set<string>(linkedRows.rows.map((r) => normalize(r.member_name)));
   const photos: Record<string, string> = {};
   const igs: Record<string, string> = {};
   profRows.rows.forEach((r) => {
@@ -103,6 +109,7 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
     role: m.role || "",
     photoFileId: photos[normalize(m.name)] || null,
     igHandle: igs[normalize(m.name)] || "",
+    linked: linkedSet.has(normalize(m.name)),
   });
   const members: PublicMember[] = ((b.members || []) as Person[]).map(toPublicMember);
   const crew: PublicMember[] = ((b.crew || []) as Person[]).map(toPublicMember);
@@ -113,7 +120,9 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
     workspaceId: b.workspace_id,
     name: b.name,
     logo: b.logo || "",
+    logoAspect: b.logo_aspect || "1:1",
     coverUrl: b.cover_url || "",
+    coverPos: b.cover_pos || "50% 50%",
     color1: b.color1 || "",
     color2: b.color2 || "",
     tags: b.tags || [],

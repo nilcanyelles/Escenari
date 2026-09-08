@@ -137,6 +137,8 @@ export async function getArtistBandsFull(clerkUserId: string): Promise<import(".
     backups: r.backups || [],
     showFees: !!r.show_fees,
     coverUrl: r.cover_url || "",
+    logoAspect: r.logo_aspect || "1:1",
+    coverPos: r.cover_pos || "50% 50%",
     socialLinks: r.social_links || {},
     socialStats: r.social_stats || {},
     socialTracking: r.social_tracking || {},

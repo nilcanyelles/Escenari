@@ -9,7 +9,8 @@ import DiaQuiVeCard from "@/components/DiaQuiVeCard";
 // del botó de compartir, qui rep l'enllaç veu la mateixa informació del
 // dia, no només un formulari d'assistència. "editable" activa el llapis
 // de "Qui ve" (només a la vista de gestor — mai a la pàgina pública).
-export default function DiaBody({ concert: c, band, editable = false }: { concert: Concert; band: Band | null; editable?: boolean }) {
+// "linkedNames": membres amb compte d'Escenari vinculat (tick lila a "Qui ve").
+export default function DiaBody({ concert: c, band, editable = false, linkedNames = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[] }) {
   const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
 
   // L'adreça és el mateix camp que "Informació general" (mai un text lliure
@@ -98,7 +99,7 @@ export default function DiaBody({ concert: c, band, editable = false }: { concer
       </div>
 
       {/* Formació */}
-      <DiaQuiVeCard key={c.id} concert={c} band={band} editable={editable} />
+      <DiaQuiVeCard key={c.id} concert={c} band={band} editable={editable} linkedNames={linkedNames} />
 
       {/* Hospitalitat ràpida */}
       {otherHosp.length > 0 && (

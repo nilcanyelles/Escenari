@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { AgencyMember, AgencyInvitation } from "@/lib/agency";
 import { personPhotoDataUri, bandPhotoDataUri } from "@/lib/tags";
+import VerifiedTick from "@/components/VerifiedTick";
 import {
   inviteAgencyMembersAction, revokeAgencyInvitationAction, setAgencyMemberAction, removeAgencyMemberAction, saveAgencyInfoAction,
 } from "@/app/(app)/agencia/actions";
@@ -12,8 +13,12 @@ import { PLANS, AGENCY_TIERS, type BillingInfo, type PlanKey } from "@/lib/plans
 import CreateGroupModal from "@/components/CreateGroupModal";
 import UpgradeModal from "@/components/UpgradeModal";
 import PlanLock from "@/components/PlanLock";
+import ContactesView from "@/components/ContactesView";
+import type { Contact, Band } from "@/lib/types";
+import type { ContactInteraction } from "@/lib/contacts-data";
+import { logoBox } from "@/lib/logo";
 
-type BandOpt = { id: string; name: string; city: string; logo: string; color1: string; color2: string; memberCount: number };
+type BandOpt = { id: string; name: string; city: string; logo: string; logoAspect: string; color1: string; color2: string; memberCount: number };
 
 function StarIcon() {
   return (
@@ -221,7 +226,7 @@ function MemberRow({ m, bands, canEdit, isMe }: { m: AgencyMember; bands: BandOp
       <div className="ag-member-head">
         <img className="subs-photo" src={m.photoFileId ? `/api/file/${m.photoFileId}` : personPhotoDataUri(m.name)} alt="" />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="member-name">{m.name}{isMe && <span className="t-dim" style={{ fontWeight: 400, fontSize: 12 }}> · tu</span>}</div>
+          <div className="member-name">{m.name}<VerifiedTick size={12} title="Compte d'Escenari (membre de l'agència)" />{isMe && <span className="t-dim" style={{ fontWeight: 400, fontSize: 12 }}> · tu</span>}</div>
           <div className="t-dim" style={{ fontSize: 12 }}>{m.email}</div>
         </div>
         {state.agencyOwner ? <span className="badge ag-owner-badge"><StarIcon />Admin de l&apos;agència</span> : null}
@@ -289,7 +294,7 @@ function AgencyGroupCard({ b }: { b: BandOpt }) {
     <button type="button" className="artist-band-card clickable" onClick={open}>
       <div className="artist-band-banner" style={{ background: `linear-gradient(120deg, ${c1}, ${c2})` }}></div>
       <div className="artist-band-body">
-        <img className="artist-band-logo" src={b.logo || bandPhotoDataUri({ id: b.id, name: b.name })} alt="" />
+        <img className="artist-band-logo" style={logoBox(b.logoAspect, 52)} src={b.logo || bandPhotoDataUri({ id: b.id, name: b.name })} alt="" />
         <div className="artist-band-name">{b.name}</div>
         <div className="artist-band-meta">
           {b.city ? `${b.city} · ` : ""}
@@ -300,7 +305,7 @@ function AgencyGroupCard({ b }: { b: BandOpt }) {
   );
 }
 
-export default function AgenciaView({ agency, me, members, invitations, bands, billing, groups, billingNotice = "" }: {
+export default function AgenciaView({ agency, me, members, invitations, bands, billing, groups, billingNotice = "", contacts = [], allBands = [], concertCountByPerson = {}, interactions = [] }: {
   agency: { name: string; logo: string };
   me: { clerkUserId: string; agencyOwner: boolean; canCreateGroups: boolean };
   members: AgencyMember[];
@@ -309,12 +314,17 @@ export default function AgenciaView({ agency, me, members, invitations, bands, b
   billing: BillingInfo;
   groups: { count: number; cap: number | null; reached: boolean };
   billingNotice?: string;
+  // Pestanya Contactes (la mateixa vista que /contactes, incrustada).
+  contacts?: Contact[];
+  allBands?: Band[];
+  concertCountByPerson?: Record<string, number>;
+  interactions?: ContactInteraction[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialTabParam = searchParams.get("tab");
-  const initialTab = initialTabParam === "grups" || initialTabParam === "membres" ? initialTabParam : "inici";
-  const [tab, setTab] = useState<"inici" | "grups" | "membres">(initialTab);
+  const initialTab = initialTabParam === "grups" || initialTabParam === "membres" || initialTabParam === "contactes" ? initialTabParam : "inici";
+  const [tab, setTab] = useState<"inici" | "grups" | "membres" | "contactes">(initialTab);
 
   const canInvite = billing.caps.agency;
   const createBtn = (cls: string) => groups.reached ? (
@@ -349,10 +359,15 @@ export default function AgenciaView({ agency, me, members, invitations, bands, b
         <button className={"stats-tab" + (tab === "inici" ? " active" : "")} onClick={() => setTab("inici")}>Inici</button>
         <button className={"stats-tab" + (tab === "grups" ? " active" : "")} onClick={() => setTab("grups")}>Grups</button>
         <button className={"stats-tab" + (tab === "membres" ? " active" : "")} onClick={() => setTab("membres")}>Membres</button>
+        <button className={"stats-tab" + (tab === "contactes" ? " active" : "")} onClick={() => setTab("contactes")}>Contactes</button>
       </div>
 
       {tab === "inici" && (
         <BillingCard billing={billing} isOwner={me.agencyOwner} notice={billingNotice} />
+      )}
+
+      {tab === "contactes" && (
+        <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={interactions} embedded />
       )}
 
       {tab === "grups" && (

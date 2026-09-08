@@ -9,6 +9,8 @@ import { updateProfileInfoAction, uploadProfilePhotoAction, updatePersonAction }
 import { setMemberPermAction } from "@/app/(app)/grup/actions";
 import { DEFAULT_PERMS, PERM_LABELS } from "@/lib/perms";
 import type { MemberPerms } from "@/lib/types";
+import VerifiedTick from "@/components/VerifiedTick";
+import BackLink from "@/components/BackLink";
 import ProfileShareModal from "./ProfileShareModal";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import AvailabilityCalendar from "@/components/AvailabilityCalendar";
@@ -203,8 +205,8 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
       {/* Barra superior */}
       <div className="pv-topbar">
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
-          {isManager && <button type="button" className="cd-back" style={{ border: "none", background: "transparent", cursor: "pointer", font: "inherit" }} onClick={() => router.push("/grup")}>← Torna al grup</button>}
-          {isOwner && !isManager && <button type="button" className="cd-back" style={{ border: "none", background: "transparent", cursor: "pointer", font: "inherit" }} onClick={() => router.push("/artista")}>← Els meus bolos</button>}
+          {isManager && <BackLink onClick={() => router.push("/grup")}>Torna al grup</BackLink>}
+          {isOwner && !isManager && <BackLink onClick={() => router.push("/artista")}>Els meus bolos</BackLink>}
           <span className="pf-brand" style={{ margin: 0 }}>ESCENARI</span>
         </div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
@@ -240,7 +242,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
             )}
           </div>
 
-          <h1 className="pv-name">{data.name}</h1>
+          <h1 className="pv-name">{data.name}{data.clerkUserId && <VerifiedTick size={16} />}</h1>
           {data.igHandle && (
             <a className="pv-ig" href={`https://instagram.com/${data.igHandle}`} target="_blank" rel="noreferrer">@{data.igHandle}</a>
           )}

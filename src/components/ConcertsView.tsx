@@ -9,7 +9,8 @@ import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { rsCompletionPercent } from "@/lib/route-sheet";
 import NewEventButton from "@/components/NewEventButton";
-import { importConcertsAction } from "@/app/(app)/concerts/actions";
+import ImportConcertsModal from "@/components/ImportConcertsModal";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { rsIsComplete } from "@/lib/route-sheet";
 import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
 import ConcertModal from "@/components/ConcertModal";
@@ -22,24 +23,41 @@ function nextStatus(status: string): string {
   return STATUS_CYCLE[(i === -1 ? 0 : i + 1) % STATUS_CYCLE.length];
 }
 
-export function DeleteConcertBtn({ id }: { id: string }) {
+// Creueta d'eliminar un concert d'una llista, amb diàleg de confirmació
+// propi (mai el del navegador). "label" és com anomenar el concert al
+// diàleg; "onDeleted" substitueix el refresc de pàgina per defecte.
+export function DeleteConcertBtn({ id, label, onDeleted }: { id: string; label?: string; onDeleted?: () => void }) {
   const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
   return (
-    <button
-      className="row-delete-btn"
-      title="Eliminar concert"
-      aria-label="Eliminar concert"
-      onClick={async (e) => {
-        e.stopPropagation();
-        if (!confirm("Segur que vols eliminar aquest concert?")) return;
-        await deleteConcertAction(id);
-        router.refresh();
-      }}
-    >
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-        <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-      </svg>
-    </button>
+    <>
+      <button
+        className="row-delete-btn"
+        title="Eliminar concert"
+        aria-label="Eliminar concert"
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+        </svg>
+      </button>
+      {open && (
+        <ConfirmDialog
+          title="Eliminar el concert?"
+          message={<>{label && <><strong>{label}</strong><br /></>}S&apos;esborrarà amb el full de ruta, el repartiment i la factura que hi hagi. No es pot desfer.</>}
+          confirmLabel="Elimina" busy={busy}
+          onCancel={() => setOpen(false)}
+          onConfirm={async () => {
+            setBusy(true);
+            await deleteConcertAction(id);
+            setBusy(false);
+            setOpen(false);
+            if (onDeleted) onDeleted(); else router.refresh();
+          }}
+        />
+      )}
+    </>
   );
 }
 
@@ -67,8 +85,6 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [importOpen, setImportOpen] = useState(false);
-  const [importText, setImportText] = useState("");
-  const [importing, setImporting] = useState(false);
   const [statusFilter, setStatusFilter] = useState("tots");
   const [tagFilter, setTagFilter] = useState("tots");
   const [modal, setModal] = useState<{ concertId: string } | null>(null);
@@ -196,7 +212,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             </svg>
           </button>
         </div>
-        <div onClick={(e) => e.stopPropagation()}>{isMgr && <DeleteConcertBtn id={c.id} />}</div>
+        <div onClick={(e) => e.stopPropagation()}>{isMgr && <DeleteConcertBtn id={c.id} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
       </div>
     );
   }
@@ -262,29 +278,11 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        {isMgr && <button className="btn-outline" onClick={() => setImportOpen((v) => !v)}>Importa</button>}
+        {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
         {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
       </div>
 
-      {importOpen && (
-        <div className="import-box">
-          <div className="t-dim" style={{ fontSize: 12 }}>
-            Un concert per línia: <code>data; grup; població; ubicació; festa; import; estat</code> — data com a <code>2025-07-12</code> o <code>12/07/2025</code>; els grups que no existeixin es crearan.
-          </div>
-          <textarea className="field-input rider-textarea" rows={5} value={importText} onChange={(e) => setImportText(e.target.value)}
-            placeholder={"12/07/2025; Arrels de Bosc; Reus; Plaça Mercadal; Festa Major; 1800; confirmat\n2025-08-02; Trencadansa; Olot; ; ; 1500"} />
-          <button type="button" className="btn-save" style={{ alignSelf: "flex-start" }} disabled={importing}
-            onClick={async () => {
-              setImporting(true);
-              const { imported, errors } = await importConcertsAction(importText);
-              setImporting(false);
-              setImportText("");
-              setImportOpen(false);
-              router.refresh();
-              alert(`${imported} concerts importats${errors ? ` (${errors} línies amb error)` : ""}.`);
-            }}>{importing ? "Important…" : "Importa"}</button>
-        </div>
-      )}
+      {importOpen && <ImportConcertsModal onClose={() => setImportOpen(false)} />}
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>

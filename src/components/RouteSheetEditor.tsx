@@ -5,10 +5,12 @@ import { useEffect, useRef, useState } from "react";
 import type { Concert, Vehicle, Contact } from "@/lib/types";
 import {
   type RouteSheet, type HospitalitatItem, type RouteSheetDefaults,
-  normalizeRouteSheet, rsIsComplete, rsCompletionPercent, stripSectionForDefault,
+  normalizeRouteSheet, rsIsComplete, rsCompletionPercent, stripSectionForDefault, rsItemHasContent,
 } from "@/lib/route-sheet";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { saveRouteSheetAction, searchVenuesAction, searchVenuesGoogleAction, getPlaceDetailsAction, reverseGeocodeAction } from "@/app/(app)/concerts/actions";
 import { saveDefaultRouteSheetSectionAction } from "@/app/(app)/grup/actions";
+import { createRouteSheetContactAction } from "@/app/(app)/contactes/actions";
 import {
   type RsSection, useRouteSheetOps, SectionIcon, FieldRow, ContactRow, PhaseRow, HospRow, HotelBlock,
 } from "@/components/RouteSheetFields";
@@ -49,6 +51,14 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
   const router = useRouter();
   const [rsf, setRsf] = useState<RouteSheet>(() => normalizeRouteSheet(concert.routeSheet as RouteSheet | null, concert, bandDefaultRouteSheet));
   const { updateSection, addItem, removeItem, dragHandlers } = useRouteSheetOps(setRsf);
+  // Eliminar una fila que ja té alguna cosa escrita demana confirmació
+  // (amb un diàleg propi) — una de buida s'esborra directament.
+  const [pendingRemove, setPendingRemove] = useState<{ section: Section; index: number } | null>(null);
+  function confirmRemove(section: Section, index: number) {
+    const item = (rsf[section] as unknown[])[index];
+    if (rsItemHasContent(section, item, { address, exactTime })) setPendingRemove({ section, index });
+    else removeItem(section, index);
+  }
   const [saving, setSaving] = useState(false);
   const [savedSection, setSavedSection] = useState<Section | null>(null);
   const isFirstRender = useRef(true);
@@ -174,7 +184,7 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
       <FieldRow
         key={i} section={section} item={it} ctx={fieldRowCtx}
         onChange={(patch) => updateSection(section, (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x) as never)}
-        onRemove={() => removeItem(section, i)}
+        onRemove={() => confirmRemove(section, i)}
         dragProps={dragHandlers(section, i)}
       />
     ));
@@ -185,8 +195,9 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     <ContactRow
       key={i} item={ct} contacts={contacts}
       onChange={(patch) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x))}
-      onRemove={() => removeItem("contacts", i)}
+      onRemove={() => confirmRemove("contacts", i)}
       dragProps={dragHandlers("contacts", i)}
+      onCreateContact={async (it) => { const c = await createRouteSheetContactAction(it); router.refresh(); return c; }}
     />
   ));
 
@@ -195,7 +206,7 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
     <PhaseRow
       key={i} item={ph} exactTime={exactTime} onExactTimeChange={onExactTimeChange}
       onChange={(patch) => updateSection("schedule", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x))}
-      onRemove={() => removeItem("schedule", i)}
+      onRemove={() => confirmRemove("schedule", i)}
       dragProps={dragHandlers("schedule", i)}
     />
   ));
@@ -210,7 +221,7 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
         <HospRow
           key={i} item={it}
           onChange={(patch) => updateHosp(i, patch)}
-          onRemove={() => removeItem("hospitalitat", i)}
+          onRemove={() => confirmRemove("hospitalitat", i)}
           dragProps={dragHandlers("hospitalitat", i)}
         />
       );
@@ -302,6 +313,15 @@ export default function RouteSheetEditor({ concert, venue, city, onVenueCityChan
           </div>
         );
       })}
+      {pendingRemove && (
+        <ConfirmDialog
+          title="Eliminar aquest camp?"
+          message="Aquest camp ja té informació escrita. Segur que el vols eliminar?"
+          confirmLabel="Elimina"
+          onCancel={() => setPendingRemove(null)}
+          onConfirm={() => { removeItem(pendingRemove.section, pendingRemove.index); setPendingRemove(null); }}
+        />
+      )}
     </div>
   );
 }

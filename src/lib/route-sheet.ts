@@ -303,6 +303,28 @@ export function formatPhoneDisplay(phone?: string): string {
   return (cc ? "+" + cc + " " : "") + groups.join(" ");
 }
 
+// Té alguna cosa escrita aquesta fila del full de ruta? Per demanar
+// confirmació abans d'eliminar-la — una fila buida s'esborra directament.
+// L'etiqueta/fase/càrrec no compta (ve preomplerta per defecte); sí els
+// valors, telèfons, enllaços, hores, matrícules, interruptors ja marcats...
+// "live" són els camps compartits amb Informació general (l'Adreça i l'hora
+// exacta de la fase "Concert"), que no viuen dins la fila.
+export function rsItemHasContent(section: keyof RouteSheet, item: unknown, live?: { address?: string; exactTime?: string }): boolean {
+  if (!item || typeof item !== "object") return false;
+  const it = item as Record<string, unknown>;
+  const has = (v: unknown) => v !== undefined && v !== null && String(v).trim() !== "";
+  const label = String(it.label || it.phase || "").trim().toLowerCase();
+  if (section === "lloc") return has(it.value) || has(it.link) || has(it.plates) || (label === "adreça" && has(live?.address));
+  if (section === "contacts") return has(it.name) || has(it.phone) || has(it.company);
+  if (section === "schedule") return has(it.end) || (label === "concert" ? has(live?.exactTime) : has(it.start));
+  if (section === "hospitalitat") {
+    return has(it.value) || it.included !== undefined || has(it.phone) || has(it.location) || has(it.checkIn) || has(it.checkOut)
+      || has(it.breakfastTime) || has(it.parkingPlates) || it.parkingAvailable !== undefined || it.breakfastAvailable !== undefined || has(it.arrangedBy);
+  }
+  if (section === "tecnic") return has(it.value) || it.included !== undefined || has(it.status) || has(it.counterFileName);
+  return false;
+}
+
 export function rsFormatDuration(start?: string, end?: string): string {
   if (!start || !end) return "";
   const sp = start.split(":").map(Number), ep = end.split(":").map(Number);

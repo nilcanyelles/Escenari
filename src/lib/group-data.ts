@@ -20,6 +20,10 @@ export type BackupRequest = {
   note: string;
   status: "oberta" | "coberta" | "cancel·lada";
   createdAt: string;
+  // Enllaç directe (/s/token) per a un suplent proposat des de l'enllaç
+  // de confirmació, i qui l'ha proposat (buits si és una cerca a la borsa).
+  token: string;
+  proposedBy: string;
   applications: BackupApplication[];
 };
 
@@ -108,6 +112,8 @@ export async function getBackupRequests(workspaceId: string, opts?: { bandId?: s
     note: r.note,
     status: r.status,
     createdAt: toDateStr(r.created_at),
+    token: r.token || "",
+    proposedBy: r.proposed_by || "",
     applications: (r.apps || []).map((a: Record<string, unknown>) => ({
       clerkUserId: a.clerkUserId,
       name: a.name || "",

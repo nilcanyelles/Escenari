@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Band, Concert, Invoice } from "@/lib/types";
-import { MONTH_ABBR, formatCurrency, isConcertOver } from "@/lib/format";
+import { MONTH_ABBR, WEEKDAY_SHORT, formatCurrency, isConcertOver } from "@/lib/format";
+import { geocodeCitiesAction } from "@/app/(app)/concerts/actions";
+import { classifyPoint, type GeoPlace } from "@/lib/geo-stats";
+import ConcertPinMap, { type ConcertPin } from "@/components/ConcertPinMap";
+import { KIND_META } from "@/components/CalendariView";
 import { bandColor } from "@/lib/tags";
 import {
   computeMonthAgg, computeYearAgg, computeInvoiceMonthAgg, computeProjectedMonthAgg,
@@ -169,6 +173,28 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
   const [showMuniMap, setShowMuniMap] = useState(false);
 
+  // Geografia: coordenades de cada població (cache de geocodificació de
+  // l'app) i, a partir d'elles, comarca / regió / país amb els contorns
+  // locals — sense cap API més.
+  const allCityNames = useMemo(
+    () => Array.from(new Set(concerts.filter((c) => c.kind !== "assaig" && c.kind !== "reunio" && c.kind !== "altre").map((c) => (c.city || "").split(",")[0].trim()).filter(Boolean))),
+    [concerts]
+  );
+  const [geo, setGeo] = useState<Record<string, { lat: number; lon: number; place: GeoPlace } | null>>({});
+  const cityKey = allCityNames.join("|");
+  useEffect(() => {
+    if (!allCityNames.length) return;
+    let cancelled = false;
+    geocodeCitiesAction(allCityNames).then((coords) => {
+      if (cancelled) return;
+      const out: Record<string, { lat: number; lon: number; place: GeoPlace } | null> = {};
+      allCityNames.forEach((n) => { const c = coords[n]; out[n] = c ? { lat: c.lat, lon: c.lon, place: classifyPoint(c.lon, c.lat) } : null; });
+      setGeo(out);
+    }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cityKey]);
+
   const yearSet: Record<number, boolean> = { [currentYear]: true };
   concerts.forEach((c) => { yearSet[parseInt(c.date.slice(0, 4), 10)] = true; });
   invoices.forEach((i) => { yearSet[parseInt(i.issueDate.slice(0, 4), 10)] = true; });
@@ -289,32 +315,121 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
         valueFmt={identityFmt}
       />
     );
+    // ---- Geografia, recintes, festes, tipus, dies de la setmana, caixet ----
+    const geoAgg = { comarca: {} as Record<string, number>, regio: {} as Record<string, number>, pais: {} as Record<string, number> };
+    let located = 0;
+    concertsPool.forEach((c) => {
+      const g = geo[(c.city || "").split(",")[0].trim()];
+      if (!g) return;
+      located++;
+      if (g.place.comarca) geoAgg.comarca[g.place.comarca] = (geoAgg.comarca[g.place.comarca] || 0) + 1;
+      if (g.place.regio) geoAgg.regio[g.place.regio] = (geoAgg.regio[g.place.regio] || 0) + 1;
+      if (g.place.pais) geoAgg.pais[g.place.pais] = (geoAgg.pais[g.place.pais] || 0) + 1;
+    });
+    const toRows = (m: Record<string, number>, n = 8) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n).map(([label, value]) => ({ label, value }));
+    const byVenue: Record<string, number> = {}, byFesta: Record<string, number> = {}, byKind: Record<string, number> = {};
+    concertsPool.forEach((c) => {
+      const v = (c.venue || "").trim();
+      if (v && v !== "Sala per determinar") byVenue[v] = (byVenue[v] || 0) + 1;
+      const f = (c.festaEntitat || "").trim();
+      if (f) byFesta[f] = (byFesta[f] || 0) + 1;
+    });
+    pool.forEach((c) => { const k = KIND_META[c.kind || "bolo"]?.label || "Bolo"; byKind[k] = (byKind[k] || 0) + 1; });
+    const weekday = Array.from({ length: 7 }, () => 0); // dl … dg
+    concertsPool.forEach((c) => {
+      const p = c.date.split("-").map(Number);
+      weekday[(new Date(p[0], p[1] - 1, p[2]).getDay() + 6) % 7]++;
+    });
+    const maxWeekday = Math.max(1, ...weekday);
+    const monthCounts = Array.from({ length: 12 }, () => 0);
+    concertsPool.forEach((c) => { monthCounts[parseInt(c.date.slice(5, 7), 10) - 1]++; });
+    const bestMonthIdx = monthCounts.indexOf(Math.max(...monthCounts));
+    const bestMonth = concertsPool.length ? `${MONTH_ABBR[bestMonthIdx]} · ${monthCounts[bestMonthIdx]}` : "—";
+    const paidGigs = concertsPool.filter((c) => c.amount > 0);
+    const totalFee = paidGigs.reduce((s, c) => s + c.amount, 0);
+    const avgFee = paidGigs.length ? Math.round(totalFee / paidGigs.length) : 0;
+    const maxFee = Math.max(0, ...paidGigs.map((c) => c.amount));
+    let attYes = 0, attNo = 0;
+    concertsPool.forEach((c) => Object.values(c.attendance || {}).forEach((v) => { if (v === "yes") attYes++; else if (v === "no") attNo++; }));
+    const attRate = attYes + attNo ? Math.round((attYes / (attYes + attNo)) * 100) : null;
+    const sortedDates = concertsPool.map((c) => c.date).sort();
+    const monthsSpan = range === "year"
+      ? 12
+      : sortedDates.length
+        ? (parseInt(sortedDates[sortedDates.length - 1].slice(0, 4), 10) - parseInt(sortedDates[0].slice(0, 4), 10)) * 12
+          + (parseInt(sortedDates[sortedDates.length - 1].slice(5, 7), 10) - parseInt(sortedDates[0].slice(5, 7), 10)) + 1
+        : 1;
+    const perMonth = concertsPool.length ? (concertsPool.length / Math.max(1, monthsSpan)).toFixed(1) : "0";
+    const pins: ConcertPin[] = cityEntries
+      .map(([name, count]) => { const g = geo[name]; return g ? { name, count, lat: g.lat, lon: g.lon } : null; })
+      .filter((p): p is ConcertPin => !!p);
+    const geoLoading = allCityNames.length > 0 && Object.keys(geo).length === 0;
+    const unlocated = concertsPool.length - located;
+
     kpis = (
-      <div className="kpi-grid kpi-grid-4">
-        <div className="card card-centered"><div className="card-title">Total concerts</div><div className="card-value">{concertsPool.length}</div></div>
-        <div className="card card-centered"><div className="card-title">Realitzats</div><div className="card-value">{done}</div></div>
-        <div className="card card-centered"><div className="card-title">Pendents de confirmar</div><div className="card-value">{pending}</div></div>
-        <div className="card card-centered"><div className="card-title">Taxa de confirmació</div><div className="card-value">{confirmRate}%</div></div>
-      </div>
+      <>
+        <div className="kpi-grid kpi-grid-4">
+          <div className="card card-centered"><div className="card-title">Total concerts</div><div className="card-value">{concertsPool.length}</div></div>
+          <div className="card card-centered"><div className="card-title">Realitzats</div><div className="card-value">{done}</div></div>
+          <div className="card card-centered"><div className="card-title">Pendents de confirmar</div><div className="card-value">{pending}</div></div>
+          <div className="card card-centered"><div className="card-title">Taxa de confirmació</div><div className="card-value">{confirmRate}%</div></div>
+        </div>
+        <div className="kpi-grid">
+          <div className="card card-centered"><div className="card-title">Poblacions diferents</div><div className="card-value">{cityEntries.length}</div></div>
+          <div className="card card-centered"><div className="card-title">Comarques</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.comarca).length}</div></div>
+          <div className="card card-centered"><div className="card-title">Regions</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.regio).length}</div></div>
+          <div className="card card-centered">
+            <div className="card-title">Països</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.pais).length}</div>
+            {!geoLoading && unlocated > 0 && <div className="t-dim" style={{ fontSize: 11 }}>{unlocated} sense localitzar</div>}
+          </div>
+          <div className="card card-centered"><div className="card-title">Recintes diferents</div><div className="card-value">{Object.keys(byVenue).length}</div></div>
+          <div className="card card-centered">
+            <div className="card-title">Caixet mitjà</div><div className="card-value">{formatCurrency(avgFee)}</div>
+            {maxFee > 0 && <div className="t-dim" style={{ fontSize: 11 }}>màx. {formatCurrency(maxFee)}</div>}
+          </div>
+          <div className="card card-centered"><div className="card-title">Mes més fort</div><div className="card-value" style={{ textTransform: "capitalize" }}>{bestMonth}</div></div>
+          <div className="card card-centered"><div className="card-title">Ritme</div><div className="card-value">{perMonth}<span className="t-dim" style={{ fontSize: 13, fontWeight: 500 }}> /mes</span></div></div>
+          <div className="card card-centered">
+            <div className="card-title">Assistència confirmada</div><div className="card-value">{attRate === null ? "—" : `${attRate}%`}</div>
+            {attRate !== null && <div className="t-dim" style={{ fontSize: 11 }}>{attYes} sí · {attNo} no</div>}
+          </div>
+        </div>
+      </>
     );
     ranks = (
       <>
+        <div className="panel">
+          <div className="panel-header-row" style={{ marginBottom: 10 }}>
+            <div>
+              <div className="panel-title">On hem tocat</div>
+              <div className="t-dim" style={{ fontSize: 12.5 }}>
+                {pins.length} {pins.length === 1 ? "població" : "poblacions"} al mapa{unlocated > 0 && !geoLoading ? ` · ${unlocated} concerts sense localitzar` : ""}
+              </div>
+            </div>
+            <button type="button" className="btn-outline" onClick={() => setShowMuniMap(true)}>Mapa de municipis</button>
+          </div>
+          <ConcertPinMap pins={pins} loading={geoLoading} />
+        </div>
         <div className="chart-grid">
           <RankList title="Concerts per grup" rows={bandRows} fmt={(n) => String(n)} />
-          <RankList
-            title="Poblacions més repetides"
-            rows={topCities}
-            fmt={(n) => String(n)}
-            titleExtra={
-              <button type="button" className="panel-icon-btn" title="Veure mapa de municipis" aria-label="Veure mapa de municipis" onClick={() => setShowMuniMap(true)}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
-                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                  <path d="M21 15l-5-5L5 21"></path>
-                </svg>
-              </button>
-            }
-          />
+          <RankList title="Poblacions més repetides" rows={topCities} fmt={(n) => String(n)} />
+          <RankList title="Comarques" rows={toRows(geoAgg.comarca)} fmt={(n) => String(n)} />
+          <RankList title="Regions" rows={toRows(geoAgg.regio)} fmt={(n) => String(n)} />
+          <RankList title="Països" rows={toRows(geoAgg.pais)} fmt={(n) => String(n)} />
+          <RankList title="Recintes més repetits" rows={toRows(byVenue)} fmt={(n) => String(n)} />
+          <RankList title="Festes i entitats" rows={toRows(byFesta)} fmt={(n) => String(n)} />
+          <RankList title="Tipus d'esdeveniment" rows={toRows(byKind)} fmt={(n) => String(n)} />
+        </div>
+        <div className="panel">
+          <div className="panel-title" style={{ marginBottom: 12 }}>Concerts per dia de la setmana</div>
+          <div className="bars-row">
+            {weekday.map((n, i) => (
+              <VbarSplitCol
+                key={i} label={WEEKDAY_SHORT[i]} valueLabel={n} totalPct={Math.round((n / maxWeekday) * 100)}
+                share1={n} share2={0} cls1="concerts-past" cls2="concerts-future" share3={0} cls3="concerts-pending"
+              />
+            ))}
+          </div>
         </div>
         {showMuniMap && (
           <div className="modal-overlay" onClick={() => setShowMuniMap(false)}>
