@@ -6746,3 +6746,49 @@ button.ga-cover-hint { border: none; cursor: pointer; font-family: inherit; }
   font-size: 11px; font-weight: 600; fill: var(--text);
   paint-order: stroke; stroke: oklch(0.14 0.02 258); stroke-width: 3px; stroke-linejoin: round;
 }
+
+/* ============ Calendari del músic: disponibilitat per a suplències ============ */
+.calx-day { position: relative; }
+.calx-day.avail-yes { box-shadow: inset 0 0 0 1.5px oklch(0.72 0.15 155 / 0.55); background: oklch(0.72 0.15 155 / 0.05); }
+.calx-day.avail-no { box-shadow: inset 0 0 0 1.5px oklch(0.62 0.19 25 / 0.45); background: oklch(0.62 0.19 25 / 0.05); }
+.calx-day.avail-busy { background: oklch(0.62 0.19 25 / 0.04); }
+.calx-day.selected.avail-yes, .calx-day.selected.avail-no { box-shadow: inset 0 0 0 1.5px var(--accent); }
+.calx-avail-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; position: absolute; top: 5px; right: 5px;
+  width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 800; line-height: 1;
+  border: 1px solid var(--border-input); color: var(--text-ghost); background: var(--bg-card);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.calx-avail-btn:hover { border-color: var(--accent); color: var(--text); }
+.calx-avail-btn.yes { background: oklch(0.72 0.15 155 / 0.2); border-color: oklch(0.72 0.15 155 / 0.7); color: oklch(0.8 0.15 155); }
+.calx-avail-btn.no { background: oklch(0.62 0.19 25 / 0.16); border-color: oklch(0.62 0.19 25 / 0.6); color: oklch(0.74 0.18 25); }
+.calx-avail-btn.busy { cursor: default; color: oklch(0.7 0.18 25); border-color: transparent; background: transparent; font-size: 9px; }
+.calx-avail-legend { margin-bottom: 16px; display: flex; flex-direction: column; gap: 6px; }
+.calx-avail-dot {
+  display: inline-flex; align-items: center; justify-content: center; width: 15px; height: 15px; border-radius: 50%;
+  font-size: 9px; font-weight: 800; vertical-align: -3px; border: 1px solid var(--border-input);
+}
+.calx-avail-dot.yes { background: oklch(0.72 0.15 155 / 0.2); color: oklch(0.8 0.15 155); border-color: oklch(0.72 0.15 155 / 0.7); }
+.calx-avail-dot.no { background: oklch(0.62 0.19 25 / 0.16); color: oklch(0.74 0.18 25); border-color: oklch(0.62 0.19 25 / 0.6); }
+.calx-avail-dot.busy { color: oklch(0.7 0.18 25); border-color: transparent; }
+
+/* ============ Barra lateral: icones SVG dels enllaços fixos ============ */
+.band-rail-avatar-all svg { display: block; }
+.band-chip-icon { display: inline-flex; align-items: center; vertical-align: -3px; margin-right: 2px; }
+
+/* ============ Suplències: preferències del músic ============ */
+.subs-prefs { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--border-soft); display: flex; flex-direction: column; gap: 14px; }
+.subs-prefs-block { display: flex; flex-direction: column; gap: 8px; }
+.subs-prefs-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.subs-prefs-field { display: flex; flex-direction: column; gap: 4px; min-width: 200px; flex: 1; }
+.subs-prefs-actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+
+/* ============ Fitxa del concert (músic): diners ============ */
+.acd-money { display: flex; flex-direction: column; gap: 16px; }
+.acd-money-block { display: flex; flex-direction: column; gap: 6px; }
+.acd-money-row { display: flex; align-items: center; gap: 10px; font-size: 13.5px; padding: 4px 0; border-bottom: 1px solid var(--border-soft); }
+.acd-money-row:last-child { border-bottom: none; }
+.acd-money-name { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 3px; }
+.acd-money-amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bento-gig-att .cd-att-btn { padding: 3px 9px; font-size: 11.5px; }

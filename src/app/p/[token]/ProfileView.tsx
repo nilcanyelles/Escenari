@@ -13,8 +13,6 @@ import VerifiedTick from "@/components/VerifiedTick";
 import BackLink from "@/components/BackLink";
 import ProfileShareModal from "./ProfileShareModal";
 import InstrumentPicker from "@/components/InstrumentPicker";
-import AvailabilityCalendar from "@/components/AvailabilityCalendar";
-import { setDayAvailabilityAction } from "@/app/(artist)/actions";
 
 // Permisos del membre en un grup, editables pel gestor des del perfil.
 function BandPermsRow({ bandId, memberName, initial }: { bandId: string; memberName: string; initial: Partial<MemberPerms> }) {
@@ -129,7 +127,6 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
   const [localPhoto, setLocalPhoto] = useState<string | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [emailCopied, setEmailCopied] = useState(false);
-  const [availability, setAvailability] = useState<Record<string, boolean>>(data.availability || {});
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
 
@@ -312,34 +309,11 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
           </div>
         </aside>
 
-        {/* Columna dreta: calendari + cançons */}
+        {/* Columna dreta: permisos + cançons. El calendari de bolos i la
+            disponibilitat per a suplències ja no viuen al perfil — es
+            gestionen des del calendari del músic (Calendari) i des de
+            Suplències. */}
         <main className="pv-main">
-          {/* Els bolos només els veuen el músic i el seu gestor. */}
-          {signedIn && (
-            <div className="pv-panel">
-              <div className="pv-panel-title">Calendari de bolos</div>
-              <AttendanceCalendar concerts={data.concerts} today={today} />
-            </div>
-          )}
-
-          <div className="pv-panel">
-            <div className="pv-panel-title">
-              Disponibilitat per a suplències
-              {isOwner && <span className="t-dim" style={{ fontSize: 12, fontWeight: 400, marginLeft: 10 }}>Toca un dia: verd = disponible, vermell = no</span>}
-            </div>
-            <AvailabilityCalendar
-              availability={availability} busy={data.busyDays || {}} editable={isOwner} today={today}
-              onToggle={async (day, next) => {
-                setAvailability((prev) => {
-                  const n = { ...prev };
-                  if (next === null) delete n[day]; else n[day] = next;
-                  return n;
-                });
-                await setDayAvailabilityAction(day, next);
-              }}
-            />
-          </div>
-
           {/* Permisos per grup: només el gestor els veu (i els canvia). */}
           {isManager && data.bandPerms.length > 0 && (
             <div className="pv-panel">

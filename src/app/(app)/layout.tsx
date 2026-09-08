@@ -5,6 +5,7 @@ import { requireManager, hasBandMembership } from "@/lib/current-user";
 import { getBands } from "@/lib/data";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 import { db } from "@/lib/db";
+import { IconSwap } from "@/components/RailIcons";
 
 export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireManager();
@@ -19,8 +20,10 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
     // L'agència del gestor: nom i logotip a dalt de la barra de grups.
     db().query("select name, logo from workspaces where id=$1", [profile.workspaceId]).then((r) => r.rows[0] || null),
   ]);
-  // Un gestor que també toca en algun grup té l'àrea de músic a un clic.
+  // Un gestor que també toca en algun grup no té una segona àrea: ho veu tot
+  // des d'aquí — només se n'indica el doble paper al seu perfil.
   const isMusician = await hasBandMembership(profile.clerkUserId);
+  const roleLabel = (ppRow?.role_label || "Gestió") + (isMusician ? " · Músic" : "");
   const selectedBandId = resolveBandScope(bands, selectedRaw);
   return (
     <AppShell
@@ -28,7 +31,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
       pages={PAGES}
       user={{
         name: profile.name,
-        roleLabel: ppRow?.role_label || "Gestió",
+        roleLabel,
         photoUrl: ppRow?.photo_file_id ? `/api/file/${ppRow.photo_file_id}` : "",
         phone: ppRow?.phone || "",
         whatsapp: ppRow?.whatsapp || "",
@@ -39,8 +42,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
       selectedBandId={selectedBandId}
       agency={{ name: wsRow?.name || "", logo: wsRow?.logo || "" }}
       subLinks={[
-        { href: "/suplents", label: "Suplències", emoji: "🔄" },
-        ...(isMusician ? [{ href: "/artista", label: "Àrea de músic", emoji: "🎸" }] : []),
+        { href: "/suplents", label: "Suplències", emoji: "🔄", icon: <IconSwap /> },
       ]}
     >
       {children}

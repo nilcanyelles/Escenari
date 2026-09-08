@@ -65,7 +65,8 @@ export async function createBandWithPeople(opts: {
 
   const members: Person[] = [];
   if (self) {
-    members.push({ name: self.name.trim(), role: self.instruments.join(", "), instruments: self.instruments, email: self.email || undefined });
+    // Qui crea el grup hi mana: admin del grup des del primer moment.
+    members.push({ name: self.name.trim(), role: self.instruments.join(", "), instruments: self.instruments, email: self.email || undefined, perms: { admin: true } });
   }
   people.filter((x) => x.kind === "musician").forEach((x) => {
     members.push({ name: x.name, role: x.instruments.join(", "), instruments: x.instruments, email: x.email || undefined });

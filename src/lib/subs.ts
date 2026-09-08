@@ -18,7 +18,18 @@ export type SubCandidate = {
   bands: string[];
   // Propers dies marcats en verd (aaaa-mm-dd), per ordre.
   availableDays: string[];
+  // Preferències: fins a quina distància se'l pot contactar (0 = qualsevol)
+  // i des d'on; i si val per a qualsevol instrument o només per als triats.
+  maxKm: number;
+  homeCity: string;
+  anyInstrument: boolean;
+  subsInstruments: string[];
 };
+
+// Instruments per als quals se'l pot contactar de veres.
+export function candidateInstruments(c: SubCandidate): string[] {
+  return c.anyInstrument || !c.subsInstruments.length ? c.instruments : c.subsInstruments;
+}
 
 // Dies marcats pel músic (true = disponible, false = no disponible).
 export async function getAvailability(clerkUserId: string): Promise<Record<string, boolean>> {
@@ -37,7 +48,8 @@ export async function getSubCandidates(): Promise<SubCandidate[]> {
   const pool = db();
   const { rows } = await pool.query(
     `select pp.id, pp.clerk_user_id, pp.person_name, pp.photo_file_id, pp.bio, pp.phone, pp.contact_email,
-            pp.ig_handle, pp.profile_public, p.instruments, p.email as account_email
+            pp.ig_handle, pp.profile_public, p.instruments, p.email as account_email,
+            p.subs_max_km, p.subs_home_city, p.subs_any_instrument, p.subs_instruments
      from person_profiles pp
      left join profiles p on p.clerk_user_id = pp.clerk_user_id
      where pp.open_to_subs
@@ -68,6 +80,10 @@ export async function getSubCandidates(): Promise<SubCandidate[]> {
       igHandle: r.ig_handle || "",
       bands: [],
       availableDays: [],
+      maxKm: Number(r.subs_max_km) || 0,
+      homeCity: r.subs_home_city || "",
+      anyInstrument: r.subs_any_instrument !== false,
+      subsInstruments: r.subs_instruments || [],
     });
   });
   const list = Array.from(byKey.values());

@@ -9,6 +9,7 @@ import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import NewEventButton from "@/components/NewEventButton";
 import { TimePeriodIcon } from "@/components/TimePeriodBubble";
+import { setDayAvailabilityAction } from "@/app/(artist)/actions";
 
 // Tipus d'esdeveniment amb el seu color (la "Legend" del calendari).
 export const KIND_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -33,7 +34,22 @@ function groupByDate(list: Concert[]) {
   return { byDate, dates };
 }
 
-export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", contacts = [], today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; today: string }) {
+// "availability"/"busyDays" (només el calendari del músic): la seva
+// disponibilitat per a suplències es marca aquí mateix, dia a dia — un
+// botonet a cada cel·la que fa cicle lliure → disponible → no disponible.
+// Els dies amb bolo (busyDays) surten sols en vermell.
+export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", contacts = [], availability, busyDays = {}, today }: {
+  bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[];
+  availability?: Record<string, boolean>; busyDays?: Record<string, string>; today: string;
+}) {
+  const availabilityEditable = !!availability;
+  const [avail, setAvail] = useState<Record<string, boolean>>(availability || {});
+  async function cycleAvailability(day: string) {
+    const cur = avail[day];
+    const next: boolean | null = cur === undefined ? true : cur === true ? false : null;
+    setAvail((prev) => { const n = { ...prev }; if (next === null) delete n[day]; else n[day] = next; return n; });
+    await setDayAvailabilityAction(day, next);
+  }
   const router = useRouter();
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week" | "year">("month");
@@ -153,15 +169,28 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
       );
     }
 
+    const busy = availabilityEditable ? busyDays[dateStr] : "";
+    const availState = !availabilityEditable ? null : busy ? "busy" : avail[dateStr] === true ? "yes" : avail[dateStr] === false ? "no" : null;
     return (
       <div
         key={dateStr}
         role="button"
         tabIndex={0}
-        className={"calx-day" + (extraClass ? " " + extraClass : "") + (isSelected ? " selected" : "") + (isToday ? " today" : "")}
+        className={"calx-day" + (extraClass ? " " + extraClass : "") + (isSelected ? " selected" : "") + (isToday ? " today" : "") + (availState ? " avail-" + availState : "")}
         onClick={() => setCalSelectedDate(dateStr)}
       >
         <span className={"calx-num" + (isToday ? " today" : "")}>{dayNum}</span>
+        {availabilityEditable && dateStr >= today && (
+          busy ? (
+            <span className="calx-avail-btn busy" title={`Tens bolo: ${busy}`}>●</span>
+          ) : (
+            <button
+              type="button" className={"calx-avail-btn" + (availState ? " " + availState : "")}
+              title={availState === "yes" ? "Disponible per a suplències — toca per marcar no disponible" : availState === "no" ? "No disponible — toca per treure la marca" : "Toca per marcar-te disponible per a suplències"}
+              onClick={(e) => { e.stopPropagation(); cycleAvailability(dateStr); }}
+            >{availState === "yes" ? "✓" : availState === "no" ? "✕" : "·"}</button>
+          )
+        )}
         {body}
       </div>
     );
@@ -285,6 +314,14 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
       <div className="calx-layout">
         {/* Llegenda */}
         <aside className="calx-sidebar">
+          {availabilityEditable && (
+            <div className="calx-avail-legend">
+              <div className="calx-side-title">Disponibilitat per a suplències</div>
+              <div className="t-dim" style={{ fontSize: 12, lineHeight: 1.45 }}>
+                Toca el botonet de cada dia: <span className="calx-avail-dot yes">✓</span> disponible, <span className="calx-avail-dot no">✕</span> no disponible. Els dies amb bolo (<span className="calx-avail-dot busy">●</span>) es marquen sols. Els gestors que busquen suplent veuen els dies en verd.
+              </div>
+            </div>
+          )}
           <div className="calx-side-title">Llegenda</div>
           <div className="calx-legend">
             {KIND_ORDER.map((k) => (

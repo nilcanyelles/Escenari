@@ -19,7 +19,9 @@ function revalidateArtist() {
 // Alta d'un artista en un grup: fila a band_members + entrada al jsonb de
 // members (o crew) del grup. Si `claimName` coincideix amb un membre creat a
 // mà, la persona el "reclama": mateixa identitat, mateix historial.
-async function addMembership(bandId: string, profile: Profile, opts?: { claimName?: string; asCrew?: boolean }) {
+// "instruments"/"role": què hi toca (o quina funció hi fa) en AQUEST grup —
+// pot ser diferent del perfil general; si no es diuen, s'agafen del perfil.
+async function addMembership(bandId: string, profile: Profile, opts?: { claimName?: string; asCrew?: boolean; instruments?: string[]; role?: string }) {
   const pool = db();
   const band = (await pool.query("select members, crew from bands where id=$1", [bandId])).rows[0];
   if (!band) return;
@@ -34,6 +36,8 @@ async function addMembership(bandId: string, profile: Profile, opts?: { claimNam
       crew.find((m) => (m.name || "").trim().toLowerCase() === profile.name.trim().toLowerCase());
 
   const memberName = existingMember?.name || profile.name;
+  const instruments = (opts?.instruments || []).map((s) => s.trim()).filter(Boolean);
+  const crewRole = (opts?.role || "").trim();
 
   await pool.query(
     `insert into band_members (band_id, clerk_user_id, member_name)
@@ -44,16 +48,28 @@ async function addMembership(bandId: string, profile: Profile, opts?: { claimNam
 
   if (!existingMember) {
     if (opts?.asCrew) {
-      crew.push({ name: profile.name, role: "Tècnic de so", email: profile.email });
+      crew.push({ name: profile.name, role: crewRole || "Tècnic de so", email: profile.email });
       await pool.query("update bands set crew=$1 where id=$2", [JSON.stringify(crew), bandId]);
     } else {
+      const ins = instruments.length ? instruments : profile.instruments;
       members.push({
         name: profile.name,
-        role: profile.instruments.join(", "),
+        role: ins.join(", "),
         email: profile.email,
-        instruments: profile.instruments,
+        instruments: ins,
       });
       await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
+    }
+  } else if (instruments.length || crewRole) {
+    // Reclama un membre ja creat pel gestor: es queda amb el que la persona
+    // diu que hi toca (o hi fa), si ho ha dit.
+    const inMembers = members.some((m) => m === existingMember);
+    if (inMembers && instruments.length) {
+      const next = members.map((m) => (m === existingMember ? { ...m, instruments, role: instruments.join(", ") } : m));
+      await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(next), bandId]);
+    } else if (!inMembers && crewRole) {
+      const next = crew.map((m) => (m === existingMember ? { ...m, role: crewRole } : m));
+      await pool.query("update bands set crew=$1 where id=$2", [JSON.stringify(next), bandId]);
     }
   }
 
@@ -133,13 +149,15 @@ export async function claimBandInvitationAction(token: string) {
   return { ok: true as const, bandId: inv.band_id as string };
 }
 
-export async function joinByCodeAction(code: string, asCrew = false) {
+// "extra": què hi toca en aquest grup (instruments) o quina funció hi fa
+// (crew) — es demana en unir-s'hi amb el codi.
+export async function joinByCodeAction(code: string, asCrew = false, extra?: { instruments?: string[]; role?: string }) {
   const profile = await requireArtistAction();
   const cleaned = (code || "").trim().toUpperCase();
   if (!cleaned) return { ok: false as const, error: "Escriu un codi." };
   const band = (await db().query("select id, name from bands where upper(join_code)=$1 and join_code_active", [cleaned])).rows[0];
   if (!band) return { ok: false as const, error: "No hi ha cap grup amb aquest codi." };
-  await addMembership(band.id, profile, { asCrew });
+  await addMembership(band.id, profile, { asCrew, instruments: extra?.instruments, role: extra?.role });
   revalidateArtist();
   return { ok: true as const, bandName: band.name as string };
 }
@@ -271,6 +289,22 @@ export async function setSubsAvailabilityAction(input: { open?: boolean; visible
 
 // Un dia del calendari de disponibilitat: disponible (true), no disponible
 // (false) o sense marcar (null). Qualsevol compte pot marcar el seu.
+// Preferències de suplències (per compte): fins a quina distància se'l pot
+// contactar i des d'on, i per a quins instruments.
+const SUBS_KM_OPTIONS = [0, 25, 50, 100, 150, 250];
+export async function setSubsPrefsAction(input: { maxKm: number; homeCity: string; anyInstrument: boolean; instruments: string[] }) {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  const maxKm = SUBS_KM_OPTIONS.includes(Number(input.maxKm)) ? Number(input.maxKm) : 0;
+  const instruments = (input.instruments || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 20);
+  await db().query(
+    "update profiles set subs_max_km=$1, subs_home_city=$2, subs_any_instrument=$3, subs_instruments=$4 where clerk_user_id=$5",
+    [maxKm, (input.homeCity || "").trim().slice(0, 120), !!input.anyInstrument, JSON.stringify(instruments), profile.clerkUserId]
+  );
+  revalidatePath("/suplencies");
+  revalidatePath("/suplents");
+}
+
 export async function setDayAvailabilityAction(day: string, available: boolean | null) {
   const profile = await getProfile();
   if (!profile) throw new Error("Sessió no vàlida");

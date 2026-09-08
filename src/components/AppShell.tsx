@@ -28,7 +28,8 @@ function setBandCookie(id: string) {
   document.cookie = `${BAND_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
 }
 
-export type RailLink = { href: string; label: string; emoji: string };
+// "icon" (SVG) té preferència sobre "emoji" — vegeu RailIcons.tsx.
+export type RailLink = { href: string; label: string; emoji: string; icon?: React.ReactNode };
 export type ShellAgency = { name: string; logo: string };
 
 export default function AppShell({
@@ -167,7 +168,7 @@ export default function AppShell({
           {railLinks.map((l) => (
             <Link key={l.href} href={l.href}
               className={"band-rail-item band-rail-link" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
-              <span className="band-rail-avatar band-rail-avatar-all">{l.emoji}</span>
+              <span className="band-rail-avatar band-rail-avatar-all">{l.icon ?? l.emoji}</span>
               <span className="band-rail-name">{l.label}</span>
             </Link>
           ))}
@@ -200,7 +201,7 @@ export default function AppShell({
       {(subLinks || []).map((l) => (
         <Link key={l.href} href={l.href}
           className={"band-rail-item band-rail-link" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
-          <span className="band-rail-avatar band-rail-avatar-all">{l.emoji}</span>
+          <span className="band-rail-avatar band-rail-avatar-all">{l.icon ?? l.emoji}</span>
           <span className="band-rail-name">{l.label}</span>
         </Link>
       ))}
@@ -215,7 +216,7 @@ export default function AppShell({
     <div className="band-chips mobile-only">
       {(railLinks || []).map((l) => (
         <Link key={l.href} href={l.href} className={"band-chip" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
-          {l.emoji} {l.label}
+          <span className="band-chip-icon">{l.icon ?? l.emoji}</span> {l.label}
         </Link>
       ))}
       <button type="button" className={"band-chip" + (activeBand === "" || onAgenciaRoute ? " active" : "")} onClick={() => { if (agency) { router.push(routeBase + "/agencia"); } else { selectBand(""); } }}>
@@ -223,7 +224,7 @@ export default function AppShell({
       </button>
       {(subLinks || []).map((l) => (
         <Link key={l.href} href={l.href} className={"band-chip" + (pathname === l.href || pathname.startsWith(l.href + "/") ? " active" : "")}>
-          {l.emoji} {l.label}
+          <span className="band-chip-icon">{l.icon ?? l.emoji}</span> {l.label}
         </Link>
       ))}
       {(bands || []).map((b) => (
