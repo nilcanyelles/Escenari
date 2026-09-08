@@ -4,7 +4,9 @@ import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
 import { getSetlists } from "@/lib/material-data";
 import { getLinkedMembers } from "@/lib/group-data";
+import { getTransactions } from "@/lib/finance";
 import { memberPerms } from "@/lib/perms";
+import { computePayouts, myPayout } from "@/lib/payouts";
 import { today } from "@/lib/format";
 import { normalize } from "@/lib/text";
 import { db } from "@/lib/db";
@@ -27,23 +29,39 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
     [concert.bandId, profile.clerkUserId]
   )).rows[0];
   const myName = link?.member_name || profile.name;
-
-  // El seu caixet: l'entrada del repartiment amb el seu nom (si n'hi ha).
-  const payouts = concert.payouts || {};
-  const payoutKey = Object.keys(payouts).find((k) => normalize(k) === normalize(myName));
-  const myAmount = payoutKey !== undefined ? payouts[payoutKey] : null;
-
-  // Setlists del grup i si aquest membre pot assignar-les a l'esdeveniment.
-  const [setlists, linkedMembers] = band ? await Promise.all([getSetlists(band.id), getLinkedMembers(band.id)]) : [[], []];
   const me = (band?.members || []).find((m) => normalize(m.name) === normalize(myName)) || null;
-  const canSetlists = memberPerms(me).setlists;
+  const perms = memberPerms(me);
+  const isAdmin = perms.admin;
 
-  // Fotos reals per a la llista d'assistència.
   const ws = (await db().query("select workspace_id from bands where id=$1", [concert.bandId])).rows[0];
-  const photoRows = ws ? (await db().query(
-    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-    [ws.workspace_id]
-  )).rows : [];
+  const [setlists, linkedMembers, raw, txs, photoRows] = await Promise.all([
+    band ? getSetlists(band.id) : Promise.resolve([]),
+    band ? getLinkedMembers(band.id) : Promise.resolve([]),
+    // Caixet real i repartiment desat (el carregador d'artista amaga el
+    // caixet si el grup no el mostra; aquí es calcula el que toca a cadascú
+    // igual que a la fitxa del gestor, i només es mostra el que correspon).
+    db().query("select amount, agency_pct, agency_assumes_expenses, payouts from concerts where id=$1", [id]).then((r) => r.rows[0] || null),
+    ws ? getTransactions(ws.workspace_id) : Promise.resolve([]),
+    // Fotos reals per a les llistes d'assistència i repartiment.
+    ws ? db().query(
+      "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+      [ws.workspace_id]
+    ).then((r) => r.rows) : Promise.resolve([]),
+  ]);
+  const expenseTxs = txs.filter((t) => t.concertId === id && t.kind === "despesa");
+  const summary = computePayouts(
+    {
+      attendance: concert.attendance, substitutes: concert.substitutes,
+      amount: Number(raw?.amount) || 0,
+      payouts: (raw?.payouts as Record<string, number>) || {},
+      agencyPct: raw?.agency_pct == null ? undefined : Number(raw.agency_pct),
+      agencyAssumesExpenses: raw?.agency_assumes_expenses !== false,
+    },
+    band,
+    expenseTxs
+  );
+  const myAmount = myPayout(summary.payouts, myName);
+
   const photosByName: Record<string, string> = {};
   photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
 
@@ -54,9 +72,11 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
       myName={myName}
       myAmount={myAmount}
       showFees={!!band?.showFees}
+      isAdmin={isAdmin}
+      money={isAdmin ? summary : null}
       photosByName={photosByName}
       setlists={setlists}
-      canSetlists={canSetlists}
+      canSetlists={perms.setlists}
       linkedNames={linkedMembers.map((m) => m.memberName)}
       today={today()}
     />

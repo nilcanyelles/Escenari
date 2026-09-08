@@ -72,7 +72,7 @@ export default async function ArtistGroupsPage() {
       )}
 
       <div className="artist-section-title">Uneix-te amb un codi</div>
-      <JoinByCode />
+      <JoinByCode defaultInstruments={profile.instruments} />
     </div>
   );
 }

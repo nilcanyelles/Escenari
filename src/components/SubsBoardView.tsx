@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { SubCandidate } from "@/lib/subs";
+import { candidateInstruments, type SubCandidate } from "@/lib/subs";
 import { personPhotoDataUri, instrumentIconFor } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { formatDate } from "@/lib/format";
@@ -23,16 +23,19 @@ export default function SubsBoardView({ candidates, bands, today, billing, canUp
   const [busy, setBusy] = useState<string | null>(null);
   const [added, setAdded] = useState<Record<string, string>>({}); // profileId -> band name
 
+  // Es filtra pels instruments per als quals cada músic vol que el
+  // contactin (els seus de perfil, o només els que ha triat).
   const instruments = useMemo(() => {
     const seen = new Map<string, string>();
-    candidates.forEach((c) => c.instruments.forEach((i) => { const k = normalize(i); if (!seen.has(k)) seen.set(k, i); }));
+    candidates.forEach((c) => candidateInstruments(c).forEach((i) => { const k = normalize(i); if (!seen.has(k)) seen.set(k, i); }));
     return Array.from(seen.values()).sort((a, b) => a.localeCompare(b));
   }, [candidates]);
 
   const q = normalize(search.trim());
   const list = candidates.filter((c) => {
-    if (instrument && !c.instruments.some((i) => normalize(i) === normalize(instrument))) return false;
-    if (q && !normalize(c.name).includes(q) && !c.instruments.some((i) => normalize(i).includes(q)) && !c.bands.some((b) => normalize(b).includes(q))) return false;
+    const ins = candidateInstruments(c);
+    if (instrument && !ins.some((i) => normalize(i) === normalize(instrument))) return false;
+    if (q && !normalize(c.name).includes(q) && !ins.some((i) => normalize(i).includes(q)) && !c.bands.some((b) => normalize(b).includes(q))) return false;
     return true;
   });
   const band = bands.find((b) => b.id === targetBand) || null;
@@ -88,15 +91,21 @@ export default function SubsBoardView({ candidates, bands, today, billing, canUp
                   <div style={{ minWidth: 0, flex: 1 }}>
                     <div className="member-name">{c.name}</div>
                     <div className="member-instruments">
-                      {c.instruments.slice(0, 4).map((ins) => {
+                      {candidateInstruments(c).slice(0, 4).map((ins) => {
                         const icon = instrumentIconFor(ins);
                         return <span key={ins} className="member-instrument-chip">{icon && <img src={icon} alt="" />}{ins}</span>;
                       })}
-                      {c.instruments.length === 0 && <span className="t-dim" style={{ fontSize: 11.5 }}>Sense instruments indicats</span>}
+                      {candidateInstruments(c).length === 0 && <span className="t-dim" style={{ fontSize: 11.5 }}>Sense instruments indicats</span>}
                     </div>
                   </div>
                 </div>
                 {c.bands.length > 0 && <div className="t-dim" style={{ fontSize: 12 }}>Toca amb: {c.bands.join(", ")}</div>}
+                <div className="t-dim" style={{ fontSize: 12 }}>
+                  {c.maxKm > 0
+                    ? <>📍 Fins a {c.maxKm} km{c.homeCity ? ` de ${c.homeCity}` : ""}</>
+                    : <>📍 Qualsevol distància</>}
+                  {!c.anyInstrument && c.subsInstruments.length > 0 && <> · només {c.subsInstruments.join(", ")}</>}
+                </div>
                 {c.bio && <div className="subs-bio">{c.bio}</div>}
                 <div className="subs-avail">
                   {nextDays.length

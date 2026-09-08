@@ -712,17 +712,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>
         <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
         {!isMgr && myName ? (
-          <span className="bento-gig-att" onClick={(e) => e.stopPropagation()}>
+          <span className="bento-gig-att cd-att-controls" style={{ marginTop: 0 }} onClick={(e) => e.stopPropagation()}>
             <button
-              type="button" className={"bento-att-btn yes" + (myAns === "yes" ? " active" : "")}
+              type="button" className={"cd-att-btn yes" + (myAns === "yes" ? " active" : "")}
               title="Hi seré"
               onClick={async () => { await setMyAttendanceAction(c.id, "yes"); router.refresh(); }}
-            >✓</button>
+            >Sí</button>
             <button
-              type="button" className={"bento-att-btn no" + (myAns === "no" ? " active" : "")}
+              type="button" className={"cd-att-btn no" + (myAns === "no" ? " active" : "")}
               title="No hi seré"
               onClick={async () => { await setMyAttendanceAction(c.id, "no"); router.refresh(); }}
-            >✗</button>
+            >No</button>
           </span>
         ) : (
           <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>

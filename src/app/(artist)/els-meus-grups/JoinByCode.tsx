@@ -3,18 +3,24 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { joinByCodeAction } from "../actions";
+import InstrumentPicker from "@/components/InstrumentPicker";
 
-export default function JoinByCode() {
+// Unir-se a un grup amb el codi: a més del codi, què hi tocaràs en aquest
+// grup (pot ser diferent del perfil general) — o quina funció hi faràs,
+// si és com a crew.
+export default function JoinByCode({ defaultInstruments = [] }: { defaultInstruments?: string[] }) {
   const router = useRouter();
   const [code, setCode] = useState("");
   const [asCrew, setAsCrew] = useState(false);
+  const [instruments, setInstruments] = useState<string[]>(defaultInstruments);
+  const [role, setRole] = useState("");
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
 
   function submit() {
     if (pending || !code.trim()) return;
     startTransition(async () => {
-      const result = await joinByCodeAction(code, asCrew);
+      const result = await joinByCodeAction(code, asCrew, asCrew ? { role } : { instruments });
       if (!result.ok) {
         setMessage({ text: result.error, ok: false });
       } else {
@@ -26,7 +32,7 @@ export default function JoinByCode() {
   }
 
   return (
-    <div>
+    <div className="join-form">
       <div className="join-code-form">
         <input
           className="field-input"
@@ -44,6 +50,19 @@ export default function JoinByCode() {
         <input type="checkbox" checked={asCrew} onChange={(e) => setAsCrew(e.target.checked)} />
         M&apos;hi uneixo com a tècnic de so / crew (no com a músic)
       </label>
+      <div style={{ marginTop: 12 }}>
+        {asCrew ? (
+          <>
+            <label className="form-label">Quina funció hi faràs?</label>
+            <input className="field-input compact-field" style={{ maxWidth: 320 }} type="text" placeholder="So, llums, backliner…" value={role} onChange={(e) => setRole(e.target.value)} />
+          </>
+        ) : (
+          <>
+            <label className="form-label">Què hi toques, en aquest grup?</label>
+            <InstrumentPicker value={instruments} onChange={setInstruments} />
+          </>
+        )}
+      </div>
       {message && (
         <div style={{ marginTop: 8, fontSize: 13, color: message.ok ? "oklch(0.78 0.15 155)" : "var(--red)" }}>
           {message.text}

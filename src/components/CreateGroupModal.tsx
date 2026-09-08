@@ -85,7 +85,9 @@ export default function CreateGroupModal({ onClose, mode = "agency", selfName = 
         ? await createGroupAsMusicianAction(input, selfIns)
         : await createGroupAction(input, addSelf ? { instruments: selfIns } : null);
       setResult(res);
-      router.refresh();
+      // El músic que crea el grup passa a gestor: un refresc el faria saltar a
+      // /resum abans de veure els enllaços d'invitació — hi va des d'"Obre el grup".
+      if (mode !== "musician") router.refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : "No s'ha pogut crear el grup.");
     }

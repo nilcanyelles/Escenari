@@ -76,10 +76,12 @@ export const hasBandMembership = cache(async (clerkUserId: string): Promise<bool
   return rows.length > 0;
 });
 
-// Per a pàgines d'artista.
+// Per a pàgines d'artista. Un gestor (encara que també toqui en algun grup)
+// fa servir sempre l'àrea de gestió, que ho té tot — no hi ha dues vistes.
 export async function requireArtist(): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
+  if (profile.role === "manager" && profile.workspaceId) redirect("/resum");
   if (profile.role !== "artist" && !(await hasBandMembership(profile.clerkUserId))) redirect("/resum");
   return profile;
 }

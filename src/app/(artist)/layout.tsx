@@ -5,9 +5,12 @@ import { requireArtist } from "@/lib/current-user";
 import { getArtistBands } from "@/lib/artist-data";
 import { getSelectedBandId } from "@/lib/band-scope";
 import { db } from "@/lib/db";
+import { IconPerson, IconMusic, IconSwap, IconPlus } from "@/components/RailIcons";
 
 // L'àrea del músic és un mirall de la del gestor: grups a l'esquerra (amb
-// Perfil i Suplències a dalt de tot) i pestanyes Grup/Agenda/Concerts/Estadístiques.
+// Perfil i Suplències a dalt de tot) i pestanyes Grup/Calendari/Concerts/Estadístiques.
+// Un gestor (encara que també toqui) no hi entra mai: ho veu tot des de la
+// seva àrea de gestió (vegeu requireArtist).
 export default async function ArtistGroupLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireArtist();
   const todayLabel = capitalize(formatDateFull(today()));
@@ -34,12 +37,10 @@ export default async function ArtistGroupLayout({ children }: { children: React.
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "" }))}
       selectedBandId={selectedBandId}
       railLinks={[
-        { href: "/artista/perfil", label: "El meu perfil", emoji: "👤" },
-        { href: "/artista/biblioteca", label: "Biblioteca de cançons", emoji: "🎵" },
-        { href: "/suplencies", label: "Suplències", emoji: "🔄" },
-        { href: "/els-meus-grups", label: profile.workspaceId ? "Els meus grups" : "Uneix-te o crea un grup", emoji: "➕" },
-        // Qui també gestiona (el seu grup o una agència) salta a l'àrea de gestió.
-        ...(profile.workspaceId ? [{ href: "/resum", label: "Gestió del grup", emoji: "🏢" }] : []),
+        { href: "/artista/perfil", label: "El meu perfil", emoji: "👤", icon: <IconPerson /> },
+        { href: "/artista/biblioteca", label: "Biblioteca de cançons", emoji: "🎵", icon: <IconMusic /> },
+        { href: "/suplencies", label: "Suplències", emoji: "🔄", icon: <IconSwap /> },
+        { href: "/els-meus-grups", label: "Uneix-te o crea un grup", emoji: "➕", icon: <IconPlus /> },
       ]}
       routeBase="/artista"
       homeHref="/artista/perfil"

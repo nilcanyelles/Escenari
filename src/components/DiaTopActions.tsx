@@ -46,8 +46,10 @@ function WhatsAppIcon() {
 // l'obertura del modal del pòster (útil quan qui crida el vol incrustar
 // tal qual en comptes de com a finestra flotant — la targeta "Proper
 // concert").
-export default function DiaTopActions({ concert, band, iconBtnClass = "dia-top-icon-btn", base = "", onInstagramClick }: {
-  concert: Concert; band: Band | null; iconBtnClass?: string; base?: string; onInstagramClick?: () => void;
+// "showRouteSheet" (per defecte sí): a l'àrea de músic el full de ruta només
+// el veuen els que el poden editar (admins del grup).
+export default function DiaTopActions({ concert, band, iconBtnClass = "dia-top-icon-btn", base = "", onInstagramClick, showRouteSheet = true }: {
+  concert: Concert; band: Band | null; iconBtnClass?: string; base?: string; onInstagramClick?: () => void; showRouteSheet?: boolean;
 }) {
   const router = useRouter();
   const [rsOpen, setRsOpen] = useState(false);
@@ -88,7 +90,7 @@ export default function DiaTopActions({ concert, band, iconBtnClass = "dia-top-i
   return (
     <>
       <div className="dia-top-actions">
-        <button type="button" className={iconBtnClass} title="Full de ruta" onClick={() => setRsOpen(true)}><FdrIcon /></button>
+        {showRouteSheet && <button type="button" className={iconBtnClass} title="Full de ruta" onClick={() => setRsOpen(true)}><FdrIcon /></button>}
         <div className="dia-share-wrap" ref={shareWrapRef}>
           <button type="button" className={iconBtnClass} title="Comparteix" onClick={() => setShareMenuOpen((v) => !v)}><ShareIcon /></button>
           {shareMenuOpen && (
