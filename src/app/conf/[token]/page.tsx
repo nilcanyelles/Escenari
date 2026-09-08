@@ -3,104 +3,119 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { normalize } from "@/lib/text";
 import type { Person, Concert, Band } from "@/lib/types";
-import ConfirmView from "./ConfirmView";
+import { resolveAttendanceLink } from "@/lib/attendance-link";
+import ConfirmView, { type ConfMember, type ConfViewer } from "./ConfirmView";
 
 export const dynamic = "force-dynamic";
 
-// Pàgina pública de confirmació d'assistència: cada músic tria qui és i
-// respon, sense necessitat de compte ni registre. Si hi ha algú identificat
-// (compte d'Escenari ja existent), es fa servir només per preseleccionar-lo
-// i, en respondre, per vincular-lo automàticament — mai és obligatori.
+function toDateStr(d: Date | string): string {
+  if (typeof d === "string") return d.slice(0, 10);
+  return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+}
+
+// Pàgina pública de confirmació d'assistència: primer cada músic tria qui
+// és; després entra amb el seu compte (o se'l crea, si encara no en té) i
+// veu la taula dels concerts de l'enllaç — un de sol (concerts.att_token)
+// o uns quants de propers del grup (attendance_links) — on confirma o
+// rebutja cadascun.
 export default async function ConfirmPage({ params, searchParams }: {
   params: Promise<{ token: string }>;
   searchParams: Promise<{ sel?: string }>;
 }) {
   const { token } = await params;
   const { sel } = await searchParams;
+  const link = await resolveAttendanceLink(token);
+  if (!link) notFound();
   const pool = db();
 
-  const concert = (await pool.query(
-    `select c.id, c.date, c.time, c.exact_time, c.city, c.venue, c.address, c.festa_entitat, c.kind,
-            c.attendance, c.substitutes, c.route_sheet, c.band_id, c.workspace_id,
-            b.name as band_name, b.logo, b.color1, b.color2, b.members, b.crew
-     from concerts c join bands b on b.id = c.band_id
-     where c.att_token=$1 and c.status <> 'cancel·lat'`,
-    [token]
+  const band = (await pool.query(
+    "select id, name, logo, color1, color2, members, crew from bands where id=$1",
+    [link.bandId]
   )).rows[0];
-  if (!concert) notFound();
+  if (!band) notFound();
 
-  const members: Person[] = [...(concert.members || []), ...(concert.crew || [])];
-  const links = (await pool.query(
-    "select member_name, clerk_user_id from band_members where band_id=$1",
-    [concert.band_id]
-  )).rows;
+  const rows = link.concertIds.length
+    ? (await pool.query(
+        `select id, date, time, exact_time, city, venue, address, festa_entitat, kind, status, attendance, substitutes, route_sheet, band_id, band_name
+         from concerts where id = any($1::text[]) order by date, time`,
+        [link.concertIds]
+      )).rows
+    : [];
+
+  const members: Person[] = [...(band.members || []), ...(band.crew || [])];
+  const [links, photos] = await Promise.all([
+    pool.query("select member_name, clerk_user_id from band_members where band_id=$1", [band.id]).then((r) => r.rows),
+    pool.query(
+      "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
+      [link.workspaceId]
+    ).then((r) => r.rows),
+  ]);
   const linkedByName: Record<string, string> = {};
   links.forEach((l) => { linkedByName[normalize(l.member_name)] = l.clerk_user_id; });
-
-  const photos = (await pool.query(
-    "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-    [concert.workspace_id]
-  )).rows;
   const photosByName: Record<string, string> = {};
   photos.forEach((p) => { photosByName[normalize(p.person_name)] = p.photo_file_id; });
 
+  // Membres encara sense vincle però amb un compte d'Escenari al mateix
+  // correu: també se'ls demana entrar (en respondre, quedaran vinculats).
+  const emails = members.map((m) => (m.email || "").trim().toLowerCase()).filter(Boolean);
+  const accountEmails = new Set<string>(
+    emails.length
+      ? (await pool.query("select lower(email) as email from profiles where lower(email) = any($1::text[])", [emails])).rows.map((r) => r.email as string)
+      : []
+  );
+
   const { userId } = await auth();
-  const myMemberName = userId
-    ? links.find((l) => l.clerk_user_id === userId)?.member_name || ""
-    : "";
-  const viewerRole = userId
-    ? (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0]?.role || "none"
-    : "none";
+  const myLink = userId ? links.find((l) => l.clerk_user_id === userId) : undefined;
+  const viewerProfile = userId
+    ? (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0]
+    : null;
+  const viewer: ConfViewer = {
+    loggedIn: !!userId,
+    role: viewerProfile?.role === "manager" ? "manager" : viewerProfile?.role === "artist" ? "artist" : "none",
+    linkedMemberName: myLink?.member_name || "",
+  };
 
-  const attendance: Record<string, string> = concert.attendance || {};
-  const dateStr = typeof concert.date === "string" ? concert.date.slice(0, 10) : concert.date.toISOString().slice(0, 10);
-
-  // Objectes "de veres" (Concert/Band), només amb el que DiaBody fa servir
-  // de veres — perquè la pàgina pública pugui mostrar la mateixa vista del
-  // dia de bolo (horaris, contactes, qui ve, allotjament) que la de gestor,
-  // en comptes de només el formulari d'assistència.
-  const diaConcert: Concert = {
-    id: concert.id, date: dateStr, time: concert.time || "", exactTime: concert.exact_time || "",
-    venue: concert.venue || "", city: concert.city || "", address: concert.address || "",
-    festaEntitat: concert.festa_entitat || "", bandId: concert.band_id, bandName: concert.band_name,
-    tags: [], status: "confirmat", amount: 0, attendance: attendance as Record<string, "yes" | "no">, substitutes: concert.substitutes || {},
+  // Objectes "de veres" (Concert/Band), només amb el que la vista fa servir
+  // — la taula de concerts i, a sota, la mateixa vista del dia de bolo
+  // (horaris, contactes, qui ve, allotjament) que la de gestor (DiaBody).
+  const concerts: Concert[] = rows.map((c) => ({
+    id: c.id, date: toDateStr(c.date), time: c.time || "", exactTime: c.exact_time || "",
+    venue: c.venue || "", city: c.city || "", address: c.address || "",
+    festaEntitat: c.festa_entitat || "", bandId: c.band_id, bandName: c.band_name || band.name,
+    tags: [], status: c.status as Concert["status"], amount: 0,
+    attendance: (c.attendance || {}) as Record<string, "yes" | "no">, substitutes: c.substitutes || {},
     noSubstitute: {}, convocatoriaExcluded: {}, contact: { email: "", name: "", phone: "", company: "" },
-    routeSheet: concert.route_sheet, kind: concert.kind || "bolo", canAnnounce: "", announceAfter: "", ticketType: "",
-  };
+    routeSheet: c.route_sheet, kind: c.kind || "bolo", canAnnounce: "", announceAfter: "", ticketType: "",
+  }));
   const diaBand: Band = {
-    id: concert.band_id, name: concert.band_name, city: "", rate: 0, contact: "", phone: "", tags: [],
-    members: concert.members || [], crew: concert.crew || [],
+    id: band.id, name: band.name, city: "", rate: 0, contact: "", phone: "", tags: [],
+    members: band.members || [], crew: band.crew || [],
   };
+
+  const confMembers: ConfMember[] = members.map((m) => {
+    const email = (m.email || "").trim().toLowerCase();
+    const linked = !!linkedByName[normalize(m.name)];
+    return {
+      name: m.name,
+      instruments: m.instruments?.length ? m.instruments : String(m.role || "").split(/[,/]| i /i).map((s) => s.trim()).filter(Boolean),
+      photoId: photosByName[normalize(m.name)] || "",
+      linked,
+      hasAccount: linked || (!!email && accountEmails.has(email)),
+      isMe: !!myLink && normalize(m.name) === normalize(myLink.member_name),
+    };
+  });
 
   return (
     <ConfirmView
       token={token}
-      event={{
-        date: dateStr,
-        time: concert.time || "",
-        exactTime: concert.exact_time || "",
-        city: concert.city || "",
-        venue: concert.venue || "",
-        address: concert.address || "",
-        festaEntitat: concert.festa_entitat || "",
-        kind: concert.kind || "bolo",
-        bandName: concert.band_name,
-        logo: concert.logo || "",
-        color1: concert.color1 || "",
-        color2: concert.color2 || "",
-      }}
-      members={members.map((m) => ({
-        name: m.name,
-        instruments: m.instruments?.length ? m.instruments : String(m.role || "").split(/[,/]| i /i).map((s) => s.trim()).filter(Boolean),
-        photoId: photosByName[normalize(m.name)] || "",
-        linked: !!linkedByName[normalize(m.name)],
-        isMe: !!myMemberName && normalize(m.name) === normalize(myMemberName),
-        answer: attendance[m.name] === "yes" ? "yes" : attendance[m.name] === "no" ? "no" : "",
-      }))}
-      viewerIsManager={viewerRole === "manager"}
-      preselect={sel || ""}
-      diaConcert={diaConcert}
+      single={link.single}
+      allFuture={link.allFuture}
+      band={{ name: band.name, logo: band.logo || "", color1: band.color1 || "", color2: band.color2 || "" }}
+      concerts={concerts}
       diaBand={diaBand}
+      members={confMembers}
+      viewer={viewer}
+      preselect={sel || ""}
     />
   );
 }

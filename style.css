@@ -6485,3 +6485,117 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   .perm-table { min-width: 560px; }
   .ss-title-row { flex-wrap: wrap; }
 }
+
+/* ============ Formulari públic per pàgines (/f/token) ============ */
+/* Enrere/Següent a dalt i a baix de cada pàgina; a dalt, entremig, el
+   pas actual (una bombolla per secció, clicables per saltar-hi). */
+.pf-nav { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pf-nav-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  border: 1px solid var(--border-input); border-radius: 12px; padding: 10px 16px;
+  font-size: 13.5px; font-weight: 600; color: var(--text-muted); background: var(--bg-card);
+  transition: border-color .15s, color .15s, background .15s, transform .12s;
+}
+.pf-nav-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.pf-nav-btn:disabled { opacity: 0.5; cursor: default; }
+.pf-nav-btn.primary { background: var(--accent); border-color: transparent; color: #fff; }
+.pf-nav-btn.primary:hover:not(:disabled) { background: var(--accent-hover); color: #fff; transform: translateY(-1px); }
+.pf-nav-btn.finish {
+  background: linear-gradient(120deg, var(--accent), oklch(0.62 0.2 310));
+  box-shadow: 0 8px 30px oklch(0.68 0.19 290 / 0.35);
+}
+.pf-nav-center { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+.pf-stepper { display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; }
+.pf-step {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  width: 30px; height: 30px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1.5px solid var(--border-input); color: var(--text-faint); background: var(--bg-card);
+  transition: border-color .15s, color .15s, background .15s, transform .15s;
+}
+.pf-step:hover { border-color: var(--accent); color: var(--text); }
+.pf-step.done { border-color: oklch(0.72 0.15 155 / 0.5); color: oklch(0.78 0.15 155); background: oklch(0.72 0.15 155 / 0.12); }
+.pf-step.current { border-color: var(--accent); color: #fff; background: var(--accent); transform: scale(1.1); }
+.pf-page-label { font-size: 11.5px; color: var(--text-faint); }
+/* Estat del desat automàtic, sota la barra de progrés. */
+.pf-save-state { margin-top: 8px; font-size: 11.5px; color: var(--text-ghost); min-height: 14px; transition: color .2s; }
+.pf-save-state.pending, .pf-save-state.saving { color: var(--text-faint); }
+.pf-save-state.saved { color: oklch(0.78 0.15 155); }
+.pf-save-state.error { color: oklch(0.78 0.14 25); }
+/* Avís d'una pàgina ja completa i fixada (sota el títol). */
+.pf-locked-hint { display: flex; align-items: center; gap: 8px; font-size: 12.5px; color: var(--text-faint); margin: -8px 0 16px; line-height: 1.4; }
+@media (max-width: 560px) {
+  .pf-nav { flex-wrap: wrap; }
+  .pf-nav.top .pf-nav-center { order: -1; flex-basis: 100%; }
+  .pf-nav-btn { flex: 1; justify-content: center; }
+}
+
+/* ============ /conf: qui ets, entrada i taula de concerts ============ */
+.cfm-band-head { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 0 4px; }
+.cfm-band-head img { width: 64px; height: 64px; border-radius: 18px; object-fit: cover; margin-bottom: 8px; }
+.cfm-band-kicker { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
+.cfm-band-title { font-family: "Space Grotesk", sans-serif; font-size: 26px; font-weight: 700; }
+.cfm-band-sub { font-size: 13px; color: var(--text-muted); }
+/* Qui ha dit que és — sempre a la vista mentre respon. */
+.cfm-identity {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--bg-card); border: 1.5px solid var(--c1, var(--accent)); border-radius: 14px; padding: 10px 12px;
+}
+.cfm-identity img { width: 42px; height: 42px; border-radius: 12px; object-fit: cover; flex-shrink: 0; }
+.cfm-identity-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.cfm-identity-name { font-weight: 700; font-size: 14px; }
+.cfm-identity-sub { font-size: 11.5px; color: var(--text-faint); }
+.cfm-gate-btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.cfm-gate-btns .btn-primary, .cfm-gate-btns .btn-outline {
+  text-decoration: none; width: auto; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+}
+.cfm-table { display: flex; flex-direction: column; gap: 8px; }
+.cfm-table-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 12px; color: var(--text-faint); padding: 0 4px; }
+.cfm-row {
+  background: var(--bg-card); border: 1.5px solid var(--border-soft); border-radius: 14px; padding: 10px 12px;
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; align-items: center;
+  transition: border-color .15s;
+}
+.cfm-row.yes { border-color: oklch(0.72 0.15 155 / 0.45); }
+.cfm-row.no { border-color: oklch(0.62 0.19 25 / 0.4); }
+.cfm-row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cfm-row-date { font-weight: 700; font-size: 14px; }
+.cfm-row-sub { font-size: 12px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfm-row-btns { display: flex; gap: 6px; flex-shrink: 0; }
+.cfm-row-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit; white-space: nowrap;
+  font-size: 12.5px; font-weight: 700; padding: 7px 12px; border-radius: 10px;
+  border: 1.5px solid var(--border-input); color: var(--text-muted);
+  transition: background .15s, color .15s, border-color .15s;
+}
+.cfm-row-btn:hover:not(:disabled) { color: var(--text); border-color: var(--text-faint); }
+.cfm-row-btn:disabled { opacity: 0.6; cursor: default; }
+.cfm-row-btn.yes.active { background: oklch(0.72 0.15 155 / 0.18); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
+.cfm-row-btn.no.active { background: oklch(0.62 0.19 25 / 0.14); color: oklch(0.72 0.18 25); border-color: oklch(0.62 0.19 25 / 0.4); }
+.cfm-row-expand { all: unset; cursor: pointer; grid-column: 1 / -1; font-size: 12px; color: var(--text-faint); display: inline-flex; align-items: center; gap: 5px; }
+.cfm-row-expand:hover { color: var(--text); }
+.cfm-row-expand svg { transition: transform .15s; }
+.cfm-row-details { grid-column: 1 / -1; padding: 4px 0 0; margin: 0; max-width: none; }
+@media (max-width: 480px) {
+  .cfm-row { grid-template-columns: 1fr; }
+  .cfm-row-btns .cfm-row-btn { flex: 1; text-align: center; }
+}
+
+/* Modal "per a quins concerts?" de l'enllaç de confirmació (fitxa del concert) */
+.atl-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.atl-all {
+  display: flex; align-items: flex-start; gap: 10px; font-size: 13px; padding: 10px 12px; cursor: pointer;
+  border: 1px dashed var(--border-input); border-radius: 10px; line-height: 1.4;
+}
+.atl-all-sub { display: block; font-size: 12px; color: var(--text-faint); }
+.atl-all input, .atl-item input { width: 16px; height: 16px; accent-color: var(--accent); flex: none; margin: 2px 0 0; }
+.atl-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow: auto; }
+.atl-item {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px; font-size: 13px; cursor: pointer; min-width: 0;
+  border-radius: 10px; background: var(--bg-card-2); border: 1px solid var(--border-soft);
+}
+.atl-item.disabled { opacity: 0.7; cursor: default; }
+.atl-item-date { font-weight: 700; flex: none; min-width: 84px; }
+.atl-item-sub { color: var(--text-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.atl-actions { display: flex; gap: 10px; justify-content: flex-end; }
