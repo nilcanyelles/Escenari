@@ -9,7 +9,7 @@ export type NavPage = { key: PageKey; href: string; label: string };
 export const PAGES: NavPage[] = [
   { key: "agencia", href: "/agencia", label: "Agència" },
   { key: "grup", href: "/grup", label: "Grup" },
-  { key: "agenda", href: "/agenda", label: "Agenda" },
+  { key: "agenda", href: "/agenda", label: "Calendari" },
   { key: "concerts", href: "/concerts", label: "Concerts" },
   { key: "estadistiques", href: "/estadistiques", label: "Estadístiques" },
 ];
@@ -18,7 +18,7 @@ export const PAGES: NavPage[] = [
 // suplències viuen a la barra lateral, sobre la llista de grups).
 export const ARTIST_PAGES: NavPage[] = [
   { key: "grup", href: "/artista/grup", label: "Grup" },
-  { key: "agenda", href: "/artista/agenda", label: "Agenda" },
+  { key: "agenda", href: "/artista/agenda", label: "Calendari" },
   { key: "concerts", href: "/artista/concerts", label: "Concerts" },
   { key: "estadistiques", href: "/artista/estadistiques", label: "Estadístiques" },
 ];

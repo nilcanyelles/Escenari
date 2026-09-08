@@ -6131,7 +6131,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* ============ Pestanya Permisos del grup (taula d'interruptors) ============ */
 .perm-table-wrap { overflow-x: auto; }
-.perm-table { width: 100%; border-collapse: collapse; min-width: 640px; }
+.perm-table { width: 100%; border-collapse: collapse; min-width: 860px; }
 .perm-table th {
   text-align: center; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text-ghost); font-weight: 700; padding: 6px 8px 10px; border-bottom: 1px solid var(--border-soft);
@@ -6599,3 +6599,150 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .atl-item-date { font-weight: 700; flex: none; min-width: 84px; }
 .atl-item-sub { color: var(--text-faint); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .atl-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ============ Fitxa del concert: mesuradors clicables, zona de perill ============ */
+.cd-meter.clickable, .cd-hero-amount.clickable { cursor: pointer; border-radius: 8px; transition: color .15s, transform .12s; }
+.cd-meter.clickable:hover .cd-meter-head span:first-child { color: var(--text); text-decoration: underline; text-underline-offset: 3px; }
+.cd-meter.clickable:focus-visible, .cd-hero-amount.clickable:focus-visible { outline: 2px solid oklch(0.68 0.19 290 / 0.55); outline-offset: 3px; }
+.cd-hero-amount.clickable:hover { color: var(--accent-text); transform: translateY(-1px); }
+.cd-danger-zone { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; border-color: oklch(0.68 0.18 25 / 0.35); }
+.cf-confirm-title { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+
+/* ============ Equip: "Edita membres" ============ */
+.team-editing .chroma-card { outline: 1.5px dashed var(--accent); outline-offset: 2px; cursor: pointer; }
+.team-editing .chroma-card:hover { outline-style: solid; }
+.team-edit-hint { font-size: 12.5px; color: var(--accent-text); margin-bottom: 10px; }
+.team-edit-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.team-edit-actions .link-btn { font-size: 12.5px; padding: 6px; }
+/* Permisos: "Admin" ho inclou tot — la resta es veuen encesos però bloquejats. */
+.perm-switch.implied { opacity: 0.55; }
+
+/* ============ Importació de concerts des d'Excel ============ */
+.imp-steps { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: var(--text-muted); line-height: 1.45; }
+.imp-drop {
+  border: 1.5px dashed var(--border-input); border-radius: 12px; padding: 22px 16px; text-align: center;
+  color: var(--text-muted); font-size: 13px; cursor: pointer; line-height: 1.5;
+  transition: border-color .15s, background .15s, color .15s;
+}
+.imp-drop:hover, .imp-drop.dragover, .imp-drop:focus-visible { border-color: var(--accent); background: oklch(0.68 0.19 290 / 0.08); color: var(--text); outline: none; }
+.imp-summary { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 12px 14px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
+.imp-preview { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-dim); max-height: 160px; overflow: auto; }
+.imp-errors { color: oklch(0.78 0.14 25); font-size: 12.5px; max-height: 120px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.imp-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+/* ============ Logo Escenari al formulari públic ============ */
+.pf-logo { height: 34px; width: auto; display: block; margin: 0 auto; }
+
+/* ============ Retall d'imatge (logo del grup) ============ */
+.crop-modal { max-width: 96vw; }
+.crop-frame {
+  position: relative; overflow: hidden; border-radius: 12px; max-width: 100%;
+  background: repeating-conic-gradient(oklch(1 0 0 / 0.07) 0 25%, transparent 0 50%) 0 0 / 16px 16px;
+  cursor: grab; touch-action: none; user-select: none;
+}
+.crop-frame:active { cursor: grabbing; }
+.crop-frame img { pointer-events: none; }
+.crop-zoom { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
+.crop-zoom input { flex: 1; accent-color: var(--accent); }
+
+/* ============ Aparença del grup: forma del logo i portada arrossegable ============ */
+.ga-aspect { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.ga-aspect-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
+  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border-input); color: var(--text-muted);
+  transition: border-color .15s, background .15s, color .15s;
+}
+.ga-aspect-btn:hover { border-color: var(--accent); color: var(--text); }
+.ga-aspect-btn.active { background: oklch(0.68 0.19 290 / 0.18); border-color: var(--accent); color: var(--text); }
+.ga-cover.draggable { cursor: grab; touch-action: none; user-select: none; }
+.ga-cover.draggable:active { cursor: grabbing; }
+.ga-cover-pos-hint {
+  position: absolute; left: 10px; top: 10px; pointer-events: none;
+  background: rgba(6, 5, 12, 0.62); color: #fff; font-size: 11px; border-radius: 999px; padding: 4px 10px;
+}
+button.ga-cover-hint { border: none; cursor: pointer; font-family: inherit; }
+
+/* ============ Enllaç de suplent (/s/token) ============ */
+.sub-event { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; margin-top: 6px; }
+.sub-event-when { font-weight: 700; font-size: 14px; }
+.sub-event-where, .sub-event-who { font-size: 12.5px; color: var(--text-muted); }
+
+/* ============ /conf: proposar un suplent ============ */
+.cfm-sub { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 6px; border-top: 1px dashed var(--border-soft); padding-top: 8px; }
+.cfm-sub-line { font-size: 12.5px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cfm-sub-line.yes { color: oklch(0.78 0.15 155); }
+.cfm-sub-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit; align-self: flex-start;
+  font-size: 12.5px; font-weight: 600; color: var(--accent-text);
+  border: 1px dashed var(--border-input); border-radius: 10px; padding: 6px 12px; transition: border-color .15s;
+}
+.cfm-sub-btn:hover { border-color: var(--accent); }
+.cfm-sub-panel { display: flex; flex-direction: column; gap: 8px; background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 12px; padding: 10px 12px; }
+.cfm-sub-results { display: flex; flex-direction: column; gap: 4px; }
+.cfm-sub-result {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit;
+  display: flex; justify-content: space-between; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 13px;
+}
+.cfm-sub-result:hover:not(:disabled) { background: oklch(1 0 0 / 0.06); }
+.cfm-sub-result:disabled { opacity: 0.6; cursor: default; }
+.cfm-sub-linkbox { font-size: 12px; word-break: break-all; background: oklch(1 0 0 / 0.05); border-radius: 8px; padding: 8px 10px; }
+
+/* ============ Fitxa del concert: candidatures de suplent ============ */
+.cd-att-sub { flex-wrap: wrap; }
+.cd-sub-box { display: flex; flex-direction: column; gap: 6px; flex-basis: 100%; }
+.cd-sub-apps { display: flex; flex-direction: column; gap: 6px; }
+.cd-sub-app {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 12.5px;
+  background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 6px 10px;
+}
+.cd-sub-app-name { font-weight: 600; display: inline-flex; align-items: center; gap: 2px; }
+.cd-sub-app-msg { font-size: 12px; flex: 1; min-width: 0; }
+.cd-sub-app-actions { display: flex; gap: 6px; margin-left: auto; }
+.cd-sub-app-actions .btn-save, .cd-sub-app-actions .btn-outline { padding: 4px 10px; font-size: 12px; }
+
+/* ============ Autocompletat de contactes: crear-ne un de nou ============ */
+.contact-ac-create .contact-ac-name { color: var(--accent-text); }
+
+/* ============ Botó de tornar (BackLink) ============ */
+.back-btn, .cd-back {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit;
+  display: inline-flex; align-items: center; gap: 7px; min-height: 36px; padding: 6px 14px 6px 10px;
+  border-radius: 999px; border: 1px solid var(--border-input); background: var(--bg-card);
+  color: var(--text-dim); font-size: 13px; font-weight: 600; text-decoration: none; white-space: nowrap;
+  transition: border-color .15s, color .15s, background .15s;
+}
+.back-btn:hover, .cd-back:hover { border-color: var(--accent); color: var(--text); background: oklch(0.68 0.19 290 / 0.1); }
+.back-btn:focus-visible { outline: 2px solid oklch(0.68 0.19 290 / 0.55); outline-offset: 2px; }
+.back-btn-icon { flex: none; transition: transform .15s; }
+.back-btn:hover .back-btn-icon { transform: translateX(-2px); }
+.back-btn.onboarding-back { align-self: flex-start; margin-bottom: 4px; }
+
+/* ============ Despeses: qui les paga, i desglossament de la comissió ============ */
+.cd-expense-row { flex-wrap: wrap; }
+.cd-expense-row .cd-payout-name { flex: 1; min-width: 140px; }
+.cd-expense-payer { width: auto; min-width: 130px; font-size: 12px; padding: 4px 8px; }
+.cd-comm-breakdown { display: flex; flex-direction: column; gap: 5px; max-width: 480px; margin-top: 12px; font-size: 13px; }
+.cd-comm-breakdown > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
+.cd-comm-breakdown > div > span:last-child { text-align: right; }
+.cd-comm-sep { border-top: 1px dashed var(--border-soft); margin: 4px 0; }
+/* Beta */
+.beta-badge {
+  display: inline-flex; align-items: center; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: oklch(0.82 0.15 80); background: oklch(0.78 0.15 80 / 0.16); border: 1px solid oklch(0.78 0.15 80 / 0.4);
+  border-radius: 999px; padding: 2px 8px; margin-right: 8px; vertical-align: middle;
+}
+.beta-note {
+  display: flex; gap: 10px; align-items: flex-start; font-size: 13px; line-height: 1.5; color: var(--text-dim);
+  background: oklch(0.78 0.15 80 / 0.1); border: 1px solid oklch(0.78 0.15 80 / 0.35); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px;
+}
+
+/* ============ Estadístiques: mapa de xinxetes ============ */
+.pin-map-card { padding: 10px; }
+.pin-map-shape { fill: oklch(1 0 0 / 0.045); stroke: oklch(1 0 0 / 0.22); stroke-width: 1; }
+.pin-map-shape.country { fill: oklch(1 0 0 / 0.02); stroke: oklch(1 0 0 / 0.12); }
+.pin-map-pin circle { fill: oklch(0.68 0.19 290 / 0.82); stroke: #fff; stroke-width: 1.2; transition: fill .15s; }
+.pin-map-pin:hover circle { fill: oklch(0.8 0.16 290); }
+.pin-map-label {
+  font-size: 11px; font-weight: 600; fill: var(--text);
+  paint-order: stroke; stroke: oklch(0.14 0.02 258); stroke-width: 3px; stroke-linejoin: round;
+}

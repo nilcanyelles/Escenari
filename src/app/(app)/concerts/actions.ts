@@ -8,6 +8,7 @@ import { requireBandAccess } from "@/lib/band-access";
 import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
 import { getCompanyInfo } from "@/lib/data";
 import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonReverseGeocode } from "@/lib/geo-search";
+import type { ImportedConcert } from "@/lib/concert-import";
 
 export type SaveConcertInput = {
   id: string | null;
@@ -226,6 +227,60 @@ export async function importConcertsAction(raw: string): Promise<{ imported: num
     imported++;
   }
   revalidateAll();
+  return { imported, errors };
+}
+
+// Importació des d'Excel (ImportConcertsModal): les files ja arriben
+// interpretades (dates, estats i imports normalitzats a concert-import.ts);
+// aquí només es creen els concerts — i els grups que encara no existeixin.
+export async function importConcertRowsAction(rows: ImportedConcert[]): Promise<{ imported: number; errors: string[] }> {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  const errors: string[] = [];
+  let imported = 0;
+  const bandCache: Record<string, { id: string; name: string; tags: unknown[] }> = {};
+  const stamp = Date.now();
+  const list = (rows || []).slice(0, 2000);
+  for (let i = 0; i < list.length; i++) {
+    const r = list[i];
+    const date = String(r.date || "");
+    const bandName = String(r.band || "").trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !bandName) { errors.push(`Fila ${i + 1}: falta la data o l'artista`); continue; }
+    const key = bandName.toLowerCase();
+    let bandRow = bandCache[key];
+    if (!bandRow) {
+      bandRow = (await pool.query("select id, name, tags from bands where lower(name)=$1 and workspace_id=$2", [key, workspaceId])).rows[0];
+      if (!bandRow) {
+        const newId = "b" + stamp + i;
+        await pool.query(
+          "insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code) values ($1,$2,$3,0,'','','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$4,$5)",
+          [newId, bandName, (r.city || "").trim() || "—", workspaceId, generateJoinCode()]
+        );
+        bandRow = { id: newId, name: bandName, tags: [] };
+      }
+      bandCache[key] = bandRow;
+    }
+    const status = ["confirmat", "pendent", "reservat", "cancel·lat"].includes(r.status) ? r.status : "confirmat";
+    const time = /^\d{2}:\d{2}$/.test(r.time || "") ? r.time : "";
+    const contact = {
+      name: (r.contactName || "").trim(), phone: (r.contactPhone || "").trim(),
+      email: (r.contactEmail || "").trim(), company: (r.contactCompany || "").trim(),
+    };
+    await pool.query(
+      `insert into concerts (id, date, time, exact_time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, contact, workspace_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'{}','{}','{}',$13,$14)`,
+      ["c" + stamp + i, date, time || "21:00", time, (r.venue || "").trim(), (r.city || "").trim(), (r.title || "").trim(), bandRow.id, bandRow.name,
+        JSON.stringify(bandRow.tags || []), status, Math.max(0, Math.round(Number(r.amount) || 0)), JSON.stringify(contact), workspaceId]
+    );
+    // El contacte de cada fila entra al magatzem compartit de contactes,
+    // com quan es desa des de la fitxa del concert.
+    if (contact.name) {
+      await syncRouteSheetContactsToContacts(workspaceId, [{ name: contact.name, role: "", phone: contact.phone, company: contact.company, email: contact.email }]);
+    }
+    imported++;
+  }
+  revalidateAll();
+  if (imported) revalidatePath("/contactes");
   return { imported, errors };
 }
 

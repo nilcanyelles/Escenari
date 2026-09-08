@@ -4,7 +4,8 @@ import { db } from "@/lib/db";
 import { normalize } from "@/lib/text";
 import type { Person, Concert, Band } from "@/lib/types";
 import { resolveAttendanceLink } from "@/lib/attendance-link";
-import ConfirmView, { type ConfMember, type ConfViewer } from "./ConfirmView";
+import { getBackupRequests } from "@/lib/group-data";
+import ConfirmView, { type ConfMember, type ConfViewer, type ConfSubInfo } from "./ConfirmView";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export default async function ConfirmPage({ params, searchParams }: {
   const pool = db();
 
   const band = (await pool.query(
-    "select id, name, logo, color1, color2, members, crew from bands where id=$1",
+    "select id, name, logo, logo_aspect, color1, color2, members, crew from bands where id=$1",
     [link.bandId]
   )).rows[0];
   if (!band) notFound();
@@ -92,6 +93,20 @@ export default async function ConfirmPage({ params, searchParams }: {
     members: band.members || [], crew: band.crew || [],
   };
 
+  // Cerques de suplent obertes d'aquests concerts (proposades des d'aquí
+  // mateix o publicades pel gestor), per membre: qui s'hi ha presentat i
+  // l'enllaç del suplent, si n'hi ha.
+  const reqs = (await getBackupRequests(link.workspaceId, { bandId: link.bandId }))
+    .filter((r) => r.status === "oberta" && link.concertIds.includes(r.concertId));
+  const subs: Record<string, Record<string, ConfSubInfo>> = {};
+  reqs.forEach((r) => {
+    (subs[r.concertId] ||= {})[normalize(r.memberName)] = {
+      requestId: r.id,
+      token: r.token,
+      applications: r.applications.map((a) => ({ name: a.name, status: a.status })),
+    };
+  });
+
   const confMembers: ConfMember[] = members.map((m) => {
     const email = (m.email || "").trim().toLowerCase();
     const linked = !!linkedByName[normalize(m.name)];
@@ -110,10 +125,12 @@ export default async function ConfirmPage({ params, searchParams }: {
       token={token}
       single={link.single}
       allFuture={link.allFuture}
-      band={{ name: band.name, logo: band.logo || "", color1: band.color1 || "", color2: band.color2 || "" }}
+      band={{ name: band.name, logo: band.logo || "", logoAspect: band.logo_aspect || "1:1", color1: band.color1 || "", color2: band.color2 || "" }}
       concerts={concerts}
       diaBand={diaBand}
       members={confMembers}
+      subs={subs}
+      linkedNames={links.map((l) => l.member_name as string)}
       viewer={viewer}
       preselect={sel || ""}
     />

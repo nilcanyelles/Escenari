@@ -3,6 +3,8 @@
 import { useRef, useState } from "react";
 import type { Concert, Band } from "@/lib/types";
 import { setConvocatoriaAction } from "@/app/(app)/concerts/actions";
+import { normalize } from "@/lib/text";
+import VerifiedTick from "@/components/VerifiedTick";
 
 function EditIcon() {
   return (
@@ -15,7 +17,9 @@ function EditIcon() {
 // mai a la pàgina pública /conf/[token]) hi apareix un llapis al costat
 // del títol que obre una edició ràpida d'assistència i substituts, sense
 // haver d'anar a la pestanya "Convocatòria" de la fitxa completa.
-export default function DiaQuiVeCard({ concert, band, editable = false }: { concert: Concert; band: Band | null; editable?: boolean }) {
+// "linkedNames": qui té compte d'Escenari vinculat (tick lila al costat del nom).
+export default function DiaQuiVeCard({ concert, band, editable = false, linkedNames = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[] }) {
+  const linkedSet = new Set(linkedNames.map(normalize));
   const [editing, setEditing] = useState(false);
   const [attendance, setAttendanceState] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutesState] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
@@ -72,7 +76,7 @@ export default function DiaQuiVeCard({ concert, band, editable = false }: { conc
             const a = attendance[p.name];
             return (
               <div key={p.name} className="dia-quive-edit-row">
-                <span className="dia-quive-edit-name">{p.name}</span>
+                <span className="dia-quive-edit-name">{p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}</span>
                 <div className="cd-att-controls">
                   <button type="button" className={"cd-att-btn yes" + (a === "yes" ? " active" : "")} onClick={() => setAtt(p.name, a === "yes" ? null : "yes")}>Sí</button>
                   <button type="button" className={"cd-att-btn no" + (a === "no" ? " active" : "")} onClick={() => setAtt(p.name, a === "no" ? null : "no")}>No</button>
@@ -93,7 +97,7 @@ export default function DiaQuiVeCard({ concert, band, editable = false }: { conc
             const sub = substitutes[p.name];
             return a === "no" && sub ? (
               <span key={p.name} className="dia-member-group">
-                <span className="dia-member no" style={{ textDecoration: "line-through" }}>✕ {p.name}</span>
+                <span className="dia-member no" style={{ textDecoration: "line-through" }}>✕ {p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}</span>
                 <span className="dia-member sub">
                   <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 16-4 4-4-4"></path><path d="M17 20V4"></path><path d="m3 8 4-4 4 4"></path><path d="M7 4v16"></path></svg>
                   {sub}
@@ -101,7 +105,7 @@ export default function DiaQuiVeCard({ concert, band, editable = false }: { conc
               </span>
             ) : (
               <span key={p.name} className={"dia-member" + (a === "yes" ? " yes" : a === "no" ? " no" : "")}>
-                {a === "yes" ? "✓ " : a === "no" ? "✕ " : "? "}{p.name}
+                {a === "yes" ? "✓ " : a === "no" ? "✕ " : "? "}{p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}
               </span>
             );
           })}

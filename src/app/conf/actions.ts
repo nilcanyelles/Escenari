@@ -7,7 +7,8 @@ import { db } from "@/lib/db";
 import { requireManagerAction } from "@/lib/current-user";
 import { normalize } from "@/lib/text";
 import { today } from "@/lib/format";
-import { resolveAttendanceLink } from "@/lib/attendance-link";
+import { resolveAttendanceLink, type ResolvedAttendanceLink } from "@/lib/attendance-link";
+import { instrumentsFor } from "@/lib/tags";
 import type { Person } from "@/lib/types";
 
 function toDateStr(d: Date | string): string {
@@ -181,4 +182,105 @@ export async function respondConfAction(
   revalidatePath(`/concerts/${concertId}`);
   revalidatePath("/artista");
   return { ok: true };
+}
+
+// ---------- Suplents proposats des de l'enllaç de confirmació ----------
+// Qui diu que no pot venir pot proposar un suplent: si ja té compte
+// d'Escenari, el busca i queda com a candidatura pendent; si no, genera un
+// enllaç (/s/token) perquè s'hi creï el compte i s'hi presenti. Tot va a
+// parar a la mateixa cerca de suplent (backup_requests) que el gestor veu a
+// la fitxa del concert, on l'accepta o la rebutja.
+
+// Qui pot actuar en nom d'un membre en aquest enllaç: el mateix compte
+// vinculat (o un compte encara sense vincle) — mateixes regles que
+// respondConfAction.
+async function requireConfMember(token: string, concertId: string, memberName: string): Promise<
+  | { error: string }
+  | { userId: string; link: ResolvedAttendanceLink; member: Person; isCrew: boolean }
+> {
+  const { userId } = await auth();
+  if (!userId) return { error: "Cal entrar amb el teu compte." };
+  const link = await resolveAttendanceLink(token);
+  if (!link) return { error: "Aquest enllaç ja no és vàlid" };
+  if (!link.concertIds.includes(concertId)) return { error: "Aquest concert no forma part de l'enllaç" };
+  const pool = db();
+  const band = (await pool.query("select id, members, crew from bands where id=$1", [link.bandId])).rows[0];
+  if (!band) return { error: "El grup ja no existeix" };
+  const members: Person[] = band.members || [];
+  const crew: Person[] = band.crew || [];
+  const member = [...members, ...crew].find((m) => normalize(m.name) === normalize(memberName));
+  if (!member) return { error: "Aquesta persona no és membre del grup" };
+  const memberLink = (await pool.query(
+    "select clerk_user_id from band_members where band_id=$1 and lower(member_name)=lower($2)",
+    [band.id, member.name]
+  )).rows[0];
+  if (memberLink && memberLink.clerk_user_id !== userId) {
+    return { error: `${member.name} ja té el compte vinculat — només pot fer-ho la mateixa persona.` };
+  }
+  return { userId, link, member, isCrew: crew.some((m) => normalize(m.name) === normalize(member.name)) };
+}
+
+// La cerca oberta d'aquest membre per a aquest concert — o se'n crea una.
+async function getOrCreateOpenRequest(link: ResolvedAttendanceLink, concertId: string, member: Person, isCrew: boolean): Promise<{ id: string; token: string | null }> {
+  const pool = db();
+  const existing = (await pool.query(
+    "select id, token from backup_requests where concert_id=$1 and lower(member_name)=lower($2) and status='oberta' order by created_at desc limit 1",
+    [concertId, member.name]
+  )).rows[0];
+  if (existing) return { id: existing.id, token: existing.token || null };
+  const id = "br" + Date.now();
+  await pool.query(
+    `insert into backup_requests (id, workspace_id, band_id, concert_id, member_name, instruments, role, note, proposed_by)
+     values ($1,$2,$3,$4,$5,$6,$7,'',$8)`,
+    [id, link.workspaceId, link.bandId, concertId, member.name, JSON.stringify(isCrew ? [] : instrumentsFor(member)), isCrew ? member.role || "" : "", member.name]
+  );
+  return { id, token: null };
+}
+
+// Comptes d'Escenari que coincideixen pel nom (mínim 2 lletres) — només
+// nom i instruments, mai el correu.
+export async function searchSubstituteCandidatesAction(token: string, q: string): Promise<{ clerkUserId: string; name: string; instruments: string[] }[]> {
+  const { userId } = await auth();
+  if (!userId) return [];
+  if (!(await resolveAttendanceLink(token))) return [];
+  const s = (q || "").trim();
+  if (s.length < 2) return [];
+  const { rows } = await db().query(
+    "select clerk_user_id, name, instruments from profiles where name ilike $1 and clerk_user_id <> $2 order by lower(name) limit 8",
+    [`%${s}%`, userId]
+  );
+  return rows.map((r) => ({ clerkUserId: r.clerk_user_id, name: r.name, instruments: r.instruments || [] }));
+}
+
+export async function proposeSubstituteAction(token: string, concertId: string, memberName: string, candidateClerkUserId: string): Promise<{ ok: boolean; error?: string; name?: string }> {
+  const ctx = await requireConfMember(token, concertId, memberName);
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+  const pool = db();
+  const cand = (await pool.query("select clerk_user_id, name from profiles where clerk_user_id=$1", [candidateClerkUserId])).rows[0];
+  if (!cand) return { ok: false, error: "Aquesta persona no té compte d'Escenari" };
+  const req = await getOrCreateOpenRequest(ctx.link, concertId, ctx.member, ctx.isCrew);
+  await pool.query(
+    `insert into backup_applications (request_id, clerk_user_id, message) values ($1,$2,$3)
+     on conflict (request_id, clerk_user_id) do nothing`,
+    [req.id, cand.clerk_user_id, `Proposat per ${ctx.member.name} des de l'enllaç de confirmació`]
+  );
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/conf/${token}`);
+  revalidatePath("/grup");
+  revalidatePath("/suplencies");
+  return { ok: true, name: cand.name };
+}
+
+export async function createSubstituteLinkAction(token: string, concertId: string, memberName: string): Promise<{ ok: boolean; error?: string; path?: string }> {
+  const ctx = await requireConfMember(token, concertId, memberName);
+  if ("error" in ctx) return { ok: false, error: ctx.error };
+  const req = await getOrCreateOpenRequest(ctx.link, concertId, ctx.member, ctx.isCrew);
+  let t = req.token;
+  if (!t) {
+    t = "s_" + randomBytes(10).toString("base64url");
+    await db().query("update backup_requests set token=$1 where id=$2", [t, req.id]);
+  }
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath(`/conf/${token}`);
+  return { ok: true, path: `/s/${t}` };
 }

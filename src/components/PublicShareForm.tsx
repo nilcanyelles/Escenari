@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Vehicle, Contact } from "@/lib/types";
-import type { RouteSheet } from "@/lib/route-sheet";
+import { rsItemHasContent, type RouteSheet } from "@/lib/route-sheet";
 import { formatDateFull, capitalize, today } from "@/lib/format";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import {
   submitShareFormAction, searchVenuesGooglePublicAction, getPlaceDetailsPublicAction,
   searchVenuesPublicAction, reverseGeocodePublicAction, type ShareInfoPayload,
@@ -11,6 +12,7 @@ import {
 import {
   type RsSection, useRouteSheetOps, SectionIcon, WarnIcon, XIcon, FieldRow, ContactRow, PhaseRow, HospRow, HotelBlock,
 } from "@/components/RouteSheetFields";
+import { searchContactsPublicAction, createContactPublicAction } from "@/app/f/contact-actions";
 import VenueSearchField from "@/components/VenueSearchField";
 import InlineDatePicker from "@/components/InlineDatePicker";
 import TimePeriodBubble from "@/components/TimePeriodBubble";
@@ -63,9 +65,9 @@ type ConcertLite = {
   exactTime: string;
 };
 
-// No suggeriments de contactes ja desats de l'agència — qui omple el
-// formulari extern no els ha de veure ni triar (seria una fuita de dades
-// cap a fora); vegeu ContactRow a RouteSheetFields.tsx.
+// Cap llista local de contactes: al formulari públic la cerca va per
+// l'enllaç (searchContactsPublicAction), que només arriba als contactes del
+// full de ruta i sense dades sensibles — vegeu f/contact-actions.ts.
 const NO_CONTACTS: Contact[] = [];
 
 type Section = "info" | RsSection;
@@ -118,10 +120,17 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
   const [exactTime, setExactTime] = useState(concert.exactTime);
   const [rs, setRs] = useState<RouteSheet>(routeSheet);
   const { updateSection, addItem, removeItem, dragHandlers } = useRouteSheetOps(setRs);
-  // Només el formulari públic de regidor demana confirmació abans
-  // d'eliminar un camp — el normal es queda tal com estava (sense).
+  // Eliminar una fila que ja té alguna cosa escrita demana confirmació
+  // (diàleg propi, mai el del navegador); una de buida s'esborra
+  // directament. El mateix per al document de contrarider ja penjat.
+  const [pendingRemove, setPendingRemove] = useState<{ kind: "item"; section: RsSection; index: number } | { kind: "file" } | null>(null);
   function confirmedRemove(section: RsSection, i: number) {
-    if (window.confirm("Segur que vols eliminar aquest camp?")) removeItem(section, i);
+    const item = (rs[section] as unknown[])[i];
+    if (rsItemHasContent(section, item, { address, exactTime })) setPendingRemove({ kind: "item", section, index: i });
+    else removeItem(section, i);
+  }
+  function removeCounterFile() {
+    updateSection("tecnic", (arr) => arr.map((x, xi) => xi === counterRiderIndex ? { ...x, counterFileUrl: undefined, counterFileMime: undefined, counterFileName: undefined } : x));
   }
 
   // Contrarider: el promotor hi penja el document (mai l'estat/notes, que
@@ -177,6 +186,7 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
   const detailsAction = useMemo(() => (id: string) => getPlaceDetailsPublicAction(token, id), [token]);
   const addressSearchAction = useMemo(() => (q: string) => searchVenuesPublicAction(token, q), [token]);
   const reverseGeocodeAction = useMemo(() => (lat: number, lon: number) => reverseGeocodePublicAction(token, lat, lon), [token]);
+  const contactSearchAction = useMemo(() => (q: string) => searchContactsPublicAction(token, q), [token]);
   const fieldRowCtx = {
     venue: info.venue, onVenueCityChange: handleVenueCityChange, address, onAddressChange: setAddress, vehicles,
     vehiclesEditable: false, contraRiderEditable: false,
@@ -555,6 +565,8 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
             {rs.contacts.map((ct, i) => (
               <ContactRow
                 key={i} item={ct} contacts={NO_CONTACTS}
+                searchAction={contactSearchAction}
+                onCreateContact={(it) => createContactPublicAction(token, it)}
                 onChange={(patch) => updateSection("contacts", (arr) => arr.map((x, xi) => xi === i ? { ...x, ...patch } : x))}
                 onRemove={() => confirmedRemove("contacts", i)}
                 dragProps={dragHandlers("contacts", i)}
@@ -674,10 +686,7 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
                   <PaperclipIcon />
                   <span>{counterRiderItem.counterFileName}</span>
                   <button type="button" className="pf-counter-file-remove" title="Elimina el document"
-                    onClick={() => {
-                      if (!window.confirm("Segur que vols eliminar aquest document?")) return;
-                      updateSection("tecnic", (arr) => arr.map((x, xi) => xi === counterRiderIndex ? { ...x, counterFileUrl: undefined, counterFileMime: undefined, counterFileName: undefined } : x));
-                    }}
+                    onClick={() => setPendingRemove({ kind: "file" })}
                   ><XIcon /></button>
                 </div>
               )}
@@ -692,7 +701,7 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
   return (
     <div className="pf-screen">
       <div className="pf-container">
-        <div className="pf-brand">ESCENARI</div>
+        <div className="pf-brand"><img className="pf-logo" src="/logo-escenari.png" alt="Escenari" /></div>
 
         <div className="pf-hero">
           <div className="pf-hero-band">{concert.bandName}</div>
@@ -729,6 +738,19 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
           </>
         )}
       </div>
+      {pendingRemove && (
+        <ConfirmDialog
+          title={pendingRemove.kind === "file" ? "Eliminar el document?" : "Eliminar aquest camp?"}
+          message={pendingRemove.kind === "file" ? "El document de contrarider es traurà del full de ruta." : "Aquest camp ja té informació escrita. Segur que el vols eliminar?"}
+          confirmLabel="Elimina"
+          onCancel={() => setPendingRemove(null)}
+          onConfirm={() => {
+            if (pendingRemove.kind === "file") removeCounterFile();
+            else removeItem(pendingRemove.section, pendingRemove.index);
+            setPendingRemove(null);
+          }}
+        />
+      )}
     </div>
   );
 }

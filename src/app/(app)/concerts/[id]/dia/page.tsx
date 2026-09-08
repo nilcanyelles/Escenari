@@ -1,10 +1,11 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
+import BackLink from "@/components/BackLink";
 import { getBands, getConcerts } from "@/lib/data";
 import { requireManager } from "@/lib/current-user";
 import { formatDateFull, formatConcertTime, capitalize } from "@/lib/format";
 import DiaTopActions from "@/components/DiaTopActions";
 import DiaBody from "@/components/DiaBody";
+import { getLinkedMembers } from "@/lib/group-data";
 
 export const dynamic = "force-dynamic";
 
@@ -20,12 +21,13 @@ export default async function DiaPage({ params }: { params: Promise<{ id: string
   const c = concerts.find((x) => x.id === id);
   if (!c) notFound();
   const band = bands.find((b) => b.id === c.bandId);
+  const linkedNames = band ? (await getLinkedMembers(band.id)).map((m) => m.memberName) : [];
   const mapsQuery = encodeURIComponent([c.venue, c.address, c.city].filter(Boolean).join(", "));
 
   return (
     <div className="dia">
       <div className="dia-top">
-        <Link href={`/concerts/${id}`} className="cd-back">← Concert</Link>
+        <BackLink href={`/concerts/${id}`}>Concert</BackLink>
         <div className="dia-top-right">
           <span className="t-dim" style={{ fontSize: 12 }}>{c.bandName}</span>
           <DiaTopActions concert={c} band={band || null} />
@@ -46,7 +48,7 @@ export default async function DiaPage({ params }: { params: Promise<{ id: string
         <div className="cd-poster-date">{capitalize(formatDateFull(c.date))}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
       </div>
 
-      <DiaBody concert={c} band={band || null} editable />
+      <DiaBody concert={c} band={band || null} editable linkedNames={linkedNames} />
     </div>
   );
 }

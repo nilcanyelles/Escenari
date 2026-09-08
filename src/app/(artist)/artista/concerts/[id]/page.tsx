@@ -3,6 +3,7 @@ import ArtistConcertDetail from "@/components/ArtistConcertDetail";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
 import { getSetlists } from "@/lib/material-data";
+import { getLinkedMembers } from "@/lib/group-data";
 import { memberPerms } from "@/lib/perms";
 import { today } from "@/lib/format";
 import { normalize } from "@/lib/text";
@@ -33,7 +34,7 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
   const myAmount = payoutKey !== undefined ? payouts[payoutKey] : null;
 
   // Setlists del grup i si aquest membre pot assignar-les a l'esdeveniment.
-  const setlists = band ? await getSetlists(band.id) : [];
+  const [setlists, linkedMembers] = band ? await Promise.all([getSetlists(band.id), getLinkedMembers(band.id)]) : [[], []];
   const me = (band?.members || []).find((m) => normalize(m.name) === normalize(myName)) || null;
   const canSetlists = memberPerms(me).setlists;
 
@@ -56,6 +57,7 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
       photosByName={photosByName}
       setlists={setlists}
       canSetlists={canSetlists}
+      linkedNames={linkedMembers.map((m) => m.memberName)}
       today={today()}
     />
   );

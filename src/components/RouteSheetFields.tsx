@@ -648,20 +648,29 @@ export function FieldRow({ section, item, ctx, onChange, onRemove, dragProps }: 
 // contactes ja desats — el formulari públic hi passa sempre una llista
 // buida, perquè qui l'omple des de fora no en veu ni en tria cap: seria
 // una fuita de dades), empresa i telèfon.
-export function ContactRow({ item, contacts, onChange, onRemove, dragProps }: {
+export function ContactRow({ item, contacts, onChange, onRemove, dragProps, searchAction, onCreateContact }: {
   item: { role: string; name: string; phone: string; company: string };
   contacts: Contact[];
   onChange: (patch: Partial<{ role: string; name: string; phone: string; company: string }>) => void;
   onRemove?: () => void;
   dragProps?: { onDragStart: () => void; onDragOver: (e: React.DragEvent) => void; onDrop: (e: React.DragEvent) => void; onDragEnd: () => void };
+  // Font remota de contactes (formulari públic: cerca validada per l'enllaç).
+  searchAction?: (q: string) => Promise<Contact[]>;
+  // Crea un contacte nou (a Contactes de l'agència) amb el que hi ha escrit
+  // a la fila, i omple la fila amb el resultat.
+  onCreateContact?: (item: { role: string; name: string; phone: string; company: string }) => Promise<Contact | null>;
 }) {
   return (
     <div className="rs-contact-row" {...dragProps}>
       {dragProps && <DragHandle onDragStart={dragProps.onDragStart} />}
       <input className="field-input" type="text" placeholder="Càrrec" value={item.role} onChange={(e) => onChange({ role: e.target.value })} />
-      <ContactAutocomplete className="field-input" placeholder="Nom" value={item.name} contacts={contacts}
+      <ContactAutocomplete className="field-input" placeholder="Nom" value={item.name} contacts={contacts} searchAction={searchAction}
         onNameChange={(v) => onChange({ name: v })}
-        onPick={(c) => onChange({ name: c.name, role: c.role || item.role, phone: c.phone, company: c.company })} />
+        onPick={(c) => onChange({ name: c.name, role: c.role || item.role, phone: c.phone || item.phone, company: c.company || item.company })}
+        onCreate={onCreateContact ? async (name) => {
+          const c = await onCreateContact({ ...item, name });
+          if (c) onChange({ name: c.name, role: c.role || item.role, phone: c.phone || item.phone, company: c.company || item.company });
+        } : undefined} />
       <input className="field-input" type="text" placeholder="Empresa" value={item.company} onChange={(e) => onChange({ company: e.target.value })} />
       <input className="field-input" type="text" placeholder="Telèfon" value={item.phone} onChange={(e) => onChange({ phone: e.target.value })} />
       {onRemove && <button type="button" className="rs-mini-btn danger" title="Elimina" onClick={onRemove}><XIcon /></button>}

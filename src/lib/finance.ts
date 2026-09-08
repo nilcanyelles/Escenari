@@ -1,5 +1,14 @@
 import { db } from "./db";
 
+// Qui es fa càrrec d'una despesa de concert: l'agència (surt de la seva
+// comissió), el grup (del repartiment de músics i crew), tots dos (del
+// caixet abans de calcular res) o altres (promotor, sala... — no és cap
+// cost del bolo).
+export type ExpensePayer = "agencia" | "grup" | "ambdos" | "altre";
+export const EXPENSE_PAYER_LABELS: Record<ExpensePayer, string> = {
+  agencia: "Agència", grup: "Grup", ambdos: "Agència i grup", altre: "Altres",
+};
+
 export type Transaction = {
   id: string;
   kind: "ingres" | "despesa";
@@ -11,6 +20,8 @@ export type Transaction = {
   fund: string;
   notes: string;
   receiptFileId: string | null;
+  // Buit a les despeses d'abans d'existir el camp (vegeu ConcertDetailView).
+  paidBy?: ExpensePayer | "";
 };
 
 export const INCOME_CATEGORIES = ["Caixet", "Propines", "Marxandatge", "Subvenció", "Altres ingressos"];
@@ -40,5 +51,6 @@ export async function getTransactions(workspaceId: string): Promise<Transaction[
     fund: r.fund,
     notes: r.notes,
     receiptFileId: r.receipt_file_id || null,
+    paidBy: (r.paid_by as ExpensePayer | "") || "",
   }));
 }

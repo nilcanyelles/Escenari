@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
 import { songDurationSecs, formatTotalDuration } from "@/lib/material-types";
 import type { LinkedMember } from "@/lib/group-data";
@@ -198,6 +199,14 @@ function AccessBox({ band, linkedMembers, editors, kind }: { band: Band; linkedM
   );
 }
 
+// Rider "document": un PDF penjat tal qual (una sola pàgina d'annex i cap
+// altre contingut) — no s'edita, només es pot obrir, descarregar, compartir
+// i eliminar.
+function isFileRider(r: Rider): boolean {
+  const c = r.content;
+  return c.pages.length === 1 && !!c.pages[0].fileUrl && !c.inputs.some((i) => i.source.trim()) && c.stage.items.length === 0 && !c.intro.trim();
+}
+
 export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isManager }: {
   band: Band;
   riders: Rider[];
@@ -209,6 +218,8 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
   const router = useRouter();
   const [creating, setCreating] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Rider | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   async function handleNewRider() {
     setCreating(true);
@@ -270,15 +281,22 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
         <div className="panel-header-row" style={{ marginBottom: 12 }}>
           <div className="panel-title">Riders tècnics</div>
           {canEdit && (
-            <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.3} baseColor="#8b7bff" lineColor="#ffffff" disabled={creating} onClick={handleNewRider}>
-              {creating ? "Creant…" : "+ Nou rider"}
-            </SpecularButton>
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <button type="button" className="btn-outline" disabled={creating} onClick={() => fileInput.current?.click()} title="Puja un PDF ja fet: es desa com a rider tal qual">
+                ⬆ Puja un rider (PDF)
+              </button>
+              <input ref={fileInput} type="file" hidden accept="application/pdf,.pdf" multiple
+                onChange={(e) => { const fs = Array.from(e.target.files || []); if (fs.length) handleDropFiles(fs); e.target.value = ""; }} />
+              <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.3} baseColor="#8b7bff" lineColor="#ffffff" disabled={creating} onClick={handleNewRider}>
+                {creating ? "Creant…" : "+ Nou rider"}
+              </SpecularButton>
+            </div>
           )}
         </div>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
           El rider és el document que reps la sala o el festival abans del bolo: escenari, entrades de so, backline,
           monitors i hospitalitat. Crea&apos;n un per cada format del grup (banda completa, acústic…) i assigna&apos;l a cada concert.
-          {canEdit && <> També pots arrossegar aquí un PDF ja fet per desar-lo directament com a rider.</>}
+          {canEdit && <> Si ja el tens fet, puja&apos;l (o arrossega&apos;l aquí) i es desa tal qual amb el nom del document: es pot obrir, descarregar i compartir, però no editar.</>}
         </div>
         {dragOver && <div className="studio-dropzone-hint">Deixa anar per crear un rider amb aquest document (PDF)</div>}
         {riders.length === 0 ? (
@@ -287,31 +305,41 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
           <div className="material-list">
             {riders.map((r) => {
               const channels = r.content.inputs.filter((i) => i.source.trim()).length;
+              const fileRider = isFileRider(r);
               return (
                 <div key={r.id} className="material-card">
-                  <div className="material-card-icon">🎚</div>
+                  <div className="material-card-icon">{fileRider ? "📄" : "🎚"}</div>
                   <div className="material-card-main">
                     <div className="member-name">{r.name}</div>
                     <div className="t-dim" style={{ fontSize: 12 }}>
-                      {channels} canals · {r.content.stage.items.length} elements a l&apos;escenari · {r.content.stage.widthM}×{r.content.stage.depthM} m
+                      {fileRider
+                        ? <>Document penjat · {r.content.pages[0].fileName || "PDF"}</>
+                        : <>{channels} canals · {r.content.stage.items.length} elements a l&apos;escenari · {r.content.stage.widthM}×{r.content.stage.depthM} m</>}
                     </div>
                   </div>
                   <div className="material-card-actions">
-                    {canEdit && <button type="button" className="btn-outline" onClick={() => router.push(`/rider/${r.id}`)}>Edita</button>}
+                    {canEdit && !fileRider && <button type="button" className="btn-outline" onClick={() => router.push(`/rider/${r.id}`)}>Edita</button>}
+                    {fileRider && (
+                      <a className="btn-outline" style={{ textDecoration: "none" }} href={`/api/rider-pdf/${r.publicToken}?dl=1`} download title="Descarrega el PDF">Descarrega</a>
+                    )}
                     <ShareBtns token={r.publicToken} what="Rider tècnic" bandName={band.name} />
                     {canEdit && (
-                      <button type="button" className="row-delete-btn" title="Elimina el rider"
-                        onClick={async () => {
-                          if (!confirm(`Eliminar el rider "${r.name}"?`)) return;
-                          await deleteRiderAction(band.id, r.id);
-                          router.refresh();
-                        }}>✕</button>
+                      <button type="button" className="row-delete-btn" title="Elimina el rider" onClick={() => setPendingDelete(r)}>✕</button>
                     )}
                   </div>
                 </div>
               );
             })}
           </div>
+        )}
+        {pendingDelete && (
+          <ConfirmDialog
+            title="Eliminar el rider?"
+            message={<>S&apos;eliminarà <strong>{pendingDelete.name}</strong>. L&apos;enllaç compartit deixarà de funcionar.</>}
+            confirmLabel="Elimina"
+            onCancel={() => setPendingDelete(null)}
+            onConfirm={async () => { await deleteRiderAction(band.id, pendingDelete.id); setPendingDelete(null); router.refresh(); }}
+          />
         )}
       </div>
       {isManager && (

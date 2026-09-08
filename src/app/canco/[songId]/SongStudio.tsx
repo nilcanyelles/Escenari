@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import type { Song } from "@/lib/songs";
 import { convertChordLyrics } from "@/lib/chords-detect";
 import { instrumentIconFor } from "@/lib/tags";
@@ -287,7 +287,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
     <div className="studio">
       {/* Barra superior */}
       <div className="studio-topbar">
-        <Link href={backHref} className="cd-back">← Surt</Link>
+        <BackLink href={backHref}>Surt</BackLink>
         <div className="studio-band-name">{bandName}</div>
         <div className="studio-name studio-name-display">{form.title || "Sense títol"}</div>
         <div className="studio-topbar-right">

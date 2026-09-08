@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import { saveConcertAction, createEventAction } from "@/app/(app)/concerts/actions";
 import { personPhotoDataUri, bandPhotoDataUri } from "@/lib/tags";
+import { normalize } from "@/lib/text";
+import { listLinkedMemberNamesAction } from "@/app/(app)/grup/actions";
+import VerifiedTick from "@/components/VerifiedTick";
 import InlineDatePicker from "@/components/InlineDatePicker";
 import TimePeriodBubble from "@/components/TimePeriodBubble";
 import VenueSearchField from "@/components/VenueSearchField";
@@ -54,6 +57,16 @@ export default function NewEventButton({ bands, selectedBandId = "", allowBolo =
   const portal = (node: React.ReactNode) => (mounted ? createPortal(node, document.body) : null);
 
   const band = bands.find((b) => b.id === bandId) || null;
+  // Qui té compte d'Escenari vinculat (tick lila als convidats) — només es
+  // consulta quan el popup és obert.
+  const [linkedNames, setLinkedNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (step === "closed" || !bandId) return;
+    let alive = true;
+    listLinkedMemberNamesAction(bandId).then((n) => { if (alive) setLinkedNames(n); }).catch(() => {});
+    return () => { alive = false; };
+  }, [bandId, step]);
+  const linkedSet = new Set(linkedNames.map(normalize));
 
   // Crea el bolo amb el grup triat a "bandId" — es fa servir tant si es crea
   // de seguida (grup ja decidit) com des del pas d'escollir grup.
@@ -223,7 +236,7 @@ export default function NewEventButton({ bands, selectedBandId = "", allowBolo =
                       <button key={m.name} type="button" className={"ne-invitee" + (on ? " on" : "")}
                         onClick={() => setInvited((prev) => { const n = new Set(prev); if (on) n.delete(m.name); else n.add(m.name); return n; })}>
                         <img src={personPhotoDataUri(m.name)} alt="" />
-                        <span>{m.name.split(" ")[0]}</span>
+                        <span>{m.name.split(" ")[0]}{linkedSet.has(normalize(m.name)) && <VerifiedTick size={11} />}</span>
                         <i>{on ? "✓" : ""}</i>
                       </button>
                     );

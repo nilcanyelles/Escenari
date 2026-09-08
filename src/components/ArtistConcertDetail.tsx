@@ -13,16 +13,19 @@ import { rsCompletionPercent } from "@/lib/route-sheet";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import RouteSheetPreviewDoc from "@/components/RouteSheetPreviewDoc";
 import AttendanceButtons from "@/app/(artist)/artista/AttendanceButtons";
+import VerifiedTick from "@/components/VerifiedTick";
+import BackLink from "@/components/BackLink";
 
 const KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", reunio: "Reunió", altre: "Esdeveniment" };
 
 // Fitxa del concert per al músic: mateixa portada de pòster que el gestor,
 // però tot de només lectura — informació, full de ruta (amb PDF), assistència
 // i, de facturació, només el seu caixet.
-export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, photosByName = {}, setlists = [], canSetlists = false, today }: {
+export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, photosByName = {}, setlists = [], canSetlists = false, linkedNames = [], today }: {
   concert: Concert;
   band: Band | null;
   myName: string;
+  linkedNames?: string[]; // membres amb compte d'Escenari vinculat (tick lila)
   myAmount: number | null; // null = el grup no mostra caixets
   showFees: boolean;
   photosByName?: Record<string, string>;
@@ -42,6 +45,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
   const rsPct = rsCompletionPercent(concert);
   const isFuture = concert.date >= today;
   const myAnswer = attendance[myName] === "yes" ? "yes" : attendance[myName] === "no" ? "no" : null;
+  const linkedSet = new Set(linkedNames.map(normalize));
 
   const infoRows: [string, string][] = [
     ["Tipus", KIND_LABELS[concert.kind || "bolo"] || "Bolo"],
@@ -57,7 +61,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
       <div className="glow-blooms" aria-hidden="true"></div>
 
       <div className="cd-topbar">
-        <Link href="/artista/concerts" className="cd-back">← Concerts</Link>
+        <BackLink href="/artista/concerts">Concerts</BackLink>
       </div>
 
       {/* Pòster */}
@@ -170,7 +174,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
                 <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "")}>
                   <img className="member-photo backup-photo" src={photosByName[normalize(m.name)] ? `/api/file/${photosByName[normalize(m.name)]}` : personPhotoDataUri(m.name)} alt="" />
                   <div className="cd-att-main">
-                    <div className="member-name">{m.name}{m.name === myName ? " (tu)" : ""}</div>
+                    <div className="member-name">{m.name}{m.name === myName ? " (tu)" : ""}{linkedSet.has(normalize(m.name)) && <VerifiedTick size={12} />}</div>
                     <div className="member-instruments">
                       {inss.slice(0, 3).map((ins) => {
                         const icon = instrumentIconFor(ins);

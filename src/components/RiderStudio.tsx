@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import type { RiderContent, StageItem } from "@/lib/material-types";
 import type { Person } from "@/lib/types";
 import { STAGE_LIBRARY, StageItemSvg, stageKindDef, isInstrumentKind } from "@/lib/stage-svg";
@@ -803,7 +803,7 @@ export default function RiderStudio({
   return (
     <div className="studio">
       <div className="studio-topbar">
-        <Link href={backHref} className="cd-back">←{mode === "counter" ? " Torna al rider" : " Surt"}</Link>
+        <BackLink href={backHref}>{mode === "counter" ? "Torna al rider" : "Surt"}</BackLink>
         <div className="studio-band-name">{bandName}</div>
         <input className="rider-name-input studio-name" value={name} onChange={(e) => setName(e.target.value)} disabled={mode === "counter"} placeholder="Nom del rider" />
         <div className="studio-topbar-right">

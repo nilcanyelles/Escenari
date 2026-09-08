@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import BackLink from "@/components/BackLink";
 import { useRouter } from "next/navigation";
 import type { Band, SocialLinks, SocialPlatform, SocialStats, SocialTracking } from "@/lib/types";
 import {
@@ -199,7 +199,7 @@ export default function SocialsView({ band, snapshots: initialSnapshots, today, 
   return (
     <div className="sx">
       <div className="sx-top">
-        <Link href="/grup" className="cd-back">← {band.name}</Link>
+        <BackLink href="/grup">{band.name}</BackLink>
         <h1 className="sx-title">Xarxes socials</h1>
         <div className="spacer"></div>
         <span className="t-dim" style={{ fontSize: 12 }}>

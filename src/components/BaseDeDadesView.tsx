@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Band, Concert, Invoice, ClientDetails } from "@/lib/types";
 import { formatDate, formatCurrency, statusColors, pad2, capitalize, MONTH_FULL, WEEKDAY_SHORT, today } from "@/lib/format";
 import { tagColors } from "@/lib/tags";
-import { deleteConcertAction } from "@/app/(app)/concerts/actions";
+import { DeleteConcertBtn } from "@/components/ConcertsView";
 import {
   updateConcertFieldAction, cycleConcertStatusAction, updateBandFieldAction, upsertClientDetailsAction,
 } from "@/app/(app)/base-de-dades/actions";
@@ -168,10 +168,7 @@ export default function BaseDeDadesView({
                   </div>
                   <div className="t-dim">{invByConcert[r.id] || "—"}</div>
                   <div className="row-actions">
-                    <button className="row-delete-btn" title="Eliminar concert" aria-label="Eliminar concert"
-                      onClick={async () => { if (!confirm("Segur que vols eliminar aquest concert?")) return; await deleteConcertAction(r.id); refresh(); }}>
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-                    </button>
+                    <DeleteConcertBtn id={r.id} label={`${formatDate(r.date)} · ${r.bandName}`} onDeleted={refresh} />
                   </div>
                 </div>
               );

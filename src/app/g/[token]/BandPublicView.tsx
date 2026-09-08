@@ -10,6 +10,9 @@ import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/component
 import { updateBandBioAction, updateBandActiveSinceAction } from "../actions";
 import BandShareModal from "./BandShareModal";
 import type { PublicMember } from "@/lib/band-public";
+import VerifiedTick from "@/components/VerifiedTick";
+import { logoRatio } from "@/lib/logo";
+import BackLink from "@/components/BackLink";
 
 const ICONS: Record<SocialPlatform, React.ReactNode> = {
   instagram: <InstagramIcon />, tiktok: <TiktokIcon />, spotify: <SpotifyIcon />, youtube: <YoutubeIcon />,
@@ -29,7 +32,7 @@ function MemberRow({ m, c1, c2 }: { m: PublicMember; c1: string; c2: string }) {
     <div className="pv-member-row">
       <img className="pv-member-row-photo" src={m.photoFileId ? `/api/file/${m.photoFileId}` : personPhotoDataUriColored(m.name, c1, c2)} alt="" />
       <div className="pv-member-row-main">
-        <span className="pv-member-row-name">{m.name}</span>
+        <span className="pv-member-row-name">{m.name}{m.linked && <VerifiedTick size={12} />}</span>
         <span className="pv-member-row-sub">
           {m.instruments.length ? m.instruments.slice(0, 2).map((ins) => {
             const icon = instrumentIconFor(ins);
@@ -108,9 +111,7 @@ export default function BandPublicView({ data, canEdit, backHref }: {
       <div className="pv-topbar">
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           {backHref && (
-            <button type="button" className="cd-back" style={{ border: "none", background: "transparent", cursor: "pointer", font: "inherit" }} onClick={() => router.push(backHref)}>
-              ← Torna al grup
-            </button>
+            <BackLink onClick={() => router.push(backHref)}>Torna al grup</BackLink>
           )}
           <span className="pf-brand" style={{ margin: 0 }}>ESCENARI</span>
         </div>
@@ -120,7 +121,7 @@ export default function BandPublicView({ data, canEdit, backHref }: {
       <div className="pv-grid">
         {/* Esquerra: logo i identitat */}
         <aside className="pv-side">
-          <img className="gp-logo" src={logo} alt={data.name} />
+          <img className="gp-logo" style={{ aspectRatio: String(logoRatio(data.logoAspect)) }} src={logo} alt={data.name} />
           <h1 className="pv-name">{data.name}</h1>
           {data.city && <span className="t-dim" style={{ fontSize: 13 }}>{data.city}</span>}
           {data.tags.length > 0 && (
