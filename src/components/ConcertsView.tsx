@@ -282,7 +282,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={isMgr} defaultDate={today} />}
       </div>
 
-      {importOpen && <ImportConcertsModal onClose={() => setImportOpen(false)} />}
+      {importOpen && <ImportConcertsModal bands={bands} onClose={() => setImportOpen(false)} />}
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>

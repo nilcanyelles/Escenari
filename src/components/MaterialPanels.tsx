@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Band, Concert } from "@/lib/types";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
-import { songDurationSecs, formatTotalDuration } from "@/lib/material-types";
+import { songDurationSecs, formatTotalDuration, isFileRider } from "@/lib/material-types";
 import type { LinkedMember } from "@/lib/group-data";
 import { emptyRiderContent } from "@/lib/material-types";
 import type { Song as LibrarySong } from "@/lib/songs";
@@ -198,15 +198,6 @@ function AccessBox({ band, linkedMembers, editors, kind }: { band: Band; linkedM
     </div>
   );
 }
-
-// Rider "document": un PDF penjat tal qual (una sola pàgina d'annex i cap
-// altre contingut) — no s'edita, només es pot obrir, descarregar, compartir
-// i eliminar.
-function isFileRider(r: Rider): boolean {
-  const c = r.content;
-  return c.pages.length === 1 && !!c.pages[0].fileUrl && !c.inputs.some((i) => i.source.trim()) && c.stage.items.length === 0 && !c.intro.trim();
-}
-
 export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isManager }: {
   band: Band;
   riders: Rider[];
@@ -221,10 +212,12 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
   const [pendingDelete, setPendingDelete] = useState<Rider | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
-  async function handleNewRider() {
+  function handleNewRider() {
+    // No es crea cap entrada aquí: s'obre l'editor en mode "nou" i el
+    // rider no es desa fins que l'usuari clica "Fet". Si surt abans, no
+    // queda res a la llista.
     setCreating(true);
-    const { id } = await saveRiderAction({ id: null, bandId: band.id, name: "Rider tècnic", content: emptyRiderContent() });
-    router.push(`/rider/${id}`);
+    router.push(`/rider/new?band=${band.id}`);
   }
 
   // Un "drag" intern de l'app mai porta fitxers de debò — "Files" a
@@ -305,7 +298,7 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
           <div className="material-list">
             {riders.map((r) => {
               const channels = r.content.inputs.filter((i) => i.source.trim()).length;
-              const fileRider = isFileRider(r);
+              const fileRider = isFileRider(r.content);
               return (
                 <div key={r.id} className="material-card">
                   <div className="material-card-icon">{fileRider ? "📄" : "🎚"}</div>
@@ -335,7 +328,7 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
         {pendingDelete && (
           <ConfirmDialog
             title="Eliminar el rider?"
-            message={<>S&apos;eliminarà <strong>{pendingDelete.name}</strong>. L&apos;enllaç compartit deixarà de funcionar.</>}
+            message={<>S&apos;eliminarà <strong>{pendingDelete.name}</strong>.</>}
             confirmLabel="Elimina"
             onCancel={() => setPendingDelete(null)}
             onConfirm={async () => { await deleteRiderAction(band.id, pendingDelete.id); setPendingDelete(null); router.refresh(); }}

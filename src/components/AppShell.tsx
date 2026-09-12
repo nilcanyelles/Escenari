@@ -132,6 +132,18 @@ export default function AppShell({
     });
   }
 
+  // Anar a Agència també desselecciona el grup (com "tots els grups") —
+  // si no, Agenda/Concerts/Estadístiques es quedaven filtrats pel grup
+  // d'abans en comptes de mostrar la vista general de tota l'agència.
+  function goToAgencia() {
+    setLocalBand("");
+    setBandCookie("");
+    startTransition(() => {
+      router.push(routeBase + "/agencia");
+      router.refresh();
+    });
+  }
+
   function ProfileButton() {
     return (
       <button className="profile-btn" onClick={() => setProfileOpen((v) => !v)}>
@@ -144,8 +156,8 @@ export default function AppShell({
 
   function BandRailItem({ b }: { b: ShellBand }) {
     // A Agència res del grup queda marcat com a actiu: l'única fila
-    // seleccionada és la de l'agència, encara que quedi un grup seleccionat
-    // de fons (la cookie no es toca en anar-hi).
+    // seleccionada és la de l'agència (per si s'hi arriba sense passar per
+    // goToAgencia, p. ex. escrivint la URL directament amb una cookie vella).
     const active = activeBand === b.id && !onAgenciaRoute;
     return (
       <button
@@ -183,7 +195,7 @@ export default function AppShell({
       <button
         type="button"
         className={"band-rail-item band-rail-all" + (activeBand === "" || onAgenciaRoute ? " active" : "")}
-        onClick={() => { if (agency) { router.push(routeBase + "/agencia"); } else { selectBand(""); } }}
+        onClick={() => { if (agency) { goToAgencia(); } else { selectBand(""); } }}
         title={agency?.name ? `${agency.name} — Agència` : "Tots els grups"}
       >
         {agency?.logo ? (
@@ -219,7 +231,7 @@ export default function AppShell({
           <span className="band-chip-icon">{l.icon ?? l.emoji}</span> {l.label}
         </Link>
       ))}
-      <button type="button" className={"band-chip" + (activeBand === "" || onAgenciaRoute ? " active" : "")} onClick={() => { if (agency) { router.push(routeBase + "/agencia"); } else { selectBand(""); } }}>
+      <button type="button" className={"band-chip" + (activeBand === "" || onAgenciaRoute ? " active" : "")} onClick={() => { if (agency) { goToAgencia(); } else { selectBand(""); } }}>
         {agency?.logo && <img src={agency.logo} alt="" />}{agency?.name || "Tots"}
       </button>
       {(subLinks || []).map((l) => (
@@ -275,7 +287,7 @@ export default function AppShell({
             {agency?.logo && (
               <>
                 <span className="page-header-sep">/</span>
-                <Link href={routeBase + "/agencia"} title={agency.name || "Agència"}>
+                <Link href={routeBase + "/agencia"} title={agency.name || "Agència"} onClick={() => { setLocalBand(""); setBandCookie(""); }}>
                   <img className="brand-mark page-header-agency" src={agency.logo} alt={agency.name} />
                 </Link>
               </>

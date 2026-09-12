@@ -62,6 +62,23 @@ export type Rider = {
   updatedAt: string;
 };
 
+// Rider "document": un PDF penjat tal qual (una sola pàgina d'annex amb
+// fitxer i cap altre contingut). No s'edita ni se'n genera cap PDF nou des
+// de l'app — es serveix el fitxer original.
+export function isFileRider(c: RiderContent): boolean {
+  return c.pages.length === 1 && !!c.pages[0].fileUrl
+    && !c.inputs.some((i) => i.source.trim())
+    && c.stage.items.length === 0
+    && !c.intro.trim();
+}
+
+// L'id de fitxer del document d'un rider-document (o null si no ho és).
+export function riderFileId(c: RiderContent): string | null {
+  if (!isFileRider(c)) return null;
+  const m = /\/api\/file\/([^/?#]+)/.exec(c.pages[0].fileUrl || "");
+  return m ? m[1] : null;
+}
+
 export type RiderApproval = {
   id: string;
   concertId: string;
@@ -92,12 +109,12 @@ export type BandEditor = { clerkUserId: string; canRiders: boolean; canSetlists:
 export function emptyRiderContent(): RiderContent {
   return {
     intro: "",
-    contacts: [{ role: "Contacte principal", name: "", phone: "", email: "" }],
+    contacts: [{ role: "", name: "", phone: "", email: "" }],
     stage: { widthM: 8, depthM: 6, items: [] },
     inputs: [{ ch: "1", source: "", mic: "", stand: "", notes: "" }],
     outputs: [],
-    monitors: [],
-    backline: [],
+    monitors: [{ who: "", kind: "Cunya", notes: "" }],
+    backline: [{ item: "", providedBy: "organitzacio", notes: "" }],
     audio: "",
     lighting: "",
     power: "",

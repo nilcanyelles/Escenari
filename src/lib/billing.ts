@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { db } from "./db";
 import { PLANS, isPlanKey, planForFeature, type PlanKey, type Feature, type BillingInfo } from "./plans";
 
@@ -65,12 +66,25 @@ export async function requireFeature(workspaceId: string, feature: Feature) {
   if (!r.allowed) throw new Error(`Aquesta funció necessita el pla ${PLANS[r.required].label}`);
 }
 
+// En local (localhost) no hi ha límit de grups, per poder provar-ho tot
+// sense haver de tocar el pla — a producció (escenari.app) el "host" mai és
+// localhost, així que aquí no afecta ningú.
+async function isLocalhost(): Promise<boolean> {
+  try {
+    const host = (await headers()).get("host") || "";
+    return host.startsWith("localhost") || host.startsWith("127.0.0.1");
+  } catch {
+    return false;
+  }
+}
+
 export async function groupCap(workspaceId: string): Promise<{ count: number; cap: number | null; reached: boolean }> {
   const [b, { rows }] = await Promise.all([
     getWorkspaceBilling(workspaceId),
     db().query("select count(*)::int as n from bands where workspace_id=$1", [workspaceId]),
   ]);
   const count = rows[0].n as number;
+  if (await isLocalhost()) return { count, cap: null, reached: false };
   const cap = b.caps.groups;
   return { count, cap, reached: cap != null && count >= cap };
 }

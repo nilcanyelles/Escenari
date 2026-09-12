@@ -14,13 +14,15 @@ import type { ShareLink } from "@/lib/share-data";
 import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAction, deleteRiderApprovalAction } from "@/app/(app)/grup/material-actions";
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
-import { shareLinkStatus } from "@/lib/share-data";
+import { shareLinkStatus, shareLinkCodeStatus } from "@/lib/share-data";
 import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyPctAction, repeatConcertAction, setSetlistHighlightsAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
-import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction } from "@/app/(app)/concerts/share-actions";
+import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction, setShareLinkCodeAction, clearShareLinkCodeAction, updateShareLinkRecipientAction, type CodeValidity } from "@/app/(app)/concerts/share-actions";
+import { ALL_SHARE_SECTIONS, SHARE_SECTION_LABELS, SHARE_SECTION_ICON_TITLE, shareSectionsLabel, type ShareSection } from "@/lib/share-sections";
+import { SectionIcon, type RsSection } from "@/components/RouteSheetFields";
 import { createAttendanceLinkAction, listAttendanceLinkConcertsAction } from "@/app/conf/actions";
 import AttendanceLinkModal, { type AttendanceLinkIntent } from "@/components/AttendanceLinkModal";
 import type { AttendanceLinkConcert } from "@/app/conf/actions";
@@ -46,6 +48,63 @@ import BackLink from "@/components/BackLink";
 
 const STATUS_CYCLE = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
+// Icones dels botons de compartir un enllaç (Comparteix): copia, WhatsApp i
+// correu — SVG, mai emoji.
+function CopyIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+    </svg>
+  );
+}
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  );
+}
+function WhatsAppIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path>
+    </svg>
+  );
+}
+function XIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  );
+}
+function MailIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="2" y="4" width="20" height="16" rx="2"></rect>
+      <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"></path>
+    </svg>
+  );
+}
+function ExternalLinkIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+      <polyline points="15 3 21 3 21 9"></polyline>
+      <line x1="10" y1="14" x2="21" y2="3"></line>
+    </svg>
+  );
+}
+function AllSectionsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M9 11l3 3L22 4"></path>
+      <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"></path>
+    </svg>
+  );
+}
+
 // Mateixa escala que el ConcertModal: vermell → groc → verd.
 function progressColor(percent: number, alpha = 1): string {
   let l: number, c: number, h: number;
@@ -64,7 +123,7 @@ function progressColor(percent: number, alpha = 1): string {
 // "amountFilled" ve a part perquè "0 € (de veres)" i "encara buit" tots dos
 // es guarden com el mateix 0 numèric — només l'estat local de l'input (un
 // text, no un número) sap distingir-los mentre s'edita.
-export function infoCompletion(c: Concert, opts?: { amountFilled?: boolean }): { percent: number; missing: string[] } {
+export function infoCompletion(c: Concert, opts?: { amountFilled?: boolean }): { percent: number; missing: string[]; filled: string[] } {
   const checks: [string, boolean][] = [
     ["Data", !!c.date],
     ["Hora", !!c.exactTime],
@@ -80,15 +139,26 @@ export function infoCompletion(c: Concert, opts?: { amountFilled?: boolean }): {
     // estat resolt/definitiu, no un pendent de decidir.
     ["Estat confirmat", c.status === "confirmat" || c.status === "cancel·lat"],
   ];
-  const filled = checks.filter(([, ok]) => ok).length;
-  return { percent: Math.round((filled / checks.length) * 100), missing: checks.filter(([, ok]) => !ok).map(([label]) => label) };
+  const filledChecks = checks.filter(([, ok]) => ok);
+  return {
+    percent: Math.round((filledChecks.length / checks.length) * 100),
+    missing: checks.filter(([, ok]) => !ok).map(([label]) => label),
+    filled: filledChecks.map(([label]) => label),
+  };
 }
 
 
 // Mesurador del bànner (Informació, Full de ruta): en passar-hi el ratolí
 // surt què falta amb el mateix format de bombolles que el d'Assistència, i
 // clicar-lo porta a la pestanya corresponent.
-function Meter({ label, percent, missing, onClick }: { label: string; percent: number; missing: string[]; onClick?: () => void }) {
+function Meter({ label, percent, missing, sectionCounts, onClick }: {
+  label: string; percent: number; missing: string[];
+  // Al "Full de ruta": en lloc de llistar cada camp que falta, la
+  // consulta ràpida és per secció — icona + quants camps hi són fets
+  // (p. ex. 3/4) — mai barreja seccions que ni es veuen entre elles.
+  sectionCounts?: { section: RsSection; filled: number; total: number }[];
+  onClick?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   return (
     <div
@@ -106,12 +176,26 @@ function Meter({ label, percent, missing, onClick }: { label: string; percent: n
       </div>
       {open && (
         <div className="cd-meter-tip">
-          <div className="cd-meter-tip-title">{missing.length ? "Falta:" : label + ":"}</div>
-          <div className="cd-att-bubbles">
-            {missing.length
-              ? missing.map((m) => <span key={m} className="cd-att-bubble pending"><HourglassIcon />{m}</span>)
-              : <span className="cd-att-bubble yes">✓ Tot complet</span>}
-          </div>
+          {sectionCounts ? (
+            <div className="cd-meter-tip-sections">
+              {sectionCounts.map((sc) => (
+                <div key={sc.section} className="cd-meter-tip-section-row">
+                  <SectionIcon title={SHARE_SECTION_ICON_TITLE[sc.section]} size={13} />
+                  <span>{SHARE_SECTION_LABELS[sc.section]}</span>
+                  <span className="cd-meter-tip-count" style={sc.total > 0 && sc.filled >= sc.total ? { color: "oklch(0.78 0.15 155)" } : undefined}>{sc.filled}/{sc.total}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <>
+              <div className="cd-meter-tip-title">{missing.length ? "Falta:" : label + ":"}</div>
+              <div className="cd-att-bubbles">
+                {missing.length
+                  ? missing.map((m) => <span key={m} className="cd-att-bubble pending"><HourglassIcon />{m}</span>)
+                  : <span className="cd-att-bubble yes">✓ Tot complet</span>}
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>
@@ -198,33 +282,56 @@ function AttendanceMeter({ people, attendance, excluded, substitutes = {}, onCli
   );
 }
 
-function rsMissingList(c: Concert): string[] {
+// Què hi és i què falta d'UNA secció del full de ruta — el seguiment de
+// "Comparteix" el crida per secció (només les que l'enllaç de veres dona),
+// rsMissingList/rsFilledList (el Meter general) sumen les 5.
+function rsSectionTracking(c: Concert, section: RsSection): { filled: string[]; missing: string[] } {
   const rs = c.routeSheet as {
     lloc?: { label: string; value: string }[]; contacts?: { name: string }[];
     schedule?: { phase: string; start: string; end: string }[];
     hospitalitat?: { label: string; value: string; included?: boolean }[];
     tecnic?: { label: string; value: string; included?: boolean; status?: string }[];
   } | null;
-  if (!rs) return ["Tot el full de ruta"];
-  const missing: string[] = [];
-  withLiveAddress(rs.lloc, c.address).forEach((it) => { if (it.label && !String(it.value || "").trim()) missing.push(it.label); });
-  if (!(rs.contacts || []).some((ct) => ct.name && ct.name.trim())) missing.push("Contactes");
-  withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => { if (it.phase && (!it.start || !it.end)) missing.push("Horari: " + it.phase); });
-  // Un "sí"/"no" ja marcat, o un contrarider "aprovat", ja compten com a fets
-  // encara que no s'hi hagi escrit cap detall — mateix criteri que la barra
-  // de progrés, perquè aquesta llista de "què falta" no li contradigui.
-  (rs.hospitalitat || []).forEach((it) => {
-    const done = !!(it.value && String(it.value).trim()) || it.included !== undefined;
-    if (it.label && !done) missing.push(it.label);
-  });
-  (rs.tecnic || []).forEach((it) => {
-    if (!it.label) return;
-    const label = it.label.trim().toLowerCase();
-    if (label === "pantalla led") { if (it.included === undefined) missing.push(it.label); return; }
-    const done = !!(it.value && String(it.value).trim()) || (label === "contra rider" && it.status === "aprovat");
-    if (!done) missing.push(it.label);
-  });
-  return missing;
+  const filled: string[] = [], missing: string[] = [];
+  if (!rs) return { filled, missing };
+  if (section === "lloc") {
+    withLiveAddress(rs.lloc, c.address).forEach((it) => {
+      if (!it.label) return;
+      (String(it.value || "").trim() ? filled : missing).push(it.label);
+    });
+  } else if (section === "contacts") {
+    ((rs.contacts || []).some((ct) => ct.name && ct.name.trim()) ? filled : missing).push("Contactes");
+  } else if (section === "schedule") {
+    withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => {
+      if (!it.phase) return;
+      (it.start && it.end ? filled : missing).push("Horari: " + it.phase);
+    });
+  } else if (section === "hospitalitat") {
+    // Un "sí"/"no" ja marcat, o un contrarider "aprovat", ja compten com a
+    // fets encara que no s'hi hagi escrit cap detall — mateix criteri que
+    // la barra de progrés.
+    (rs.hospitalitat || []).forEach((it) => {
+      if (!it.label) return;
+      const done = !!(it.value && String(it.value).trim()) || it.included !== undefined;
+      (done ? filled : missing).push(it.label);
+    });
+  } else {
+    (rs.tecnic || []).forEach((it) => {
+      if (!it.label) return;
+      const label = it.label.trim().toLowerCase();
+      if (label === "pantalla led") { (it.included !== undefined ? filled : missing).push(it.label); return; }
+      const done = !!(it.value && String(it.value).trim()) || (label === "contra rider" && it.status === "aprovat");
+      (done ? filled : missing).push(it.label);
+    });
+  }
+  return { filled, missing };
+}
+
+const ALL_RS_SECTIONS: RsSection[] = ["lloc", "contacts", "schedule", "hospitalitat", "tecnic"];
+
+function rsMissingList(c: Concert): string[] {
+  if (!c.routeSheet) return ["Tot el full de ruta"];
+  return ALL_RS_SECTIONS.flatMap((s) => rsSectionTracking(c, s).missing);
 }
 
 // Cerca de suplent oberta d'un membre: d'on ve (borsa o enllaç de
@@ -458,15 +565,32 @@ export default function ConcertDetailView({
   useEffect(() => { cfRef.current = cf; }, [cf]);
 
   // ---- Compartir ----
-  const [newLinkOpen, setNewLinkOpen] = useState(false);
-  const [linkScope, setLinkScope] = useState<"info" | "ruta" | "both">("both");
-  const [linkEmail, setLinkEmail] = useState("");
-  const [linkName, setLinkName] = useState("");
-  const [linkDays, setLinkDays] = useState(14);
-  const [creatingLink, setCreatingLink] = useState(false);
-  const [lastCreatedUrl, setLastCreatedUrl] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
   const [emailStatus, setEmailStatus] = useState<Record<string, string>>({});
+  // "Envia-ho a un altre contacte": quin enllaç s'està editant i l'esborrany.
+  const [editRecipientId, setEditRecipientId] = useState<string | null>(null);
+  const [recipientDraft, setRecipientDraft] = useState({ name: "", email: "" });
+  const [savingRecipient, setSavingRecipient] = useState(false);
+  // Regenerar/generar el codi d'accés d'un enllaç.
+  const [codeMenuId, setCodeMenuId] = useState<string | null>(null);
+  const [codeValidity, setCodeValidity] = useState<CodeValidity>("event");
+  const [savingCode, setSavingCode] = useState(false);
+  const [lastCode, setLastCode] = useState<{ id: string; code: string } | null>(null);
+  // Avís "genera un codi abans de compartir" quan es prova de copiar/enviar
+  // un enllaç sense codi actiu — l'id de l'enllaç que l'ha disparat.
+  const [needsCodeWarningId, setNeedsCodeWarningId] = useState<string | null>(null);
+  // "+ Generar enllaç": crea un enllaç addicional amb el seu propi abast
+  // (quines seccions pot veure/omplir) i, si es vol, el seu codi d'accés
+  // ja fet, tot des del mateix menú.
+  const [newLinkOpen, setNewLinkOpen] = useState(false);
+  const [newLinkSections, setNewLinkSections] = useState<ShareSection[]>(ALL_SHARE_SECTIONS);
+  const [newLinkName, setNewLinkName] = useState("");
+  const [newLinkEmail, setNewLinkEmail] = useState("");
+  const [newLinkCodeValidity, setNewLinkCodeValidity] = useState<CodeValidity>("event");
+  const [creatingLink, setCreatingLink] = useState(false);
+  const [lastCreatedLink, setLastCreatedLink] = useState<{ url: string; code?: string } | null>(null);
+  const [revokeLinkId, setRevokeLinkId] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState(false);
 
   // ---- Despeses ----
   // Cada despesa diu qui la paga: l'agència (surt de la seva comissió), el
@@ -675,6 +799,28 @@ export default function ConcertDetailView({
   const info = infoCompletion(liveConcert, { amountFilled: cf.amount.trim() !== "" });
   const rsPercent = rsCompletionPercent(liveConcert);
   const rsMissing = rsMissingList(liveConcert);
+  const rsSectionCounts = ALL_RS_SECTIONS.map((section) => {
+    const t = rsSectionTracking(liveConcert, section);
+    return { section, filled: t.filled.length, total: t.filled.length + t.missing.length };
+  });
+  // Seguiment de l'enllaç de regidor a Comparteix: què s'ha anat omplenant
+  // (del formulari en si, mai del codi d'accés) — nomes de les seccions que
+  // aquest enllaç en concret dona, no de tot el formulari (un enllaç amb
+  // abast "El lloc" no ha de comptar com a "falta" el que ni tan sols pot
+  // veure). El % surt de comptar els camps de veres (emplenats sobre el
+  // total), no d'una mitjana de percentatges amb pesos diferents.
+  function trackingForSections(sections: string[]): { filled: string[]; percent: number } {
+    let filled: string[] = [];
+    let total = 0;
+    if (sections.includes("info")) { filled = filled.concat(info.filled); total += info.filled.length + info.missing.length; }
+    ALL_RS_SECTIONS.forEach((s) => {
+      if (!sections.includes(s)) return;
+      const t = rsSectionTracking(liveConcert, s);
+      filled = filled.concat(t.filled);
+      total += t.filled.length + t.missing.length;
+    });
+    return { filled, percent: total > 0 ? Math.round((filled.length / total) * 100) : 0 };
+  }
 
   const linkedByName: Record<string, LinkedMember> = {};
   linkedMembers.forEach((m) => { linkedByName[m.memberName] = m; });
@@ -964,18 +1110,6 @@ export default function ConcertDetailView({
     setGenerating(false);
   }
 
-  async function handleCreateLink() {
-    setCreatingLink(true);
-    const { url } = await createShareLinkAction({
-      concertId: concert.id, scope: linkScope, recipientEmail: linkEmail, recipientName: linkName, days: linkDays,
-    });
-    setLastCreatedUrl(url);
-    setNewLinkOpen(false);
-    setLinkEmail(""); setLinkName("");
-    router.refresh();
-    setCreatingLink(false);
-  }
-
   function linkUrl(id: string): string {
     return `${window.location.origin}/f/${id}`;
   }
@@ -987,7 +1121,8 @@ export default function ConcertDetailView({
   }
 
   function whatsappLink(l: ShareLink) {
-    const text = `Hola${l.recipientName ? " " + l.recipientName : ""}! Ens falten dades del concert de ${concert.bandName} (${capitalize(formatDateFull(concert.date))}${concert.city ? ", " + concert.city : ""}). Les pots omplir aquí: ${linkUrl(l.id)}`;
+    const codeLine = shareLinkCodeStatus(l) === "vigent" ? ` El codi d'accés és: ${l.accessCode}` : "";
+    const text = `Hola${l.recipientName ? " " + l.recipientName : ""}! Ens falten dades del concert de ${concert.bandName} (${capitalize(formatDateFull(concert.date))}${concert.city ? ", " + concert.city : ""}). Les pots omplir aquí: ${linkUrl(l.id)}${codeLine}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, "_blank");
   }
 
@@ -998,7 +1133,70 @@ export default function ConcertDetailView({
     router.refresh();
   }
 
-  const scopeLabels: Record<string, string> = { info: "Informació", ruta: "Full de ruta", both: "Info + full de ruta" };
+  function openEditRecipient(l: ShareLink) {
+    setEditRecipientId(l.id);
+    setRecipientDraft({ name: l.recipientName, email: l.recipientEmail });
+  }
+  async function saveRecipient(id: string) {
+    setSavingRecipient(true);
+    await updateShareLinkRecipientAction(id, recipientDraft.name, recipientDraft.email);
+    setSavingRecipient(false);
+    setEditRecipientId(null);
+    router.refresh();
+  }
+
+  async function saveCode(id: string) {
+    setSavingCode(true);
+    const { code } = await setShareLinkCodeAction(id, codeValidity);
+    setSavingCode(false);
+    setCodeMenuId(null);
+    setLastCode({ id, code });
+    router.refresh();
+  }
+
+  async function clearCode(id: string) {
+    setCodeMenuId(null);
+    setLastCode((v) => (v?.id === id ? null : v));
+    await clearShareLinkCodeAction(id);
+    router.refresh();
+  }
+
+  // Copiar/WhatsApp/correu sense codi actiu obren aquest avís en lloc de
+  // fer l'acció — es pot generar el codi des del mateix avís.
+  function requireActiveCode(l: ShareLink, action: () => void) {
+    if (shareLinkCodeStatus(l) !== "vigent") { setNeedsCodeWarningId(l.id); setCodeValidity("event"); return; }
+    action();
+  }
+  async function generateCodeFromWarning() {
+    if (!needsCodeWarningId) return;
+    setSavingCode(true);
+    const { code } = await setShareLinkCodeAction(needsCodeWarningId, codeValidity);
+    setSavingCode(false);
+    setLastCode({ id: needsCodeWarningId, code });
+    setNeedsCodeWarningId(null);
+    router.refresh();
+  }
+
+  function toggleNewLinkSection(s: ShareSection) {
+    setNewLinkSections((cur) => (cur.includes(s) ? cur.filter((x) => x !== s) : [...cur, s]));
+  }
+  async function handleCreateLink() {
+    if (!newLinkSections.length) return;
+    setCreatingLink(true);
+    const daysUntilEvent = Math.max(1, Math.ceil((new Date(concert.date + "T00:00:00").getTime() - Date.now()) / 86400000));
+    const res = await createShareLinkAction({
+      concertId: concert.id, sections: newLinkSections, recipientName: newLinkName, recipientEmail: newLinkEmail,
+      days: Math.min(90, daysUntilEvent + 7), codeValidity: newLinkCodeValidity,
+    });
+    setLastCreatedLink({ url: res.url, code: res.code });
+    setNewLinkOpen(false);
+    setNewLinkSections(ALL_SHARE_SECTIONS);
+    setNewLinkName(""); setNewLinkEmail(""); setNewLinkCodeValidity("event");
+    router.refresh();
+    setCreatingLink(false);
+  }
+
+  const codeValidityLabels: Record<CodeValidity, string> = { "7": "1 setmana", "14": "2 setmanes", "30": "1 mes", "90": "3 mesos", event: "Fins al dia de l'actuació" };
 
   return (
     <div className="glow concert-detail" style={{ ["--band-accent" as string]: accent }}>
@@ -1048,7 +1246,7 @@ export default function ConcertDetailView({
           >{formatCurrency(amountNum)}</div>
           <div className="cd-meters">
             <Meter label="Informació" percent={info.percent} missing={info.missing} onClick={() => setTab("info")} />
-            <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} onClick={() => setTab("ruta")} />
+            <Meter label="Full de ruta" percent={rsPercent} missing={rsMissing} sectionCounts={rsSectionCounts} onClick={() => setTab("ruta")} />
             {(members.length > 0 || crew.length > 0) && (
               <AttendanceMeter people={[...members, ...crew]} attendance={attendance} excluded={convocatoriaExcluded} substitutes={substitutes} onClick={() => setTab("assistencia")} />
             )}
@@ -1993,102 +2191,186 @@ export default function ConcertDetailView({
       </div>
       )}
 
-      {/* Comparteix: a Informació i també al final del Full de ruta */}
-      {(tab === "info" || tab === "ruta") && (
-      <FoldPanel id="cd-comparteix" title="Comparteix — formularis per omplir dades" summary={shareLinks.length ? `${shareLinks.length} ${shareLinks.length === 1 ? "enllaç" : "enllaços"}${activeLinks.cap != null ? ` · ${activeLinks.count}/${activeLinks.cap} actius al pla gratuït` : ""}` : "Cap enllaç"} defaultOpen={shareLinks.length > 0 || newLinkOpen}
+      {/* Comparteix: a Informació i també al final del Full de ruta — només
+          per als bolos (els altres tipus no es comparteixen amb ningú
+          extern). El primer enllaç (tot l'abast) ja hi és per defecte; des
+          d'aquí també se'n poden generar més amb un abast concret. */}
+      {kind === "bolo" && (tab === "info" || tab === "ruta") && (() => {
+        const activeShareLinks = shareLinks.filter((l) => shareLinkStatus(l) === "activa");
+        return (
+      <FoldPanel id="cd-comparteix" title="Comparteix — formularis per omplir dades" summary={activeShareLinks.length ? `${activeShareLinks.length} ${activeShareLinks.length === 1 ? "enllaç actiu" : "enllaços actius"}${activeLinks.cap != null ? ` · ${activeLinks.count}/${activeLinks.cap} al pla gratuït` : ""}` : "Cap enllaç"} defaultOpen
         action={!newLinkOpen && (activeLinks.reached
           ? <PlanLock billing={billing} required="grup" compact canUpgrade={canUpgrade} title={`Has arribat als ${activeLinks.cap} enllaços actius del pla gratuït`} />
-          : <button type="button" className="glow-cta" onClick={() => setNewLinkOpen(true)}>+ Nou enllaç</button>)}>
+          : <button type="button" className="glow-cta" onClick={() => { setNewLinkOpen(true); setNewLinkName(contact.name); setNewLinkEmail(contact.email); }}>+ Generar enllaç</button>)}>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
-          Genera un enllaç caducable perquè l&apos;ajuntament, el promotor o la sala omplin la informació que falta.
-          El formulari es pot editar mentre l&apos;enllaç sigui vàlid, encara que ja s&apos;hagi enviat.
+          L&apos;enllaç de regidor perquè l&apos;ajuntament, el promotor o la sala omplin la informació que falta ja hi és — cal generar-hi un codi d&apos;accés abans de compartir-lo.
+          El formulari es pot editar mentre l&apos;enllaç sigui vàlid, encara que ja s&apos;hagi enviat. Es pot generar algun enllaç més amb un abast concret (només algunes seccions).
         </div>
 
         {newLinkOpen && (
           <div className="cd-newlink">
-            <div className="cd-newlink-scopes">
-              {(["info", "ruta", "both"] as const).map((s) => (
-                <button key={s} type="button" className={"cd-scope-card" + (linkScope === s ? " active" : "")} onClick={() => setLinkScope(s)}>
-                  <div className="cd-scope-title">{scopeLabels[s]}</div>
-                  <div className="cd-scope-desc">
-                    {s === "info" ? "Data, lloc, festa i import" : s === "ruta" ? "Horaris, contactes, hospitalitat, tècnica" : "Tot el formulari complet"}
-                  </div>
-                </button>
-              ))}
+            <div className="cd-field">
+              <label className="form-label">Quines seccions pot veure i omplir</label>
+              <div className="cd-newlink-sections">
+                <button
+                  type="button" className={"access-chip" + (newLinkSections.length === ALL_SHARE_SECTIONS.length ? " active" : "")}
+                  onClick={() => setNewLinkSections(newLinkSections.length === ALL_SHARE_SECTIONS.length ? [] : ALL_SHARE_SECTIONS)}
+                ><AllSectionsIcon /> Tot</button>
+                {ALL_SHARE_SECTIONS.map((s) => (
+                  <button key={s} type="button" className={"access-chip" + (newLinkSections.includes(s) ? " active" : "")} onClick={() => toggleNewLinkSection(s)}>
+                    <SectionIcon title={SHARE_SECTION_ICON_TITLE[s]} size={13} /> {SHARE_SECTION_LABELS[s]}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="cd-newlink-fields">
               <div className="cd-field">
                 <label className="form-label">Nom del destinatari</label>
-                <input className="field-input form-field" value={linkName} onChange={(e) => setLinkName(e.target.value)} placeholder="Maria (Aj. de Reus)" />
+                <input className="field-input form-field" value={newLinkName} onChange={(e) => setNewLinkName(e.target.value)} placeholder="Maria (Aj. de Reus)" />
               </div>
               <div className="cd-field">
                 <label className="form-label">Correu electrònic</label>
-                <input className="field-input form-field" type="email" value={linkEmail} onChange={(e) => setLinkEmail(e.target.value)} placeholder="cultura@ajuntament.cat" />
+                <input className="field-input form-field" type="email" value={newLinkEmail} onChange={(e) => setNewLinkEmail(e.target.value)} placeholder="cultura@ajuntament.cat" />
               </div>
               <div className="cd-field">
-                <label className="form-label">Validesa</label>
-                <select className="field-input form-field" value={linkDays} onChange={(e) => setLinkDays(parseInt(e.target.value, 10))}>
-                  <option value={7}>7 dies</option>
-                  <option value={14}>14 dies</option>
-                  <option value={30}>30 dies</option>
-                  <option value={60}>60 dies</option>
-                  <option value={Math.max(1, Math.min(90, Math.ceil((new Date(concert.date + "T00:00:00").getTime() - Date.now()) / 86400000)))}>
-                    Fins al dia de l&apos;actuació
-                  </option>
+                <label className="form-label">Validesa del codi</label>
+                <select className="field-input form-field" value={newLinkCodeValidity} onChange={(e) => setNewLinkCodeValidity(e.target.value as CodeValidity)}>
+                  {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
                 </select>
               </div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button type="button" className="btn-outline" onClick={() => setNewLinkOpen(false)}>Cancel·la</button>
-              <button type="button" className="btn-save" disabled={creatingLink} onClick={handleCreateLink}>
-                {creatingLink ? "Creant…" : "Crea l'enllaç"}
+              <button type="button" className="btn-save" disabled={creatingLink || !newLinkSections.length} onClick={handleCreateLink}>
+                {creatingLink ? "Creant…" : "Crea l'enllaç i el codi"}
               </button>
             </div>
           </div>
         )}
 
-        {lastCreatedUrl && (
+        {lastCreatedLink && (
           <div className="cd-created-banner">
-            Enllaç creat: <code>{lastCreatedUrl}</code>
+            Enllaç creat: <code>{lastCreatedLink.url}</code>
+            {lastCreatedLink.code && <> · codi: <code className="cd-access-code">{lastCreatedLink.code}</code></>}
           </div>
         )}
 
-        {shareLinks.length === 0 && !newLinkOpen ? (
-          <div className="t-dim" style={{ fontSize: 13 }}>Encara no hi ha cap enllaç per aquest concert.</div>
+        {!activeShareLinks.length ? (
+          <div className="t-dim" style={{ fontSize: 13 }}>Generant l&apos;enllaç…</div>
         ) : (
           <div className="cd-links-list">
-            {shareLinks.map((l) => {
+            {activeShareLinks.map((l) => {
               const st = shareLinkStatus(l);
               return (
                 <div key={l.id} className={"cd-link-card" + (st !== "activa" ? " inactive" : "")}>
                   <div className="cd-link-main">
                     <div className="cd-link-title">
-                      <span className="badge" style={{ background: "oklch(0.68 0.19 290 / 0.16)", color: "var(--accent-text)" }}>{scopeLabels[l.scope]}</span>
-                      <span className={"cd-link-status " + st}>{st}</span>
+                      <span className="badge cd-sections-badge" style={{ background: "oklch(0.68 0.19 290 / 0.16)", color: "var(--accent-text)" }} title={shareSectionsLabel(l.sections)}>
+                        {shareSectionsLabel(l.sections) === "Tot" ? "Tot" : l.sections.map((s) => <SectionIcon key={s} title={SHARE_SECTION_ICON_TITLE[s as ShareSection]} size={13} />)}
+                      </span>
+                      <span className={"cd-link-status " + st}>{st === "activa" ? "actiu" : st === "caducada" ? "caducat" : "revocat"}</span>
                       {l.submittedAt && <span className="cd-link-status activa">respost ✓</span>}
                       {l.lastOpenedAt && !l.submittedAt && <span className="t-dim" style={{ fontSize: 11 }}>obert</span>}
                     </div>
                     <div className="t-dim" style={{ fontSize: 12 }}>
-                      {l.recipientName || l.recipientEmail || "Sense destinatari"} · caduca {new Date(l.expiresAt).toLocaleDateString("ca-ES")}
-                      {l.emailSentAt ? " · correu enviat" : ""}
+                      {editRecipientId === l.id ? (
+                        <span className="cd-recipient-edit">
+                          <input className="field-input compact-field" placeholder="Nom" value={recipientDraft.name} onChange={(e) => setRecipientDraft((d) => ({ ...d, name: e.target.value }))} />
+                          <input className="field-input compact-field" type="email" placeholder="Correu" value={recipientDraft.email} onChange={(e) => setRecipientDraft((d) => ({ ...d, email: e.target.value }))} />
+                          <button type="button" className="cd-icon-btn" title="Desa" disabled={savingRecipient} onClick={() => saveRecipient(l.id)}><CheckIcon /></button>
+                          <button type="button" className="cd-icon-btn" title="Cancel·la" onClick={() => setEditRecipientId(null)}><XIcon /></button>
+                        </span>
+                      ) : (
+                        <>
+                          {l.recipientName && l.recipientEmail ? `${l.recipientName} · ${l.recipientEmail}` : l.recipientName || l.recipientEmail || "Sense destinatari"}
+                          {" · caduca "}{new Date(l.expiresAt).toLocaleDateString("ca-ES")}
+                          {l.emailSentAt ? " · correu enviat" : ""}
+                          {st === "activa" && (
+                            <button type="button" className="link-btn cd-change-recipient" onClick={() => openEditRecipient(l)}>Envia-ho a un altre contacte</button>
+                          )}
+                        </>
+                      )}
+                    </div>
+                    {(() => {
+                      const cst = shareLinkCodeStatus(l);
+                      if (cst === "cap") {
+                        return (
+                          <div className="cd-link-code-row cd-link-code-empty">
+                            {st === "activa" && codeMenuId !== l.id && (
+                              <button type="button" className="btn-save" onClick={() => { setCodeMenuId(l.id); setCodeValidity("event"); }}>Genera codi</button>
+                            )}
+                            {codeMenuId === l.id && (
+                              <span className="cd-code-menu">
+                                <span className="t-dim" style={{ fontSize: 12 }}>Validesa:</span>
+                                <select className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
+                                  {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
+                                </select>
+                                <button type="button" className="btn-save" disabled={savingCode} onClick={() => saveCode(l.id)}>{savingCode ? "Generant…" : "Confirma"}</button>
+                              </span>
+                            )}
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className="cd-link-code-row">
+                          {cst === "vigent" && (
+                            <>
+                              <span className="t-dim" style={{ fontSize: 12 }}>Codi d&apos;accés</span>
+                              <code className="cd-access-code">{l.accessCode}</code>
+                              <span className="t-dim" style={{ fontSize: 11.5 }}>caduca {new Date(l.codeExpiresAt!).toLocaleDateString("ca-ES")}</span>
+                            </>
+                          )}
+                          {cst === "caducat" && <span className="badge" style={{ background: "oklch(0.78 0.15 80 / 0.16)", color: "var(--amber)" }}>codi caducat</span>}
+                          {st === "activa" && (
+                            <button type="button" className="link-btn" onClick={() => { setCodeMenuId(codeMenuId === l.id ? null : l.id); setCodeValidity("event"); }}>Regenera</button>
+                          )}
+                          {codeMenuId === l.id && (
+                            <span className="cd-code-menu">
+                              <select className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
+                                {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
+                              </select>
+                              <button type="button" className="btn-save" disabled={savingCode} onClick={() => saveCode(l.id)}>{savingCode ? "Generant…" : "Confirma"}</button>
+                            </span>
+                          )}
+                          {st === "activa" && (
+                            <button type="button" className="cd-icon-btn" title="Elimina el codi" onClick={() => clearCode(l.id)}><XIcon /></button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    <div className="cd-link-track">
+                      {l.lastOpenedAt ? (() => {
+                        const track = trackingForSections(l.sections);
+                        return (
+                        <>
+                          {new Date(l.lastOpenedAt).toLocaleDateString("ca-ES")} · enllaç obert{l.openCount > 1 ? ` (${l.openCount} cops)` : ""}
+                          {" · informació emplenada: "}
+                          {track.filled.length
+                            ? track.filled.slice(0, 6).join(", ") + (track.filled.length > 6 ? ` +${track.filled.length - 6} més` : "")
+                            : "cap encara"}
+                          {` · ${track.percent}% emplenat`}
+                        </>
+                        );
+                      })() : "Encara no s'ha obert."}
                     </div>
                   </div>
                   {st === "activa" && (
                     <div className="cd-link-actions">
-                      <button type="button" className="btn-outline" onClick={() => copyLink(l.id)}>{copied === l.id ? "Copiat ✓" : "Copia"}</button>
-                      <button type="button" className="btn-outline cd-wa-btn" onClick={() => whatsappLink(l)}>WhatsApp</button>
-                      {l.recipientEmail && (
-                        <button
-                          type="button" className="btn-outline" disabled={!emailReady}
-                          title={emailReady ? `Envia a ${l.recipientEmail}` : "Configura RESEND_API_KEY per enviar correus des d'Escenari"}
-                          onClick={() => handleSendEmail(l.id)}
-                        >{emailStatus[l.id] || "Envia per correu"}</button>
-                      )}
-                      <button type="button" className="row-delete-btn" title="Revoca l'enllaç" onClick={async () => { await revokeShareLinkAction(l.id); router.refresh(); }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                          <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
-                        </svg>
+                      <button type="button" className="cd-icon-btn" title="Obre l'enllaç" onClick={() => window.open(linkUrl(l.id), "_blank")}><ExternalLinkIcon /></button>
+                      <button type="button" className="cd-icon-btn" title={copied === l.id ? "Copiat" : "Copia l'enllaç"} onClick={() => requireActiveCode(l, () => copyLink(l.id))}>
+                        {copied === l.id ? <CheckIcon /> : <CopyIcon />}
                       </button>
+                      <button type="button" className="cd-icon-btn cd-wa-btn" title="WhatsApp" onClick={() => requireActiveCode(l, () => whatsappLink(l))}><WhatsAppIcon /></button>
+                      <button
+                        type="button" className="cd-icon-btn" disabled={!emailReady || !l.recipientEmail || emailStatus[l.id] === "enviant…"}
+                        title={
+                          !l.recipientEmail ? "Posa un correu al destinatari primer"
+                          : emailStatus[l.id] && emailStatus[l.id] !== "enviat ✓" ? emailStatus[l.id]
+                          : emailReady ? `Envia a ${l.recipientEmail}` : "Configura RESEND_API_KEY per enviar correus des d'Escenari"
+                        }
+                        onClick={() => requireActiveCode(l, () => handleSendEmail(l.id))}
+                      >{emailStatus[l.id] === "enviat ✓" ? <CheckIcon /> : <MailIcon />}</button>
+                      <button type="button" className="row-delete-btn" title="Elimina l&apos;enllaç" onClick={() => setRevokeLinkId(l.id)}><XIcon /></button>
                     </div>
                   )}
                 </div>
@@ -2097,7 +2379,8 @@ export default function ConcertDetailView({
           </div>
         )}
       </FoldPanel>
-      )}
+        );
+      })()}
 
       {/* Zona de perill: eliminar l'esdeveniment sencer */}
       <div className="panel cd-section cd-danger-zone">
@@ -2117,6 +2400,40 @@ export default function ConcertDetailView({
             setDeleting(true);
             await deleteConcertAction(concert.id);
             router.push("/concerts");
+            router.refresh();
+          }}
+        />
+      )}
+      {needsCodeWarningId && (
+        <ConfirmDialog
+          title="Genera un codi de seguretat"
+          message={
+            <>
+              <p style={{ margin: "0 0 12px" }}>Abans de compartir, genera un codi de seguretat.</p>
+              <span className="cd-code-menu" style={{ justifyContent: "center" }}>
+                <span className="t-dim" style={{ fontSize: 12 }}>Validesa:</span>
+                <select className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
+                  {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
+                </select>
+              </span>
+            </>
+          }
+          confirmLabel={savingCode ? "Generant…" : "Genera codi"} danger={false} busy={savingCode}
+          onCancel={() => setNeedsCodeWarningId(null)}
+          onConfirm={generateCodeFromWarning}
+        />
+      )}
+      {revokeLinkId && (
+        <ConfirmDialog
+          title="Estàs segur?"
+          message="S'eliminarà aquest enllaç del formulari — qui el tingui ja no hi podrà entrar."
+          confirmLabel="Elimina" busy={revoking}
+          onCancel={() => setRevokeLinkId(null)}
+          onConfirm={async () => {
+            setRevoking(true);
+            await revokeShareLinkAction(revokeLinkId);
+            setRevoking(false);
+            setRevokeLinkId(null);
             router.refresh();
           }}
         />

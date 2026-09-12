@@ -45,14 +45,15 @@ type PersonDraft = CreateGroupPerson & { open: boolean };
 // instruments, i equip tècnic amb el càrrec). En crear-lo, cada persona rep
 // un enllaç per reclamar el seu perfil. Qui el crea pot entrar-hi també com
 // a músic (el músic que crea el seu grup, sempre).
-export default function CreateGroupModal({ onClose, mode = "agency", selfName = "", selfInstruments = [] }: {
+export default function CreateGroupModal({ onClose, mode = "agency", selfName = "", selfInstruments = [], initialName = "" }: {
   onClose: () => void;
   mode?: "agency" | "musician";
   selfName?: string;
   selfInstruments?: string[];
+  initialName?: string;
 }) {
   const router = useRouter();
-  const [name, setName] = useState("");
+  const [name, setName] = useState(initialName);
   const [city, setCity] = useState("");
   const [logo, setLogo] = useState("");
   const [color1, setColor1] = useState(DEFAULT_COLOR1);

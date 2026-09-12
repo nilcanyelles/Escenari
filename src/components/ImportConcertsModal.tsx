@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import * as XLSX from "xlsx";
 import { IMPORT_COLUMNS, parseImportRows, type ParsedImport } from "@/lib/concert-import";
 import { importConcertRowsAction } from "@/app/(app)/concerts/actions";
-import { formatDate } from "@/lib/format";
+import type { Band } from "@/lib/types";
+import CreateGroupModal from "@/components/CreateGroupModal";
 
 const TEMPLATE_EXAMPLES: (string | number)[][] = [
-  ["12/07/2026", "22:00", "Confirmat", "Els Catarres", "Festa Major", "Reus", "ES", "Plaça Mercadal", 1800, "Maria Puig", "Ajuntament de Reus", "600 000 000", "cultura@reus.cat"],
-  ["02/08/2026", "", "Reservat", "Els Catarres", "Festes de Sant Roc", "Olot", "ES", "", "", "", "", "", ""],
+  ["12/07/2026", "22:00", "Confirmat", "Txarnego", "Festa Major", "Reus", "ES", "Plaça Mercadal", 1800, "Maria Puig", "Ajuntament de Reus", "600 000 000", "cultura@reus.cat"],
+  ["02/08/2026", "", "Reservat", "Txarnego", "Festes de Sant Roc", "Olot", "ES", "", "", "", "", "", ""],
 ];
 
 // Importació de concerts des d'un Excel: primer es descarrega la plantilla
@@ -17,7 +18,7 @@ const TEMPLATE_EXAMPLES: (string | number)[][] = [
 // per concert i es torna a pujar aquí. Es llegeix al navegador (xlsx), es
 // mostra què s'importarà i quines files tenen error, i només en confirmar
 // es creen els concerts (i els grups que no existeixin).
-export default function ImportConcertsModal({ onClose }: { onClose: () => void }) {
+export default function ImportConcertsModal({ bands = [], onClose }: { bands?: Band[]; onClose: () => void }) {
   const router = useRouter();
   const [fileName, setFileName] = useState("");
   const [parsed, setParsed] = useState<ParsedImport | null>(null);
@@ -25,6 +26,15 @@ export default function ImportConcertsModal({ onClose }: { onClose: () => void }
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<{ imported: number; errors: string[] } | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [createBandName, setCreateBandName] = useState<string | null>(null);
+  // Assignació manual d'un artista de l'Excel (que no existeix a l'agència)
+  // a un grup ja existent, per si el nom no coincideix prou per detectar-ho
+  // sol (per exemple, un àlies o una petita variació d'escriptura).
+  const [assignBandKey, setAssignBandKey] = useState<string | null>(null);
+  const [assignBandLabel, setAssignBandLabel] = useState("");
+  const [assignSearch, setAssignSearch] = useState("");
+  const [bandAssignments, setBandAssignments] = useState<Record<string, string>>({});
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   function downloadTemplate() {
@@ -58,14 +68,35 @@ export default function ImportConcertsModal({ onClose }: { onClose: () => void }
     if (!parsed || !parsed.concerts.length) return;
     setImporting(true);
     setReadError(null);
+    // Es puja en trams (no tot el fitxer d'un cop) perquè el botó pugui
+    // anar mostrant quants concerts ja s'han creat ("Important… (X/Total)").
+    const BATCH_SIZE = 10;
+    const total = parsed.concerts.length;
+    setProgress({ done: 0, total });
     try {
-      const r = await importConcertRowsAction(parsed.concerts);
-      setResult(r);
+      // Els concerts d'un artista assignat manualment a un grup existent
+      // s'importen amb el nom exacte d'aquell grup, perquè s'hi enganxin en
+      // comptes de crear-ne un de nou.
+      const rows = parsed.concerts.map((c) => {
+        const assigned = bandAssignments[c.band.trim().toLowerCase()];
+        return assigned ? { ...c, band: assigned } : c;
+      });
+      let imported = 0;
+      const errors: string[] = [];
+      for (let offset = 0; offset < rows.length; offset += BATCH_SIZE) {
+        const batch = rows.slice(offset, offset + BATCH_SIZE);
+        const r = await importConcertRowsAction(batch, offset);
+        imported += r.imported;
+        errors.push(...r.errors);
+        setProgress({ done: Math.min(offset + BATCH_SIZE, total), total });
+      }
+      setResult({ imported, errors });
       router.refresh();
     } catch (e) {
       setReadError(e instanceof Error ? e.message : "No s'ha pogut importar.");
     } finally {
       setImporting(false);
+      setProgress(null);
     }
   }
 
@@ -74,6 +105,31 @@ export default function ImportConcertsModal({ onClose }: { onClose: () => void }
   }
 
   const ready = parsed ? parsed.concerts.length : 0;
+
+  // Nombre de concerts per artista de l'Excel, i si l'artista ja existeix a
+  // l'agència (comparació sense distingir majúscules, com fa la importació).
+  const existingBandNames = new Set(bands.map((b) => b.name.trim().toLowerCase()));
+  const bandCounts: { name: string; count: number; exists: boolean }[] = [];
+  if (parsed) {
+    const order: string[] = [];
+    const counts: Record<string, number> = {};
+    for (const c of parsed.concerts) {
+      const key = c.band.trim().toLowerCase();
+      if (!(key in counts)) { counts[key] = 0; order.push(key); }
+      counts[key]++;
+    }
+    const nameByKey: Record<string, string> = {};
+    for (const c of parsed.concerts) {
+      const key = c.band.trim().toLowerCase();
+      if (!(key in nameByKey)) nameByKey[key] = c.band.trim();
+    }
+    for (const key of order) {
+      bandCounts.push({ name: nameByKey[key], count: counts[key], exists: existingBandNames.has(key) });
+    }
+  }
+
+  const assignSearchLower = assignSearch.trim().toLowerCase();
+  const filteredBands = bands.filter((b) => !assignSearchLower || b.name.toLowerCase().includes(assignSearchLower));
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -142,12 +198,31 @@ export default function ImportConcertsModal({ onClose }: { onClose: () => void }
                       {parsed.errors.length > 0 && <> · <span style={{ color: "oklch(0.78 0.14 25)" }}>{parsed.errors.length} {parsed.errors.length === 1 ? "fila amb error" : "files amb error"}</span></>}
                     </div>
                   )}
-                  {ready > 0 && (
-                    <div className="imp-preview">
-                      {parsed.concerts.slice(0, 6).map((c, i) => (
-                        <div key={i}>{formatDate(c.date)}{c.time ? ` ${c.time}` : ""} · {c.band} · {[c.title, c.city, c.venue].filter(Boolean).join(" · ") || "—"} · <span className="t-dim">{c.status}</span></div>
-                      ))}
-                      {ready > 6 && <div className="t-dim">… i {ready - 6} més</div>}
+                  {bandCounts.length > 0 && (
+                    <div className="imp-bands">
+                      {bandCounts.map((b) => {
+                        const key = b.name.toLowerCase();
+                        const assigned = bandAssignments[key];
+                        return (
+                          <div key={key} className="imp-band-row">
+                            <span>{b.name} — {b.count} {b.count === 1 ? "concert" : "concerts"}</span>
+                            {!b.exists && (
+                              assigned ? (
+                                <span className="imp-band-assigned">
+                                  → {assigned}
+                                  <button type="button" className="imp-band-unassign" title="Desfés l'assignació"
+                                    onClick={() => setBandAssignments((prev) => { const next = { ...prev }; delete next[key]; return next; })}>✕</button>
+                                </span>
+                              ) : (
+                                <div className="imp-band-actions">
+                                  <button type="button" className="btn-ghost-sm" onClick={() => setCreateBandName(b.name)}>+ Crea artista</button>
+                                  <button type="button" className="btn-ghost-sm" onClick={() => { setAssignBandKey(key); setAssignBandLabel(b.name); setAssignSearch(""); }}>Assigna a un grup ja existent</button>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                   {parsed.errors.length > 0 && (
@@ -156,22 +231,43 @@ export default function ImportConcertsModal({ onClose }: { onClose: () => void }
                       {parsed.errors.length > 8 && <div>… i {parsed.errors.length - 8} més</div>}
                     </div>
                   )}
-                  {parsed.unknownHeaders.length > 0 && (
-                    <div className="t-dim" style={{ fontSize: 12 }}>Columnes ignorades: {parsed.unknownHeaders.join(", ")}</div>
-                  )}
                 </div>
               )}
 
               <div className="imp-actions">
                 <button type="button" className="btn-outline" onClick={onClose}>Cancel·la</button>
                 <button type="button" className="btn-save" disabled={importing || !ready || !!parsed?.missing.length} onClick={doImport}>
-                  {importing ? "Important…" : ready ? `Importa ${ready} ${ready === 1 ? "concert" : "concerts"}` : "Importa"}
+                  {importing ? `Important… (${progress?.done ?? 0}/${progress?.total ?? ready})` : ready ? `Importa ${ready} ${ready === 1 ? "concert" : "concerts"}` : "Importa"}
                 </button>
               </div>
             </>
           )}
         </div>
       </div>
+      {createBandName != null && (
+        <CreateGroupModal initialName={createBandName} onClose={() => setCreateBandName(null)} />
+      )}
+      {assignBandKey != null && (
+        <div className="modal-overlay" onClick={() => setAssignBandKey(null)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <div className="modal-title">Assigna &ldquo;{assignBandLabel}&rdquo; a un grup existent</div>
+              <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setAssignBandKey(null)}>✕</button>
+            </div>
+            <div className="modal-form">
+              <input className="field-input form-field" type="text" autoFocus placeholder="Cerca un grup…" value={assignSearch} onChange={(e) => setAssignSearch(e.target.value)} />
+              <div className="imp-assign-list">
+                {filteredBands.length ? filteredBands.map((b) => (
+                  <button key={b.id} type="button" className="year-option" onClick={() => {
+                    setBandAssignments((prev) => ({ ...prev, [assignBandKey]: b.name }));
+                    setAssignBandKey(null);
+                  }}>{b.name}</button>
+                )) : <div className="cf-band-noresults">Cap grup coincideix</div>}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

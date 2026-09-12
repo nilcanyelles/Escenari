@@ -34,7 +34,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
     // Tots els grups de l'agència (per assignar-los i per a la graella de
     // "Grups"), sense el filtre de visibilitat.
     db().query(
-      "select id, name, city, logo, logo_aspect, color1, color2, jsonb_array_length(members) as member_count from bands where workspace_id=$1 order by name",
+      "select id, name, city, logo, logo_aspect, color1, color2, jsonb_array_length(members) + jsonb_array_length(crew) as member_count from bands where workspace_id=$1 order by name",
       [profile.workspaceId]
     ).then((r) => r.rows),
     getWorkspaceBilling(profile.workspaceId),

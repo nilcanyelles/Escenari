@@ -3,14 +3,18 @@
 import { useEffect, useRef, useState } from "react";
 import type { Concert, Band } from "@/lib/types";
 import { MONTH_FULL } from "@/lib/format";
-import { getStreetWaysAction, savePosterScheduleAction } from "@/app/(app)/concerts/actions";
+import { getStreetWaysAction, geocodePosterVenueAction, savePosterScheduleAction } from "@/app/(app)/concerts/actions";
 
 // Pòster del concert per a Instagram: PNG 1080×1920 amb fons transparent,
 // tipografia gran de cartell i un mini-mapa amb la ubicació marcada
-// (geocodificació Photon + geometria real de carrers via Overpass,
+// (geocodificació del recinte + geometria real de carrers via Overpass,
 // dibuixats amb estil neó propi — no depenem de cap servei de rajoles
 // d'imatge, que es bloquegen o mostren marca d'aigua sense compte/clau; si
-// falla, marcador estilitzat).
+// falla, marcador estilitzat). La geocodificació es fa des del servidor
+// (geocodePosterVenueAction: Photon amb Nominatim de reserva, i cache
+// permanent un cop resolta) perquè una caiguda puntual de Photon no deixi
+// el mapa sense punt on marcar, tal com ja fa getStreetWaysAction amb els
+// carrers.
 //
 // Aquest component és només el contingut (capçalera + previsualització +
 // controls), sense cap "modal-overlay" propi — perquè es pugui fer servir
@@ -80,16 +84,6 @@ function accentGlow(hex: string, towardBlack: number, alpha: number): string {
   const r = parseInt(h.slice(0, 2), 16) || 0, g = parseInt(h.slice(2, 4), 16) || 0, b = parseInt(h.slice(4, 6), 16) || 0;
   const mix = (c: number) => Math.round(c * (1 - towardBlack));
   return `rgba(${mix(r)}, ${mix(g)}, ${mix(b)}, ${alpha})`;
-}
-
-async function geocode(query: string): Promise<{ lat: number; lon: number } | null> {
-  try {
-    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=1`);
-    if (!res.ok) return null;
-    const data = await res.json();
-    const c = data.features?.[0]?.geometry?.coordinates;
-    return c ? { lat: c[1], lon: c[0] } : null;
-  } catch { return null; }
 }
 
 type PosterScheduleItem = { time: string; label: string; isOwn?: boolean };
@@ -293,7 +287,7 @@ export default function ConcertPosterEditor({ concert, band, onClose }: { concer
       const q = [concert.venue, concert.city].filter(Boolean).join(", ");
       if (q) {
         rampProgress(10, 48, 900);
-        const geo = await geocode(q);
+        const geo = await geocodePosterVenueAction(q);
         stopRamp?.();
         setMapProgress(50);
         if (geo && !cancelled) {

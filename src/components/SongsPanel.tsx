@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import type { Song } from "@/lib/songs";
@@ -41,23 +41,6 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
-  const [playingId, setPlayingId] = useState<string | null>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  // Reproducció ràpida estil Spotify des de la llista.
-  function togglePlay(songId: string, fileId: string) {
-    if (playingId === songId) {
-      audioRef.current?.pause();
-      setPlayingId(null);
-      return;
-    }
-    if (!audioRef.current) audioRef.current = new Audio();
-    audioRef.current.src = `/api/file/${fileId}`;
-    audioRef.current.play();
-    audioRef.current.onended = () => setPlayingId(null);
-    setPlayingId(songId);
-  }
-
   const q = normalize(search.trim());
   const list = songs.filter((s) => !q || normalize(s.title).includes(q) || normalize(s.artist).includes(q));
 
@@ -98,19 +81,12 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
               <span className="sp-dur">⏱</span>
               <span className="sp-actions"></span>
             </div>
-            {list.map((s, i) => {
-              const audio = s.files.find((f) => f.mime.startsWith("audio"));
+            {list.map((s) => {
               const coverColor = band.color1 || "#8b7bff";
               return (
-                <div key={s.id} className={"sp-row clickable" + (playingId === s.id ? " playing" : "")} onClick={() => router.push(`/canco/${s.id}`)}>
+                <div key={s.id} className="sp-row clickable" onClick={() => router.push(`/canco/${s.id}`)}>
                   <span className="sp-idx" onClick={(e) => e.stopPropagation()}>
-                    {audio ? (
-                      <button type="button" className="sp-play" title="Escolta la gravació" onClick={() => togglePlay(s.id, audio.id)}>
-                        {playingId === s.id ? "❚❚" : "▶"}
-                      </button>
-                    ) : (
-                      <span className="sp-num">{i + 1}</span>
-                    )}
+                    <button type="button" className="sp-play" title="Obre el mode escenari" onClick={() => router.push(`/escenari-mode/song/${s.id}`)}>▶</button>
                   </span>
                   {s.coverUrl || band.logo ? (
                     <img className="sp-cover sp-cover-img" src={s.coverUrl || band.logo} alt="" loading="lazy" />

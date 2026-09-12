@@ -27,6 +27,21 @@ function StarIcon() {
     </svg>
   );
 }
+function CheckIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  );
+}
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s", flex: "none" }}>
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  );
+}
 
 // El pla d'agència immediatament superior a l'actual (per quan s'arriba al
 // límit de grups).
@@ -204,6 +219,7 @@ function MemberRow({ m, bands, canEdit, isMe }: { m: AgencyMember; bands: BandOp
   const router = useRouter();
   const [state, setState] = useState(m);
   const [busy, setBusy] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
 
   async function patch(p: Parameters<typeof setAgencyMemberAction>[1]) {
     setBusy(true);
@@ -226,10 +242,13 @@ function MemberRow({ m, bands, canEdit, isMe }: { m: AgencyMember; bands: BandOp
       <div className="ag-member-head">
         <img className="subs-photo" src={m.photoFileId ? `/api/file/${m.photoFileId}` : personPhotoDataUri(m.name)} alt="" />
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div className="member-name">{m.name}<VerifiedTick size={12} title="Compte d'Escenari (membre de l'agència)" />{isMe && <span className="t-dim" style={{ fontWeight: 400, fontSize: 12 }}> · tu</span>}</div>
+          <div className="member-name">
+            {m.name}<VerifiedTick size={12} title="Compte d'Escenari (membre de l'agència)" />
+            {isMe && <span className="t-dim" style={{ fontWeight: 400, fontSize: 12 }}> · tu</span>}
+            {state.agencyOwner && <span className="badge ag-owner-badge"><StarIcon />Admin de l&apos;agència</span>}
+          </div>
           <div className="t-dim" style={{ fontSize: 12 }}>{m.email}</div>
         </div>
-        {state.agencyOwner ? <span className="badge ag-owner-badge"><StarIcon />Admin de l&apos;agència</span> : null}
         {canEdit && !isMe && !state.agencyOwner && (
           <button type="button" className="row-delete-btn" title="Treu de l'agència" disabled={busy}
             onClick={async () => { if (!confirm(`Treure ${m.name} de l'agència?`)) return; await removeAgencyMemberAction(m.clerkUserId); router.refresh(); }}>✕</button>
@@ -243,38 +262,60 @@ function MemberRow({ m, bands, canEdit, isMe }: { m: AgencyMember; bands: BandOp
               onBlur={(e) => { if (e.target.value.trim() !== state.agencyRole) patch({ agencyRole: e.target.value.trim() }); }} />
           ) : <span style={{ fontSize: 13 }}>{state.agencyRole || "—"}</span>}
         </label>
-        <div className="ag-field">
-          <span className="form-label">Pot crear grups</span>
-          <Switch on={state.canCreateGroups} disabled={!editable || busy} onChange={(v) => patch({ canCreateGroups: v })} />
-        </div>
-        <div className="ag-field">
-          <span className="form-label">Veu tots els grups</span>
-          <Switch on={state.viewAllGroups} disabled={!editable || busy} onChange={(v) => patch({ viewAllGroups: v })} />
-        </div>
+        {!state.agencyOwner && (
+          <div className="ag-field">
+            <span className="form-label">Pot crear grups</span>
+            <Switch on={state.canCreateGroups} disabled={!editable || busy} onChange={(v) => patch({ canCreateGroups: v })} />
+          </div>
+        )}
         {canEdit && (
           <div className="ag-field">
             <span className="form-label">Admin de l&apos;agència</span>
-            <Switch on={state.agencyOwner} disabled={busy || isMe} onChange={(v) => patch({ agencyOwner: v })} title={isMe ? "Un altre admin t'ho pot canviar" : undefined} />
+            <button
+              type="button" role="checkbox" aria-checked={state.agencyOwner} className={"ag-tick-checkbox" + (state.agencyOwner ? " checked" : "")}
+              disabled={busy || isMe} title={isMe ? "Un altre admin t'ho pot canviar" : undefined}
+              onClick={() => patch({ agencyOwner: !state.agencyOwner })}
+            >{state.agencyOwner && <CheckIcon />}</button>
           </div>
         )}
-      </div>
-      {!state.viewAllGroups && (
-        <div className="ag-assign">
-          <span className="form-label">Grups assignats</span>
-          <div className="access-box-list" style={{ marginTop: 6 }}>
-            {bands.length === 0 && <span className="t-dim" style={{ fontSize: 12 }}>Encara no hi ha grups.</span>}
-            {bands.map((b) => {
-              const on = state.assignedBandIds.includes(b.id);
-              return (
-                <button key={b.id} type="button" className={"access-chip lib-chip" + (on ? " active" : "")} disabled={!editable || busy}
-                  onClick={() => patch({ assignedBandIds: on ? state.assignedBandIds.filter((x) => x !== b.id) : state.assignedBandIds.concat([b.id]) })}>
-                  <img src={b.logo || bandPhotoDataUri({ id: b.id, name: b.name })} alt="" />{on ? "✓ " : ""}{b.name}
-                </button>
-              );
-            })}
-          </div>
+        <div className="ag-field" style={{ position: "relative" }}>
+          <span className="form-label">Grups</span>
+          <button type="button" className="field-input compact-field ag-groups-trigger" disabled={!editable} onClick={() => setGroupsOpen((v) => !v)}>
+            <span>
+              {state.viewAllGroups ? "Tots" : (state.assignedBandIds.length ? state.assignedBandIds.map((id) => bands.find((b) => b.id === id)?.name || "?").join(", ") : "Cap grup")}
+            </span>
+            <ChevronIcon open={groupsOpen} />
+          </button>
+          {groupsOpen && (
+            <>
+              <div className="year-picker-overlay" onClick={() => setGroupsOpen(false)}></div>
+              <div className="year-dropdown cf-band-dropdown ag-groups-dropdown" onClick={(e) => e.stopPropagation()}>
+                <div className="access-box-list">
+                  <button
+                    type="button" className={"access-chip" + (state.viewAllGroups ? " active" : "")} disabled={!editable || busy}
+                    onClick={() => patch({ viewAllGroups: !state.viewAllGroups, assignedBandIds: [] })}
+                  >{state.viewAllGroups ? "✓ " : ""}Tots</button>
+                  {bands.length === 0 && <span className="t-dim" style={{ fontSize: 12 }}>Encara no hi ha grups.</span>}
+                  {bands.map((b) => {
+                    const on = !state.viewAllGroups && state.assignedBandIds.includes(b.id);
+                    return (
+                      <button
+                        key={b.id} type="button" className={"access-chip lib-chip" + (on ? " active" : "")} disabled={!editable || busy}
+                        onClick={() => {
+                          if (state.viewAllGroups) { patch({ viewAllGroups: false, assignedBandIds: [b.id] }); return; }
+                          patch({ assignedBandIds: on ? state.assignedBandIds.filter((x) => x !== b.id) : state.assignedBandIds.concat([b.id]) });
+                        }}
+                      >
+                        <img src={b.logo || bandPhotoDataUri({ id: b.id, name: b.name })} alt="" />{on ? "✓ " : ""}{b.name}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -413,21 +454,30 @@ export default function AgenciaView({ agency, me, members, invitations, bands, b
                 </div>
                 <div className="ag-member-grid" style={{ marginTop: 10 }}>
                   <div className="ag-field"><span className="form-label">Pot crear grups</span><Switch on={draft.canCreateGroups} onChange={(v) => setDraft({ ...draft, canCreateGroups: v })} /></div>
-                  <div className="ag-field"><span className="form-label">Veu tots els grups</span><Switch on={draft.viewAllGroups} onChange={(v) => setDraft({ ...draft, viewAllGroups: v })} /></div>
                 </div>
-                {!draft.viewAllGroups && (
-                  <div className="access-box-list" style={{ marginTop: 8 }}>
+                <div style={{ marginTop: 8 }}>
+                  <span className="form-label">Grups</span>
+                  <div className="access-box-list" style={{ marginTop: 6 }}>
+                    <button
+                      type="button" className={"access-chip" + (draft.viewAllGroups ? " active" : "")}
+                      onClick={() => setDraft({ ...draft, viewAllGroups: !draft.viewAllGroups, assignedBandIds: [] })}
+                    >{draft.viewAllGroups ? "✓ " : ""}Tots</button>
                     {bands.map((b) => {
-                      const on = draft.assignedBandIds.includes(b.id);
+                      const on = !draft.viewAllGroups && draft.assignedBandIds.includes(b.id);
                       return (
-                        <button key={b.id} type="button" className={"access-chip lib-chip" + (on ? " active" : "")}
-                          onClick={() => setDraft({ ...draft, assignedBandIds: on ? draft.assignedBandIds.filter((x) => x !== b.id) : draft.assignedBandIds.concat([b.id]) })}>
+                        <button
+                          key={b.id} type="button" className={"access-chip lib-chip" + (on ? " active" : "")}
+                          onClick={() => {
+                            if (draft.viewAllGroups) { setDraft({ ...draft, viewAllGroups: false, assignedBandIds: [b.id] }); return; }
+                            setDraft({ ...draft, assignedBandIds: on ? draft.assignedBandIds.filter((x) => x !== b.id) : draft.assignedBandIds.concat([b.id]) });
+                          }}
+                        >
                           <img src={b.logo || bandPhotoDataUri({ id: b.id, name: b.name })} alt="" />{on ? "✓ " : ""}{b.name}
                         </button>
                       );
                     })}
                   </div>
-                )}
+                </div>
                 <div style={{ display: "flex", gap: 8, marginTop: 10, alignItems: "center" }}>
                   <button type="button" className="btn-save" disabled={inviting || (!draft.name.trim() && !draft.email.trim())} onClick={sendInvite}>{inviting ? "Creant…" : "Crea la invitació"}</button>
                   <span className="t-dim" style={{ fontSize: 12 }}>Obtindràs un enllaç per passar-li; amb correu, també se li envia.</span>

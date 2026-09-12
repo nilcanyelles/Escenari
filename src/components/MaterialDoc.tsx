@@ -9,10 +9,13 @@ import { instrumentsFor } from "@/lib/tags";
 type BandLite = { name: string; logo: string; color1: string; city: string; contact: string; phone: string; members: Person[] };
 
 // Document imprimible (rider o setlist) que veu qualsevol persona amb l'enllaç.
-export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
+export default function MaterialDoc({ kind, name, band, agencyLogo = "", rider, songs, token }: {
   kind: "rider" | "setlist";
   name: string;
   band: BandLite;
+  // Logo de l'agència (workspace) — surt a la portada del rider al costat
+  // del logo del grup.
+  agencyLogo?: string;
   rider: RiderContent | null;
   songs: Song[];
   // Token públic del rider — només cal quan hi ha annexos penjats (fileUrl),
@@ -21,6 +24,9 @@ export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
   token?: string;
 }) {
   const accent = band.color1 || "#8b7bff";
+  const riderContacts = rider ? rider.contacts.filter((c) => c.name.trim()) : [];
+  const telHref = (p: string) => `tel:${p.replace(/[^\d+]/g, "")}`;
+  const waHref = (p: string) => `https://wa.me/${p.replace(/\D/g, "")}`;
   const totalSecs = songs.reduce((s, x) => s + songDurationSecs(x.duration), 0);
   const stageAspect = rider ? Math.max(0.8, Math.min(4, rider.stage.widthM / rider.stage.depthM || 1.33)) : 1.33;
   const hasFileAnnexes = !!rider?.pages.some((p) => p.fileUrl);
@@ -47,6 +53,48 @@ export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
       </div>
 
       <div className="md-doc" style={{ ["--md-accent" as string]: accent }}>
+        {kind === "rider" && (
+          <section className="md-cover">
+            {(band.logo || agencyLogo) && (
+              <div className="md-cover-logos">
+                {band.logo && <img className="md-cover-logo" src={band.logo} alt="" />}
+                {agencyLogo && <img className="md-cover-logo" src={agencyLogo} alt="" />}
+              </div>
+            )}
+            <div className="md-cover-band">{band.name}</div>
+            <div className="md-cover-title">{name}</div>
+            <div className="md-cover-year">{new Date().getFullYear()}</div>
+
+            {riderContacts.length > 0 && (
+              <table className="md-table md-cover-contacts">
+                <thead><tr><th>Càrrec</th><th>Nom</th><th>Telèfon</th><th>Correu</th></tr></thead>
+                <tbody>
+                  {riderContacts.map((c, i) => (
+                    <tr key={i}>
+                      <td>{c.role}</td>
+                      <td className="md-song">{c.name}</td>
+                      <td>
+                        {c.phone && (
+                          <span className="md-tel">
+                            <span>{c.phone}</span>
+                            <a className="md-tel-btn" href={telHref(c.phone)} title="Truca" aria-label="Truca">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.81.36 1.6.7 2.34a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.74-1.74a2 2 0 0 1 2.11-.45c.74.34 1.53.57 2.34.7A2 2 0 0 1 22 16.92z"></path></svg>
+                            </a>
+                            <a className="md-tel-btn wa" href={waHref(c.phone)} target="_blank" rel="noreferrer" title="WhatsApp" aria-label="WhatsApp">
+                              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
+                            </a>
+                          </span>
+                        )}
+                      </td>
+                      <td>{c.email}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
+        )}
+
         <div className="md-head">
           {band.logo && <img className="md-logo" src={band.logo} alt="" />}
           <div>
@@ -63,20 +111,6 @@ export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
         {kind === "rider" && rider && (
           <>
             {rider.intro && <p className="md-intro">{rider.intro}</p>}
-
-            {rider.contacts.some((c) => c.name.trim()) && (
-              <section className="md-section">
-                <h2>Contactes</h2>
-                <table className="md-table">
-                  <thead><tr><th>Càrrec</th><th>Nom</th><th>Telèfon</th><th>Correu</th></tr></thead>
-                  <tbody>
-                    {rider.contacts.filter((c) => c.name.trim()).map((c, i) => (
-                      <tr key={i}><td>{c.role}</td><td className="md-song">{c.name}</td><td>{c.phone}</td><td>{c.email}</td></tr>
-                    ))}
-                  </tbody>
-                </table>
-              </section>
-            )}
 
             {band.members.length > 0 && (
               <section className="md-section">
@@ -137,13 +171,13 @@ export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
               </section>
             )}
 
-            {rider.monitors.length > 0 && (
+            {rider.monitors.some((m) => m.who.trim() || m.notes.trim()) && (
               <section className="md-section">
                 <h2>Monitoratge</h2>
                 <table className="md-table">
                   <thead><tr><th>Per a qui</th><th>Tipus</th><th>Mescla / notes</th></tr></thead>
                   <tbody>
-                    {rider.monitors.map((m, idx) => (
+                    {rider.monitors.filter((m) => m.who.trim() || m.notes.trim()).map((m, idx) => (
                       <tr key={idx}><td>{m.who}</td><td>{m.kind}</td><td>{m.notes}</td></tr>
                     ))}
                   </tbody>
@@ -151,13 +185,13 @@ export default function MaterialDoc({ kind, name, band, rider, songs, token }: {
               </section>
             )}
 
-            {rider.backline.length > 0 && (
+            {rider.backline.some((b) => b.item.trim() || b.notes.trim()) && (
               <section className="md-section">
                 <h2>Backline</h2>
                 <table className="md-table">
                   <thead><tr><th>Element</th><th>Qui el porta</th><th>Notes</th></tr></thead>
                   <tbody>
-                    {rider.backline.map((b, idx) => (
+                    {rider.backline.filter((b) => b.item.trim() || b.notes.trim()).map((b, idx) => (
                       <tr key={idx}><td>{b.item}</td><td>{b.providedBy === "grup" ? "El grup" : "Organització"}</td><td>{b.notes}</td></tr>
                     ))}
                   </tbody>
