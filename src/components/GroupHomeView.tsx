@@ -470,13 +470,23 @@ function PermsMatrix({ band, photosByName, linkedNames, isManager, myName }: {
               {people.map(({ p, kind }) => {
                 const photoId = photosByName[normalize(p.name)];
                 const sub = kind === "member" ? (instrumentsFor(p).join(", ") || "Músic") : (p.role || "Crew");
+                const rowIsAdmin = !!perms[p.name]?.admin;
                 return (
                   <tr key={p.name}>
                     <td>
                       <div className="perm-person">
                         <img src={photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(p.name, c1, c2)} alt="" />
                         <div style={{ minWidth: 0 }}>
-                          <div className="member-name">{p.name}{linkedNames.has(normalize(p.name)) && <VerifiedTick size={12} />}</div>
+                          <div className="member-name">
+                            {p.name}
+                            {rowIsAdmin && (
+                              <svg className="perm-admin-star" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-label="Admin">
+                                <title>Admin</title>
+                                <polygon points="12 2 15.09 8.63 22 9.24 16.5 13.97 18.18 21 12 17.27 5.82 21 7.5 13.97 2 9.24 8.91 8.63 12 2" />
+                              </svg>
+                            )}
+                            {linkedNames.has(normalize(p.name)) && <VerifiedTick size={12} />}
+                          </div>
                           <div className="t-dim" style={{ fontSize: 11 }}>{sub}</div>
                         </div>
                       </div>
@@ -531,7 +541,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -551,6 +561,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // Xifres de xarxes del mes passat (per als "+123 aquest mes" d'Inici).
   socialPrev?: Partial<SocialStats>;
   today: string;
+  // Admin de l'agència: pot eliminar el grup sencer des d'"Edita el grup".
+  agencyOwner?: boolean;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -1298,7 +1310,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       </>)}
 
       {editOpen && (
-        <GroupAppearanceModal key={band.id} band={band} onClose={() => setEditOpen(false)} />
+        <GroupAppearanceModal key={band.id} band={band} canDelete={isMgr && agencyOwner} onClose={() => setEditOpen(false)} />
       )}
 
       {/* "Edita membres": què fer amb la persona clicada */}

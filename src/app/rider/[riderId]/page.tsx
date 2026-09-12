@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
 import { normalizeRiderContent } from "@/lib/material-types";
-import { getBands } from "@/lib/data";
+import { getBands, getContacts } from "@/lib/data";
 import RiderStudio from "@/components/RiderStudio";
 
 export const dynamic = "force-dynamic";
@@ -22,7 +22,7 @@ export default async function RiderStudioPage({ params }: { params: Promise<{ ri
   if (!row) notFound();
 
   let allowed = false;
-  let backHref = "/grup";
+  let backHref = "/grup?tab=documents";
   if (profile.role === "manager" && profile.workspaceId === row.band_ws) {
     allowed = true;
   } else if (profile.role === "artist") {
@@ -34,7 +34,7 @@ export default async function RiderStudioPage({ params }: { params: Promise<{ ri
   }
   if (!allowed) notFound();
 
-  const bands = await getBands(row.band_ws);
+  const [bands, agencyContacts] = await Promise.all([getBands(row.band_ws), getContacts(row.band_ws)]);
   const band = bands.find((b) => b.id === row.band_id);
 
   return (
@@ -49,6 +49,7 @@ export default async function RiderStudioPage({ params }: { params: Promise<{ ri
       publicToken={row.public_token}
       bandMembers={band?.members || []}
       bandCrew={band?.crew || []}
+      agencyContacts={agencyContacts}
     />
   );
 }

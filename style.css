@@ -357,14 +357,22 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .muni-map-card { grid-column: 1 / -1; }
-.modal.muni-map-modal { width: 760px; max-width: 95vw; }
-.muni-map-modal .muni-map-card { border: none; padding: 0; background: transparent; }
-.muni-map-svg { width: 100%; height: auto; display: block; }
-.muni-map-legend { display: flex; align-items: center; gap: 8px; margin-top: 10px; font-size: 11.5px; color: var(--text-faint); }
-.muni-map-legend-bar {
-  width: 110px; height: 8px; border-radius: 999px; flex: none;
-  background: linear-gradient(90deg, oklch(0.62 0.19 290 / 0.16), oklch(0.62 0.19 290 / 0.9));
+.muni-map-viewport { position: relative; }
+.muni-map-svg { width: 100%; height: auto; display: block; touch-action: none; }
+.muni-map-svg.grabbable { cursor: grab; }
+.muni-map-svg.grabbing { cursor: grabbing; }
+.muni-map-zoom {
+  position: absolute; top: 10px; right: 10px; display: flex; flex-direction: column;
+  border-radius: 10px; overflow: hidden; border: 1px solid var(--border-input);
+  background: var(--bg-card); box-shadow: 0 8px 20px -8px rgba(0,0,0,0.5);
 }
+.muni-map-zoom button {
+  all: unset; box-sizing: border-box; width: 30px; height: 28px; display: flex; align-items: center;
+  justify-content: center; cursor: pointer; color: var(--text-dim); font-size: 16px; font-weight: 600; line-height: 1;
+}
+.muni-map-zoom button:first-child { border-bottom: 1px solid var(--border-soft); }
+.muni-map-zoom button:hover:not(:disabled) { background: oklch(1 0 0 / 0.06); color: var(--text); }
+.muni-map-zoom button:disabled { opacity: 0.35; cursor: default; }
 .bars-row { display: flex; align-items: flex-end; gap: 10px; height: 150px; }
 .bar-col { position: relative; flex: 1; display: flex; flex-direction: column; align-items: center; gap: 6px; height: 100%; justify-content: flex-end; }
 .bar-count { font-size: 11px; color: var(--text-muted); }
@@ -1530,6 +1538,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    compte (vora, font, alineació) — la resta de l'aspecte de targeta ve tal
    qual de .artist-band-card, que no es toca. */
 .artist-band-card.clickable { appearance: none; -webkit-appearance: none; margin: 0; padding: 0; font: inherit; text-align: left; display: block; width: 100%; cursor: pointer; }
+.artist-band-card.clickable .artist-band-name { color: oklch(0.99 0.01 330); }
 .invite-card {
   display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
   background: oklch(0.68 0.19 290 / 0.08); border: 1px solid oklch(0.68 0.19 290 / 0.3);
@@ -2190,6 +2199,10 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .cd-meter-tip-title { font-weight: 600; color: var(--text-muted); margin-bottom: 4px; }
 .cd-meter-tip-row { padding: 1px 0; }
+.cd-meter-tip-sections { display: flex; flex-direction: column; gap: 6px; min-width: 170px; }
+.cd-meter-tip-section-row { display: flex; align-items: center; gap: 7px; }
+.cd-meter-tip-section-row span:nth-child(2) { flex: 1; color: var(--text-dim); }
+.cd-meter-tip-count { font-weight: 600; font-variant-numeric: tabular-nums; }
 .cd-att-bubbles { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; max-width: 220px; }
 .cd-att-bubble-group { display: inline-flex; gap: 4px; }
 .cd-att-bubble {
@@ -2351,6 +2364,8 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cd-scope-title { font-size: 13.5px; font-weight: 600; margin-bottom: 3px; }
 .cd-scope-desc { font-size: 11.5px; color: var(--text-faint); }
 .cd-newlink-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.cd-newlink-sections { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.cd-newlink-sections .access-chip { display: inline-flex; align-items: center; gap: 5px; }
 .cd-created-banner {
   background: oklch(0.72 0.15 155 / 0.1);
   border: 1px solid oklch(0.72 0.15 155 / 0.3);
@@ -2377,10 +2392,28 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cd-link-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
 .cd-link-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .cd-link-status { font-size: 11px; font-weight: 600; border-radius: 999px; padding: 2px 9px; }
+.cd-sections-badge { display: inline-flex; align-items: center; gap: 4px; }
 .cd-link-status.activa { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); }
 .cd-link-status.caducada, .cd-link-status.revocada { background: oklch(0.68 0.18 25 / 0.16); color: oklch(0.74 0.18 25); }
 .cd-link-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.cd-icon-btn {
+  box-sizing: border-box; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 8px; flex: none;
+  background: transparent; border: 1px solid var(--border-input); color: var(--text-muted);
+  transition: border-color .15s, color .15s, background .15s;
+}
+.cd-icon-btn:hover:not(:disabled) { border-color: var(--accent); color: var(--text); }
+.cd-icon-btn:disabled { opacity: 0.4; cursor: default; }
 .cd-wa-btn { color: #25D366; border-color: rgba(37, 211, 102, 0.4); }
+.cd-change-recipient { margin-left: 8px; }
+.cd-recipient-edit { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.cd-recipient-edit .compact-field { max-width: 150px; }
+.cd-link-code-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.cd-link-code-empty { justify-content: flex-start; margin-top: 8px; }
+.cd-access-code { font-family: "Space Grotesk", monospace; font-weight: 600; letter-spacing: 0.1em; background: oklch(0.68 0.19 290 / 0.14); color: var(--accent-text); border-radius: 6px; padding: 2px 8px; }
+.cd-code-menu { display: flex; align-items: center; gap: 6px; }
+.cd-code-created { font-size: 12px; color: var(--text-muted); }
+.cd-link-track { font-size: 11.5px; color: var(--text-faint); margin-top: 6px; line-height: 1.5; }
 
 @media (max-width: 900px) {
   .cd-hero { flex-direction: column; }
@@ -2434,6 +2467,8 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .pf-hero-band { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-faint); font-weight: 600; }
 .pf-hero-date { font-family: "Space Grotesk", sans-serif; font-size: 26px; font-weight: 700; margin: 6px 0 10px; }
 .pf-hero-text { color: var(--text-muted); font-size: 14px; line-height: 1.55; max-width: 480px; margin: 0 auto 16px; }
+.pf-hero-title { font-family: "Space Grotesk", sans-serif; font-size: 22px; font-weight: 700; margin: 4px 0 2px; }
+.pf-hero-privacy { color: var(--amber); font-size: 12.5px; line-height: 1.5; max-width: 480px; margin: -6px auto 16px; }
 .pf-progress { display: flex; align-items: center; gap: 12px; max-width: 380px; margin: 0 auto; font-size: 12px; color: var(--text-faint); }
 .pf-progress-track { flex: 1; height: 8px; background: oklch(1 0 0 / 0.08); border-radius: 999px; overflow: hidden; }
 .pf-progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), oklch(0.75 0.16 200)); border-radius: 999px; transition: width 0.3s; }
@@ -2630,6 +2665,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .pf-dead-icon { font-size: 34px; }
 .pf-dead h1 { font-family: "Space Grotesk", sans-serif; font-size: 22px; margin: 0; }
 .pf-dead p { color: var(--text-muted); font-size: 14px; }
+.pf-gate-warn { color: var(--amber); }
+.pf-gate-form { margin: 6px auto 0; }
+.pf-gate-error { margin-top: 2px; }
 
 @media (max-width: 560px) {
   .pf-grid { grid-template-columns: 1fr; }
@@ -2877,6 +2915,17 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* ============ Document públic (rider/setlist → PDF) ============ */
 .md-screen { min-height: 100vh; background: var(--bg-deep); padding-bottom: 60px; }
+
+/* Visor d'un rider-document (PDF penjat tal qual): barra fina + el fitxer
+   original a pantalla completa, sense cap generació de l'app. */
+.filedoc-screen { display: flex; flex-direction: column; height: 100vh; background: var(--bg-deep); }
+.filedoc-bar { display: flex; align-items: center; gap: 14px; padding: 10px 16px; border-bottom: 1px solid var(--border); flex: none; }
+.filedoc-name { font-size: 13px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.filedoc-dl {
+  display: inline-flex; align-items: center; gap: 8px; background: var(--accent); border: none; color: white;
+  font-size: 13px; font-weight: 600; border-radius: 10px; padding: 8px 16px; text-decoration: none; flex: none;
+}
+.filedoc-frame { flex: 1; width: 100%; border: none; background: #525659; }
 .md-toolbar {
   display: flex;
   align-items: center;
@@ -2900,15 +2949,56 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-family: inherit;
 }
 .md-doc {
-  max-width: 800px;
+  width: 210mm;
+  max-width: 100%;
   margin: 0 auto;
-  background: white;
   color: #16151f;
   border-radius: 14px;
   padding: 44px 52px;
   font-size: 13.5px;
   line-height: 1.5;
+  /* A la previsualització es marca on cauran els límits de cada full A4
+     (una ratlla fina cada 297 mm), perquè es vegi com quedarà paginat el
+     PDF. A la impressió aquesta guia es treu (regla de sota). */
+  background-color: white;
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(297mm - 3px),
+    rgba(110, 100, 150, 0.30) calc(297mm - 3px),
+    rgba(110, 100, 150, 0.30) calc(297mm - 1px),
+    transparent calc(297mm - 1px),
+    transparent 297mm
+  );
 }
+/* Portada del rider: primera pàgina del PDF — logos (grup + agència), nom
+   del grup en gran, "Rider tècnic", l'any i, a sota, els contactes. */
+.md-cover {
+  min-height: 255mm;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+  border-bottom: 1px dashed #d8d5e4; margin-bottom: 26px; padding-bottom: 26px;
+}
+.md-cover-logos { display: flex; align-items: center; justify-content: center; gap: 40px; margin-bottom: 40px; flex-wrap: wrap; }
+.md-cover-logo { max-height: 120px; max-width: 42%; width: auto; object-fit: contain; }
+.md-cover-band {
+  font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 46px; line-height: 1.1;
+  color: #16151f; margin-bottom: 18px;
+}
+.md-cover-title { font-size: 15px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--md-accent, #8b7bff); font-weight: 700; }
+.md-cover-year { font-size: 15px; color: #6f6b80; margin-top: 6px; }
+.md-cover-contacts { margin: 48px auto 0; max-width: 600px; text-align: left; }
+/* Telèfon d'un contacte + botons de trucar i WhatsApp al costat. */
+.md-tel { display: inline-flex; align-items: center; gap: 7px; }
+.md-tel-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px; flex: none;
+  border: 1px solid #e0dded; color: #6f6b80; text-decoration: none;
+}
+.md-tel-btn:hover { color: var(--md-accent, #8b7bff); border-color: var(--md-accent, #8b7bff); }
+.md-tel-btn.wa { color: #1fa855; border-color: #cdead7; }
+.md-tel-btn.wa:hover { color: #1a8f48; border-color: #1fa855; }
+
 .md-head { display: flex; align-items: center; gap: 20px; border-bottom: 3px solid var(--md-accent, #8b7bff); padding-bottom: 18px; margin-bottom: 22px; }
 .md-logo { width: 74px; height: 74px; border-radius: 14px; object-fit: cover; }
 .md-band { font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--md-accent, #8b7bff); font-weight: 700; }
@@ -2985,17 +3075,41 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .md-footer { text-align: center; font-size: 11px; color: #a09cb2; border-top: 1px solid #e8e6f0; padding-top: 14px; margin-top: 26px; }
 
 @media print {
-  @page { size: A4; margin: 0; }
+  /* El document del rider (/m/[token]) s'imprimeix / es desa en PDF sempre
+     en DIN A4 vertical, amb els marges dins de .md-doc (no del full) perquè
+     cap navegador els retalli. */
+  @page { size: A4 portrait; margin: 0; }
   .no-print { display: none !important; }
+  html, body { background: white; }
   .md-screen { background: white; padding: 0; }
-  .md-doc { border-radius: 0; padding: 10mm 12mm; max-width: none; width: 210mm; min-height: 297mm; box-sizing: border-box; }
-  body { background: white; }
+  .md-doc {
+    border-radius: 0; box-shadow: none;
+    width: 210mm; max-width: none; min-height: 297mm;
+    margin: 0 auto; padding: 14mm 16mm; box-sizing: border-box;
+    background-image: none; /* fora la guia de límits de pàgina */
+    orphans: 3; widows: 3;
+    -webkit-print-color-adjust: exact; print-color-adjust: exact;
+  }
+  /* Cap secció, taula, plànol ni fila es parteix en un salt de pàgina:
+     cada bloc passa sencer a la pàgina següent si no hi cap. Només se
+     subdivideix (per files, repetint la capçalera) una taula que tota
+     sola ja no cabria en una pàgina. */
+  .md-section,
+  .md-table, .md-members, .md-stage, .md-intro, .md-text, .md-setlist-summary, .md-footer {
+    break-inside: avoid;
+  }
+  .md-section h2, .md-head { break-after: avoid-page; }
+  .md-table thead { display: table-header-group; }
+  .md-table tr, .md-member { break-inside: avoid; }
+  /* La portada ocupa la primera pàgina sencera; la resta del rider comença
+     a la pàgina 2. */
+  .md-cover { min-height: calc(297mm - 28mm); break-after: page; border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
 }
 
 @media (max-width: 700px) {
   .rider-grid-2 { grid-template-columns: 1fr; }
   .cd-material-grid { grid-template-columns: 1fr; }
-  .md-doc { padding: 26px 20px; }
+  .md-doc { padding: 26px 20px; background-image: none; } /* la guia de límits A4 no té sentit si el doc no fa 210 mm */
   .rider-input-cols { grid-template-columns: 36px 1.2fr 1fr 28px; }
   .rider-input-cols > :nth-child(4), .rider-input-cols > :nth-child(5) { display: none; }
 }
@@ -3703,6 +3817,12 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center;
 }
 .perform-audio-play:disabled { opacity: 0.5; cursor: default; }
+/* Volum general (master), a la barra inferior al costat del transport. */
+.perform-audio-master { justify-self: end; display: flex; align-items: center; gap: 8px; color: var(--text-faint); min-width: 0; }
+.perform-audio-master svg { flex: none; }
+.perform-audio-master input[type="range"] { width: 92px; accent-color: var(--accent); }
+.perform-audio-master-val { flex: none; font-size: 11px; font-variant-numeric: tabular-nums; min-width: 30px; text-align: right; }
+@media (max-width: 640px) { .perform-audio-master input[type="range"] { width: 64px; } .perform-audio-master-val { display: none; } }
 .perform-audio-seek input:disabled { opacity: 0.4; }
 .perform-audio-spinner {
   width: 16px; height: 16px; border-radius: 50%;
@@ -3718,14 +3838,32 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   border: 1px solid oklch(1 0 0 / 0.16); border-right: none;
   background: #14111f; color: var(--text-dim); font-size: 15px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
-  z-index: 50; transition: color 0.15s, border-color 0.15s;
+  z-index: 330; transition: color 0.15s, border-color 0.15s;
 }
 .perform-mixer-tab.open { color: white; border-color: var(--accent); transform: translateY(-50%) rotate(180deg); }
 
+/* Botó dins del menú de mescla, sota Master/Tempo/Pitch, per desplegar la
+   llista de canals (plegada per defecte). */
+.perform-mixer-tracks-toggle {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  width: 100%; padding: 11px 12px; border-radius: 12px;
+  border: 1px solid oklch(1 0 0 / 0.14); background: oklch(1 0 0 / 0.03); color: var(--text-dim);
+  font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  font-family: inherit; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+.perform-mixer-tracks-toggle:hover { color: white; border-color: oklch(1 0 0 / 0.28); }
+.perform-mixer-tracks-toggle.open { color: white; background: oklch(1 0 0 / 0.06); }
+.perform-mixer-tracks-toggle-label { display: inline-flex; align-items: center; gap: 9px; }
+.perform-mixer-tracks-toggle-label svg { flex: none; opacity: 0.9; }
+.perform-mixer-tracks-toggle .perform-mixer-caret { font-size: 11px; transition: transform 0.15s; }
+.perform-mixer-tracks-toggle.open .perform-mixer-caret { transform: rotate(180deg); }
+
 .perform-mixer-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 60;
+  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 340;
   display: flex; justify-content: flex-end;
 }
+/* Reproductor a sota del visor de partitura a pantalla completa. */
+.perform-score-fs-audio { flex: none; background: #08070e; }
 .perform-mixer-panel {
   width: min(360px, 92vw); height: 100%; background: #0e0c17; border-left: 1px solid oklch(1 0 0 / 0.1);
   display: flex; flex-direction: column; padding: 18px; gap: 18px; overflow-y: auto;
@@ -3740,6 +3878,18 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .perform-mixer-master-label { flex: none; font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; color: oklch(0.8 0.15 55); text-transform: uppercase; }
 .perform-mixer-master input[type="range"] { flex: 1; accent-color: oklch(0.75 0.16 55); }
 .perform-mixer-master .perform-mixer-vol { color: oklch(0.8 0.15 55); }
+/* Tempo i Pitch: controls a dalt, barra a una fila pròpia (més llarga). */
+.perform-mixer-tempo { flex-direction: column; align-items: stretch; gap: 10px; }
+.perform-mixer-tempo-top { display: flex; align-items: center; gap: 8px; }
+.perform-mixer-tempo-top .perform-mixer-master-label { flex: 1; display: inline-flex; align-items: center; gap: 6px; }
+.perform-mixer-label-icon { flex: none; opacity: 0.85; }
+.perform-mixer-tempo input[type="range"] { width: 100%; accent-color: oklch(0.75 0.16 55); }
+.perform-mixer-tempo .perform-mixer-btn { color: oklch(0.85 0.14 55); border-color: oklch(0.75 0.16 55 / 0.5); }
+.perform-mixer-tempo .perform-mixer-btn:disabled { opacity: 0.35; cursor: default; }
+.perform-mixer-tempo-val { flex: none; min-width: 84px; text-align: right; font-size: 12px; font-weight: 700; color: oklch(0.85 0.14 55); font-variant-numeric: tabular-nums; }
+.perform-mixer-tempo-reset { flex: none; background: none; border: none; color: oklch(0.8 0.15 55); font-size: 15px; cursor: pointer; padding: 0 2px; line-height: 1; }
+/* Sempre ocupa lloc: així els botons no ballen quan apareix o desapareix. */
+.perform-mixer-tempo-reset.is-hidden { visibility: hidden; pointer-events: none; }
 .perform-mixer-title { font-family: "Space Grotesk", sans-serif; font-weight: 700; font-size: 15px; color: white; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .perform-mixer-tracks { display: flex; flex-direction: column; gap: 18px; }
 .perform-mixer-track { display: flex; flex-direction: column; gap: 8px; padding-bottom: 16px; border-bottom: 1px solid oklch(1 0 0 / 0.07); }
@@ -6313,15 +6463,28 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .ag-member { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 14px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; }
 .ag-member.owner { border-color: oklch(0.68 0.19 290 / 0.4); }
 .ag-member-head { display: flex; align-items: center; gap: 12px; }
+.perm-admin-star { flex: none; color: oklch(0.8 0.15 95); }
 .ag-owner-badge { background: oklch(0.68 0.19 290 / 0.18); color: var(--accent-text); display: inline-flex; align-items: center; gap: 4px; }
 .ag-owner-badge svg { flex: none; }
 .ag-member-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; align-items: end; }
 .ag-field { display: flex; flex-direction: column; gap: 5px; }
-.ag-assign { display: flex; flex-direction: column; }
+.ag-tick-checkbox {
+  all: unset; box-sizing: border-box; cursor: pointer; flex: none;
+  width: 22px; height: 22px; border-radius: 6px; border: 1px solid var(--border-input);
+  display: inline-flex; align-items: center; justify-content: center; color: #fff;
+}
+.ag-tick-checkbox.checked { background: var(--accent); border-color: var(--accent); }
+.ag-tick-checkbox:disabled { opacity: 0.5; cursor: default; }
+.ag-groups-trigger { display: flex; align-items: center; justify-content: space-between; gap: 8px; text-align: left; cursor: pointer; overflow: hidden; }
+.ag-groups-trigger span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ag-groups-trigger:disabled { cursor: default; opacity: 0.7; }
+.ag-groups-dropdown { width: min(360px, 90vw); max-height: 320px; overflow-y: auto; }
 .ag-invite-form { background: oklch(1 0 0 / 0.04); border: 1px solid var(--border-soft); border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; }
 
-/* Alta d'un grup (modal) */
-.cg-modal { width: min(860px, 96vw); max-width: 96vw; }
+/* Alta d'un grup (modal). ".modal.cg-modal" (dues classes) perquè guanyi
+   sí o sí a ".modal.wide" (mateixa especificitat que .up-modal, vegeu més
+   avall) — amb només ".cg-modal" es quedava als 440px de ".wide". */
+.modal.cg-modal { width: min(1100px, 94vw); max-width: 94vw; }
 .cg-identity { display: flex; gap: 16px; align-items: flex-start; }
 .cg-people { display: flex; flex-direction: column; gap: 8px; }
 .cg-person { background: oklch(1 0 0 / 0.035); border: 1px solid var(--border-soft); border-radius: 12px; padding: 8px 10px; display: flex; flex-direction: column; gap: 8px; }
@@ -6461,7 +6624,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   .cg-two { grid-template-columns: 1fr; }
   .cg-identity { flex-direction: column; }
   .bento-social { grid-template-columns: 1fr; }
-  .modal.wide, .cg-modal { width: 96vw; max-width: 96vw; padding: 16px; }
+  .modal.wide, .modal.cg-modal { width: 96vw; max-width: 96vw; padding: 16px; }
   .join-box { flex-direction: column; align-items: stretch; }
   .join-code { text-align: center; }
   .subs-filterbar .input.search { min-width: 0; width: 100%; }
@@ -6627,11 +6790,29 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .imp-drop:hover, .imp-drop.dragover, .imp-drop:focus-visible { border-color: var(--accent); background: oklch(0.68 0.19 290 / 0.08); color: var(--text); outline: none; }
 .imp-summary { background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 10px; padding: 12px 14px; font-size: 13px; display: flex; flex-direction: column; gap: 8px; }
 .imp-preview { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; color: var(--text-dim); max-height: 160px; overflow: auto; }
+.imp-bands { display: flex; flex-direction: column; gap: 8px; font-size: 12.5px; color: var(--text-dim); max-height: 220px; overflow-y: auto; overflow-x: hidden; }
+.imp-band-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.imp-band-row > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.imp-band-actions { display: flex; flex-direction: column; align-items: stretch; gap: 4px; flex: none; }
+.imp-band-actions .btn-ghost-sm { width: auto; padding: 3px 8px; font-size: 11px; white-space: nowrap; }
+.imp-band-assigned {
+  flex: none; display: flex; align-items: center; gap: 6px; font-size: 11.5px;
+  color: var(--accent-strong); font-weight: 600; white-space: nowrap;
+}
+.imp-band-unassign {
+  all: unset; cursor: pointer; color: var(--text-fainter); font-size: 11px; line-height: 1;
+}
+.imp-band-unassign:hover { color: var(--text); }
+.imp-assign-list { display: flex; flex-direction: column; gap: 2px; max-height: 280px; overflow-y: auto; margin-top: 10px; }
 .imp-errors { color: oklch(0.78 0.14 25); font-size: 12.5px; max-height: 120px; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
 .imp-actions { display: flex; gap: 10px; justify-content: flex-end; }
 
 /* ============ Logo Escenari al formulari públic ============ */
 .pf-logo { height: 34px; width: auto; display: block; margin: 0 auto; }
+.pf-gate-brand-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+.pf-gate-mark { height: 30px; flex: none; }
+.pf-gate-name { font-size: 17px; }
+.pf-gate-agency-logo { height: 30px; width: 30px; border-radius: 7px; object-fit: cover; flex: none; }
 
 /* ============ Retall d'imatge (logo del grup) ============ */
 .crop-modal { max-width: 96vw; }
@@ -6646,14 +6827,21 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .crop-zoom input { flex: 1; accent-color: var(--accent); }
 
 /* ============ Aparença del grup: forma del logo i portada arrossegable ============ */
-.ga-aspect { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.ga-aspect-btn {
-  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 600;
-  padding: 5px 11px; border-radius: 999px; border: 1px solid var(--border-input); color: var(--text-muted);
-  transition: border-color .15s, background .15s, color .15s;
+.ga-aspect-trigger {
+  all: unset; box-sizing: border-box; cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 600;
+  display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-radius: var(--radius-sm);
+  border: 1px solid var(--border-input); color: var(--text);
 }
-.ga-aspect-btn:hover { border-color: var(--accent); color: var(--text); }
-.ga-aspect-btn.active { background: oklch(0.68 0.19 290 / 0.18); border-color: var(--accent); color: var(--text); }
+.ga-aspect-trigger:hover { border-color: var(--accent); }
+.ga-aspect-swatch {
+  flex: none; display: inline-block; border-radius: 3px; background: var(--accent);
+  border: 1px solid oklch(1 0 0 / 0.2);
+}
+.ga-aspect-dropdown { width: 180px; }
+.ga-aspect-option { display: flex; align-items: center; gap: 10px; }
+.ga-aspect-swatch-ghost { background: transparent; border: 1.5px dashed currentColor; }
+.ga-danger-zone { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--border-soft); }
+.ga-danger-zone .btn-danger-outline { display: inline-flex; align-items: center; gap: 7px; }
 .ga-cover.draggable { cursor: grab; touch-action: none; user-select: none; }
 .ga-cover.draggable:active { cursor: grabbing; }
 .ga-cover-pos-hint {
@@ -6738,14 +6926,27 @@ button.ga-cover-hint { border: none; cursor: pointer; font-family: inherit; }
 
 /* ============ Estadístiques: mapa de xinxetes ============ */
 .pin-map-card { padding: 10px; }
-.pin-map-shape { fill: oklch(1 0 0 / 0.045); stroke: oklch(1 0 0 / 0.22); stroke-width: 1; }
-.pin-map-shape.country { fill: oklch(1 0 0 / 0.02); stroke: oklch(1 0 0 / 0.12); }
-.pin-map-pin circle { fill: oklch(0.68 0.19 290 / 0.82); stroke: #fff; stroke-width: 1.2; transition: fill .15s; }
-.pin-map-pin:hover circle { fill: oklch(0.8 0.16 290); }
-.pin-map-label {
-  font-size: 11px; font-weight: 600; fill: var(--text);
-  paint-order: stroke; stroke: oklch(0.14 0.02 258); stroke-width: 3px; stroke-linejoin: round;
-}
+/* Fons opacs (no tintes translúcides): quan dos contorns coincideixen, la
+   capa que es dibuixa després tapa amb el seu fons el traç de l'altra just
+   en el tram compartit i hi deixa el seu — un sol filet, no dos. Ordre de
+   capes de menys a més definició: països → comunitats → comarques
+   (simplificades i després fines) → municipis. El color de terra és
+   compartit amb .pin-map-comarca-mask perquè no es vegi cap costura. */
+.pin-map-shape { fill: oklch(0.25 0.016 258); stroke: oklch(1 0 0 / 0.22); stroke-width: 1; }
+.pin-map-shape.country { fill: oklch(0.235 0.017 258); stroke: oklch(1 0 0 / 0.12); }
+.pin-map-comarca { fill: none; stroke: oklch(1 0 0 / 0.52); stroke-width: 1.2; }
+/* La màscara no només omple: també traça (mateix color de terra, una mica
+   més gruixut que el filet d'una comunitat) per tapar del tot qualsevol
+   contorn de comunitat autònoma que corri arran del límit comarcal. A
+   sobre hi va el filet fi de .pin-map-comarca, que queda com l'únic. */
+.pin-map-comarca-mask { fill: oklch(0.25 0.016 258); stroke: oklch(0.25 0.016 258); stroke-width: 2; }
+/* Comarca on hi ha hagut actuacions: mateixa llum morada que un municipi,
+   sota el filet del contorn. L'opacitat de farciment la posa el component
+   (pes de la comarca × fos amb els municipis). */
+.pin-map-comarca-active { fill: oklch(0.68 0.19 290 / 1); stroke: none; transition: fill .15s; cursor: help; }
+.pin-map-comarca-active:hover { fill: oklch(0.8 0.16 290 / 1); }
+.pin-map-boundary { fill: oklch(0.68 0.19 290 / 1); stroke: oklch(0.78 0.16 290 / 0.9); stroke-width: 1.2; transition: fill .15s; }
+.pin-map-boundary:hover { fill: oklch(0.8 0.16 290 / 1); }
 
 /* ============ Calendari del músic: disponibilitat per a suplències ============ */
 .calx-day { position: relative; }

@@ -7,9 +7,10 @@ import { requireManagerAction, getProfile } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
 import { getCompanyInfo } from "@/lib/data";
-import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonReverseGeocode } from "@/lib/geo-search";
+import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonReverseGeocode, resolveVenueFromDetails, geocodePlace } from "@/lib/geo-search";
 import type { ImportedConcert } from "@/lib/concert-import";
 import { geocodeCitiesCached, normalizeForMatch } from "@/lib/geocode";
+import { autoCreateShareLinkForConcert } from "@/app/(app)/concerts/share-actions";
 
 export type SaveConcertInput = {
   id: string | null;
@@ -119,6 +120,13 @@ export async function saveConcertAction(data: SaveConcertInput) {
       { name: contact.name, role: "", phone: contact.phone, company: contact.company, email: contact.email },
     ]);
     revalidatePath("/contactes");
+  }
+
+  // Concert nou (mai en edicions): l'enllaç de regidor ja hi és, amb el
+  // contacte d'aquí mateix com a destinatari inicial — es pot canviar
+  // després amb "Envia-ho a un altre contacte" a Comparteix.
+  if (!data.id) {
+    await autoCreateShareLinkForConcert({ concertId: id, workspaceId, date: data.date, recipientName: contact.name, recipientEmail: contact.email });
   }
 
   return {
@@ -234,25 +242,35 @@ export async function importConcertsAction(raw: string): Promise<{ imported: num
 // Importació des d'Excel (ImportConcertsModal): les files ja arriben
 // interpretades (dates, estats i imports normalitzats a concert-import.ts);
 // aquí només es creen els concerts — i els grups que encara no existeixin.
-export async function importConcertRowsAction(rows: ImportedConcert[]): Promise<{ imported: number; errors: string[] }> {
+// El client crida aquesta acció en trams (no tot l'Excel de cop) perquè el
+// botó "Important…" pugui mostrar quants concerts ja s'han creat; rowOffset
+// és la posició del primer element de "rows" dins del fitxer sencer, només
+// perquè els missatges d'error ("Fila X") numerin bé encara que arribin
+// trossejats.
+export async function importConcertRowsAction(rows: ImportedConcert[], rowOffset = 0): Promise<{ imported: number; errors: string[] }> {
   const { workspaceId } = await requireManagerAction();
   const pool = db();
   const errors: string[] = [];
   let imported = 0;
   const bandCache: Record<string, { id: string; name: string; tags: unknown[] }> = {};
+  // Un mateix recinte sol repetir-se a moltes files (un grup que hi torna
+  // cada any, per exemple) — es valida contra Google Places només un cop
+  // per cerca, no per fila, perquè un import de centenars de files no
+  // s'eternitzi fent la mateixa crida una vegada i una altra.
+  const venueCache: Record<string, { venue: string; city?: string; address?: string } | null> = {};
   const stamp = Date.now();
   const list = (rows || []).slice(0, 2000);
   for (let i = 0; i < list.length; i++) {
     const r = list[i];
     const date = String(r.date || "");
     const bandName = String(r.band || "").trim();
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !bandName) { errors.push(`Fila ${i + 1}: falta la data o l'artista`); continue; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !bandName) { errors.push(`Fila ${i + 1 + rowOffset}: falta la data o l'artista`); continue; }
     const key = bandName.toLowerCase();
     let bandRow = bandCache[key];
     if (!bandRow) {
       bandRow = (await pool.query("select id, name, tags from bands where lower(name)=$1 and workspace_id=$2", [key, workspaceId])).rows[0];
       if (!bandRow) {
-        const newId = "b" + stamp + i;
+        const newId = "b" + stamp + (i + rowOffset);
         await pool.query(
           "insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code) values ($1,$2,$3,0,'','','[]'::jsonb,'[]'::jsonb,'[]'::jsonb,$4,$5)",
           [newId, bandName, (r.city || "").trim() || "—", workspaceId, generateJoinCode()]
@@ -267,10 +285,35 @@ export async function importConcertRowsAction(rows: ImportedConcert[]): Promise<
       name: (r.contactName || "").trim(), phone: (r.contactPhone || "").trim(),
       email: (r.contactEmail || "").trim(), company: (r.contactCompany || "").trim(),
     };
+    // Valida el recinte contra Google Places amb "Recinte, Població" com a
+    // cerca (la mateixa que faria un gestor a la fitxa del concert) i, com
+    // que aquí no hi ha ningú per triar-ne un del desplegable, s'agafa
+    // directament la primera opció. Sense clau de Google (o sense resultats)
+    // es queda amb el text literal de l'Excel, tal com ja feia abans.
+    let venue = (r.venue || "").trim(), venueCity = (r.city || "").trim(), address = "";
+    const venueQuery = [venue, venueCity].filter(Boolean).join(", ");
+    if (venueQuery) {
+      const venueKey = venueQuery.toLowerCase();
+      if (!(venueKey in venueCache)) {
+        let resolved: { venue: string; city?: string; address?: string } | null = null;
+        const hits = await googlePlacesAutocomplete(venueQuery);
+        if (hits.length) {
+          const details = await googlePlaceDetails(hits[0].placeId);
+          if (details) resolved = await resolveVenueFromDetails(details);
+        }
+        venueCache[venueKey] = resolved;
+      }
+      const resolved = venueCache[venueKey];
+      if (resolved) {
+        venue = resolved.venue || venue;
+        if (resolved.city) venueCity = resolved.city;
+        if (resolved.address) address = resolved.address;
+      }
+    }
     await pool.query(
-      `insert into concerts (id, date, time, exact_time, venue, city, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, contact, workspace_id)
-       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,'{}','{}','{}',$13,$14)`,
-      ["c" + stamp + i, date, time || "21:00", time, (r.venue || "").trim(), (r.city || "").trim(), (r.title || "").trim(), bandRow.id, bandRow.name,
+      `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, contact, workspace_id)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,'{}','{}','{}',$14,$15)`,
+      ["c" + stamp + (i + rowOffset), date, time || "21:00", time, venue, venueCity, address, (r.title || "").trim(), bandRow.id, bandRow.name,
         JSON.stringify(bandRow.tags || []), status, Math.max(0, Math.round(Number(r.amount) || 0)), JSON.stringify(contact), workspaceId]
     );
     // El contacte de cada fila entra al magatzem compartit de contactes,
@@ -504,6 +547,36 @@ export async function reverseGeocodeAction(lat: number, lon: number): Promise<{ 
   return photonReverseGeocode(lat, lon);
 }
 
+// Geocodifica el recinte per al mini-mapa del pòster del concert (Photon,
+// amb Nominatim de reserva si falla o no en troba res — geocodePlace, a
+// diferència de geocodeOne a lib/geocode.ts, no es limita a poblacions).
+// Es crida des del servidor (i no amb un fetch directe des del navegador,
+// com feia abans) perquè es pugui aprofitar el mateix cache permanent de
+// geocode_cache que ja fan servir els mapes de poblacions: un cop es
+// resol un recinte, mai més cal tornar a demanar-lo a cap API externa,
+// encara que aquella falli puntualment la propera vegada.
+export async function geocodePosterVenueAction(query: string): Promise<{ lat: number; lon: number } | null> {
+  await requireManagerAction();
+  const q = (query || "").trim();
+  if (!q) return null;
+  const pool = db();
+  try {
+    const cached = (await pool.query("select lat, lon from geocode_cache where query=$1", [q])).rows[0];
+    if (cached && cached.lat != null && cached.lon != null) return { lat: cached.lat, lon: cached.lon };
+  } catch (err) {
+    console.error("geocodePosterVenueAction: error llegint la cache", err);
+  }
+  const geo = await geocodePlace(q);
+  if (geo) {
+    pool.query(
+      `insert into geocode_cache (query, lat, lon) values ($1,$2,$3)
+       on conflict (query) do update set lat=excluded.lat, lon=excluded.lon, updated_at=now()`,
+      [q, geo.lat, geo.lon]
+    ).catch((err) => console.error("geocodePosterVenueAction: error desant la cache", err));
+  }
+  return geo;
+}
+
 // Carrers reals al voltant d'un punt (per al mini-mapa del pòster del
 // concert), via Overpass (l'API de consultes d'OpenStreetMap): en comptes
 // de descarregar rajoles d'imatge ja renderitzades (que es bloquegen o
@@ -616,90 +689,129 @@ function assembleRings(members: { role?: string; geometry?: { lat: number; lon: 
   return rings;
 }
 
-// Contorn real (límit municipal) d'una població, per al mapa acolorit de
-// "Poblacions més repetides" a Estadístiques — a diferència de
-// getStreetWaysAction (carrers), aquí es demana la relació administrativa
-// (OSM boundary=administrative) que hi ha al punt donat i se n'encadenen
-// els trams en un polígon. admin_level 6-8 cobreix el municipi a la
-// majoria de països (a Espanya, 8); si n'hi ha diverses que hi coincideixen
-// (comarca i municipi alhora, per exemple), es tria la que té el nom exacte
-// o, si cap no hi coincideix, la de caixa delimitadora més petita (la més
-// local, no la comarca/regió que també la conté).
-export async function getMunicipalityBoundaryAction(city: string, lat: number, lon: number): Promise<{ rings: [number, number][][]; bbox: [number, number, number, number] } | null> {
-  await requireManagerAction();
-  const name = (city || "").trim();
-  if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+export type AdminBoundary = { rings: [number, number][][]; bbox: [number, number, number, number] };
 
-  const cacheKey = `${normalizeForMatch(name)}@${lat.toFixed(2)},${lon.toFixed(2)}`;
+// Contorn administratiu real d'OSM (boundary=administrative) al voltant
+// d'un punt, amb els trams encadenats en polígon i desat per sempre a
+// municipality_boundary_cache. El fan servir el mapa de "On hem tocat"
+// (ConcertPinMap) per als municipis on s'ha tocat i per a les fronteres
+// comarcals quan s'hi ha ampliat prou: la geometria d'OSM té més d'un
+// ordre de magnitud més de punts que els contorns simplificats que porta
+// map-regions.ts, que només serveixen per a la vista general.
+//
+// `nameOnly` distingeix els dos casos: per a un municipi, si cap relació
+// no coincideix de nom, val la de caixa delimitadora més petita (la més
+// local); per a una comarca, en canvi, o coincideix el nom o res — al
+// voltant hi ha sempre comarques veïnes i agafar-ne una a l'atzar seria
+// pitjor que no dibuixar-ne cap.
+async function fetchAdminBoundary(opts: {
+  cacheKey: string; name: string; query: string; nameOnly: boolean; label: string;
+}): Promise<AdminBoundary | null> {
+  const { cacheKey, name, query, nameOnly, label } = opts;
   const pool = db();
   try {
     const cached = (await pool.query("select bbox, rings from municipality_boundary_cache where key=$1", [cacheKey])).rows[0];
     if (cached) return { bbox: cached.bbox, rings: cached.rings };
   } catch (err) {
-    console.error("getMunicipalityBoundaryAction: error llegint la cache", err);
+    console.error(`${label}: error llegint la cache`, err);
   }
 
-  const query = `[out:json][timeout:20];rel(around:8000,${lat},${lon})["boundary"="administrative"]["admin_level"~"^(6|7|8)$"]["name"];out geom;`;
   const endpoints = [
     "https://overpass-api.de/api/interpreter",
     "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     "https://overpass.kumi.systems/api/interpreter",
   ];
-  for (let attempt = 0; attempt < 2; attempt++) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
-    for (const url of endpoints) {
-      try {
-        const res = await fetch(url, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Accept": "application/json",
-            "User-Agent": "Escenari (escenari.app, contacte via l'app)",
-          },
-          body: "data=" + encodeURIComponent(query),
-          signal: AbortSignal.timeout(9000),
-        });
-        if (!res.ok) {
-          console.error("getMunicipalityBoundaryAction: Overpass ha respost", url, res.status, await res.text().catch(() => ""));
-          continue;
-        }
-        const data = await res.json();
-        const rels: { type: string; tags?: Record<string, string>; members?: { role?: string; geometry?: { lat: number; lon: number }[] }[] }[] = data.elements || [];
-        const candidates = rels.filter((r) => r.type === "relation" && r.members?.length);
-        if (!candidates.length) return null;
-
-        const cityNorm = normalizeForMatch(name);
-        let best = candidates.find((r) => normalizeForMatch(r.tags?.name || "") === cityNorm) || null;
-        function bboxArea(r: (typeof candidates)[number]): number {
-          let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-          (r.members || []).forEach((m) => (m.geometry || []).forEach((g) => {
-            minLat = Math.min(minLat, g.lat); maxLat = Math.max(maxLat, g.lat);
-            minLon = Math.min(minLon, g.lon); maxLon = Math.max(maxLon, g.lon);
-          }));
-          return (maxLat - minLat) * (maxLon - minLon);
-        }
-        if (!best) best = candidates.slice().sort((a, b) => bboxArea(a) - bboxArea(b))[0] || null;
-        if (!best) return null;
-
-        const rings = assembleRings(best.members || []);
-        if (!rings.length) return null;
-        let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
-        rings.forEach((ring) => ring.forEach(([lo, la]) => {
-          minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la);
-          minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo);
-        }));
-        const bbox: [number, number, number, number] = [minLat, minLon, maxLat, maxLon];
-        pool.query(
-          "insert into municipality_boundary_cache (key, bbox, rings) values ($1,$2,$3) on conflict (key) do update set bbox=$2, rings=$3, updated_at=now()",
-          [cacheKey, JSON.stringify(bbox), JSON.stringify(rings)]
-        ).catch((err) => console.error("getMunicipalityBoundaryAction: error desant la cache", err));
-        return { bbox, rings };
-      } catch (err) {
-        console.error("getMunicipalityBoundaryAction: error cridant Overpass", url, err);
+  // Aquí (a diferència de getStreetWaysAction, que és una petició sola per
+  // pòster) se'n disparen unes quantes alhora mentre algú es mou pel mapa:
+  // una sola volta pels tres mirralls, i prou. Si cap respon, es dibuixa el
+  // que ja hi hagi i es tornarà a provar més endavant — molt millor que
+  // tenir la petició oberta un minut sencer.
+  for (const url of endpoints) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded",
+          "Accept": "application/json",
+          "User-Agent": "Escenari (escenari.app, contacte via l'app)",
+        },
+        body: "data=" + encodeURIComponent(query),
+        signal: AbortSignal.timeout(9000),
+      });
+      if (!res.ok) {
+        console.error(`${label}: Overpass ha respost`, url, res.status, await res.text().catch(() => ""));
+        continue;
       }
+      const data = await res.json();
+      const rels: { type: string; tags?: Record<string, string>; members?: { role?: string; geometry?: { lat: number; lon: number }[] }[] }[] = data.elements || [];
+      const candidates = rels.filter((r) => r.type === "relation" && r.members?.length);
+      if (!candidates.length) return null;
+
+      const wanted = normalizeForMatch(name);
+      let best = candidates.find((r) => normalizeForMatch(r.tags?.name || "") === wanted) || null;
+      function bboxArea(r: (typeof candidates)[number]): number {
+        let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+        (r.members || []).forEach((m) => (m.geometry || []).forEach((g) => {
+          minLat = Math.min(minLat, g.lat); maxLat = Math.max(maxLat, g.lat);
+          minLon = Math.min(minLon, g.lon); maxLon = Math.max(maxLon, g.lon);
+        }));
+        return (maxLat - minLat) * (maxLon - minLon);
+      }
+      if (!best && !nameOnly) best = candidates.slice().sort((a, b) => bboxArea(a) - bboxArea(b))[0] || null;
+      if (!best) return null;
+
+      const rings = assembleRings(best.members || []);
+      if (!rings.length) return null;
+      let minLat = 90, maxLat = -90, minLon = 180, maxLon = -180;
+      rings.forEach((ring) => ring.forEach(([lo, la]) => {
+        minLat = Math.min(minLat, la); maxLat = Math.max(maxLat, la);
+        minLon = Math.min(minLon, lo); maxLon = Math.max(maxLon, lo);
+      }));
+      const bbox: [number, number, number, number] = [minLat, minLon, maxLat, maxLon];
+      pool.query(
+        "insert into municipality_boundary_cache (key, bbox, rings) values ($1,$2,$3) on conflict (key) do update set bbox=$2, rings=$3, updated_at=now()",
+        [cacheKey, JSON.stringify(bbox), JSON.stringify(rings)]
+      ).catch((err) => console.error(`${label}: error desant la cache`, err));
+      return { bbox, rings };
+    } catch (err) {
+      console.error(`${label}: error cridant Overpass`, url, err);
     }
   }
   return null;
+}
+
+// Límit municipal d'una població on s'ha tocat. admin_level 6-8 cobreix el
+// municipi a la majoria de països (a Espanya, 8); si n'hi ha diverses que
+// hi coincideixen (comarca i municipi alhora, per exemple), es tria la del
+// nom exacte i, si cap no hi coincideix, la més petita de totes.
+export async function getMunicipalityBoundaryAction(city: string, lat: number, lon: number): Promise<AdminBoundary | null> {
+  await requireManagerAction();
+  const name = (city || "").trim();
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return fetchAdminBoundary({
+    cacheKey: `${normalizeForMatch(name)}@${lat.toFixed(2)},${lon.toFixed(2)}`,
+    name,
+    query: `[out:json][timeout:20];rel(around:8000,${lat},${lon})["boundary"="administrative"]["admin_level"~"^(6|7|8)$"]["name"];out geom;`,
+    nameOnly: false,
+    label: "getMunicipalityBoundaryAction",
+  });
+}
+
+// Frontera comarcal de veritat (admin_level 7 a Catalunya), per substituir
+// el contorn simplificat de MAP_COMARQUES quan s'ha ampliat prou el mapa
+// perquè es noti la diferència. El cache va per nom (no pel punt): una
+// comarca és sempre la mateixa, la demani qui la demani.
+export async function getComarcaBoundaryAction(comarca: string, lat: number, lon: number): Promise<AdminBoundary | null> {
+  await requireManagerAction();
+  const name = (comarca || "").trim();
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return fetchAdminBoundary({
+    cacheKey: `comarca:${normalizeForMatch(name)}`,
+    name,
+    query: `[out:json][timeout:25];rel(around:30000,${lat},${lon})["boundary"="administrative"]["admin_level"="7"]["name"];out geom;`,
+    nameOnly: true,
+    label: "getComarcaBoundaryAction",
+  });
 }
 
 // Geocodifica poblacions (per posar-hi xinxetes en un mapa) amb un cache

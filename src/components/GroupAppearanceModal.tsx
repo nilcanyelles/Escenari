@@ -4,15 +4,34 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import { bandPhotoDataUri } from "@/lib/tags";
-import { uploadBandImageAction, saveBandAppearanceAction } from "@/app/(app)/grup/actions";
+import { uploadBandImageAction, saveBandAppearanceAction, deleteBandAction } from "@/app/(app)/grup/actions";
 import { removeSimpleBackground } from "@/lib/image-bg-remove";
 import { LOGO_ASPECTS, logoRatio } from "@/lib/logo";
 import ImageCropModal from "@/components/ImageCropModal";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 function CameraIcon() {
   return (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle>
+    </svg>
+  );
+}
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+      style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform .15s", flex: "none" }}>
+      <polyline points="6 9 12 15 18 9"></polyline>
+    </svg>
+  );
+}
+function TrashIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"></polyline>
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      <line x1="10" y1="11" x2="10" y2="17"></line>
+      <line x1="14" y1="11" x2="14" y2="17"></line>
     </svg>
   );
 }
@@ -26,7 +45,7 @@ function parsePos(p: string): { x: number; y: number } {
 // retallat a mà), portada (estil LinkedIn, arrossegable per triar què es
 // veu), colors i etiquetes lliures — les xarxes socials es gestionen a la
 // seva pròpia pestanya (/grup/xarxes).
-export default function GroupAppearanceModal({ band, onClose }: { band: Band; onClose: () => void }) {
+export default function GroupAppearanceModal({ band, canDelete = false, onClose }: { band: Band; canDelete?: boolean; onClose: () => void }) {
   const router = useRouter();
   const [name, setName] = useState(band.name);
   const [color1, setColor1] = useState(band.color1 || "#8b7bff");
@@ -37,7 +56,13 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
   const [uploading, setUploading] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [logoAspect, setLogoAspect] = useState(band.logoAspect || "1:1");
+  const [aspectOpen, setAspectOpen] = useState(false);
   const [coverPos, setCoverPos] = useState(band.coverPos || "50% 50%");
+  // Zona de perill: eliminar el grup sencer (només admins de l'agència).
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+  const [deleteError, setDeleteError] = useState("");
+  const [deleting, setDeleting] = useState(false);
   // Fitxer de logo pendent de retallar (obre ImageCropModal).
   const [cropFile, setCropFile] = useState<File | null>(null);
   const logoInput = useRef<HTMLInputElement>(null);
@@ -122,12 +147,31 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
           {/* Proporció del logo: s'aplica al retallar-lo en pujar-lo */}
           <div>
             <div className="form-label" style={{ marginBottom: 8 }}>Forma del logo</div>
-            <div className="ga-aspect">
-              {LOGO_ASPECTS.map((a) => (
-                <button key={a.key} type="button" className={"ga-aspect-btn" + (logoAspect === a.key ? " active" : "")} onClick={() => setLogoAspect(a.key)}>{a.label}</button>
-              ))}
-              <span className="t-dim" style={{ fontSize: 12 }}>Tria la forma i puja el logo per retallar-lo.</span>
+            <div style={{ position: "relative", display: "inline-block" }}>
+              <button type="button" className="ga-aspect-trigger" onClick={() => setAspectOpen((v) => !v)}>
+                <span className="ga-aspect-swatch" style={{ width: Math.round(18 * logoRatio(logoAspect)), height: 18 }}></span>
+                {LOGO_ASPECTS.find((a) => a.key === logoAspect)?.label || logoAspect}
+                <ChevronIcon open={aspectOpen} />
+              </button>
+              {aspectOpen && (
+                <>
+                  <div className="year-picker-overlay" onClick={() => setAspectOpen(false)}></div>
+                  <div className="year-dropdown ga-aspect-dropdown" onClick={(e) => e.stopPropagation()}>
+                    {LOGO_ASPECTS.map((a) => (
+                      <button
+                        key={a.key} type="button" className={"year-option ga-aspect-option" + (logoAspect === a.key ? " active" : "")}
+                        onClick={() => { setLogoAspect(a.key); setAspectOpen(false); }}
+                        title={a.label}
+                      >
+                        <span className="ga-aspect-swatch ga-aspect-swatch-ghost" style={{ width: Math.round(20 * a.ratio), height: 20 }}></span>
+                        {a.key}
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
             </div>
+            <div className="t-dim" style={{ fontSize: 12, marginTop: 6 }}>Tria la forma i puja el logo per retallar-lo.</div>
           </div>
 
           {/* Portada + logo, previsualitzats com a la pàgina */}
@@ -204,6 +248,14 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
                 onClose();
               }}>{saving ? "Desant…" : "Desa"}</button>
           </div>
+
+          {canDelete && (
+            <div className="ga-danger-zone">
+              <button type="button" className="btn-danger-outline" onClick={() => setDeleteOpen(true)}>
+                <TrashIcon /> Elimina el grup
+              </button>
+            </div>
+          )}
         </div>
       </div>
       {cropFile && (
@@ -211,6 +263,31 @@ export default function GroupAppearanceModal({ band, onClose }: { band: Band; on
           file={cropFile} aspect={logoRatio(logoAspect)}
           title={`Retalla el logo (${LOGO_ASPECTS.find((a) => a.key === logoAspect)?.label || logoAspect})`}
           onCancel={() => setCropFile(null)} onDone={onCropped}
+        />
+      )}
+      {deleteOpen && (
+        <ConfirmDialog
+          title="Estàs segur que vols eliminar el grup?"
+          message={
+            <>
+              <p style={{ margin: "0 0 10px" }}>Aquesta acció és irreversible. Escriu <strong>{band.name}</strong> per confirmar-ho.</p>
+              <input
+                className="field-input" style={{ width: "100%" }} placeholder={band.name}
+                value={deleteText} onChange={(e) => { setDeleteText(e.target.value); setDeleteError(""); }} autoFocus
+              />
+              {deleteError && <div className="fin-neg" style={{ fontSize: 13, marginTop: 8 }}>{deleteError}</div>}
+            </>
+          }
+          confirmLabel="Elimina" busy={deleting}
+          onCancel={() => { setDeleteOpen(false); setDeleteText(""); setDeleteError(""); }}
+          onConfirm={async () => {
+            if (deleteText.trim() !== band.name) { setDeleteError("El nom no coincideix exactament."); return; }
+            setDeleting(true);
+            const res = await deleteBandAction(band.id, deleteText.trim());
+            if (!res.ok) { setDeleteError(res.error || "No s'ha pogut eliminar."); setDeleting(false); return; }
+            router.push("/agencia");
+            router.refresh();
+          }}
         />
       )}
     </div>

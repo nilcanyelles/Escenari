@@ -4,10 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackLink from "@/components/BackLink";
 import type { RiderContent, StageItem } from "@/lib/material-types";
-import type { Person } from "@/lib/types";
+import type { Person, Contact } from "@/lib/types";
 import { STAGE_LIBRARY, StageItemSvg, stageKindDef, isInstrumentKind } from "@/lib/stage-svg";
 import { saveRiderAction } from "@/app/(app)/grup/material-actions";
 import SpecularButton from "@/components/SpecularButton";
+import ContactAutocomplete from "@/components/ContactAutocomplete";
 
 let idCounter = 0;
 function nextId(): string {
@@ -151,7 +152,9 @@ function useDragReorder<T>(items: T[], onChange: (next: T[]) => void) {
   return { rowClass, rowStyle, rowHandlers, handleProps, registerRow, containerHandlers };
 }
 
-type Mode = "edit" | "counter";
+// "new" = rider encara no desat: no hi ha desat automàtic, res es guarda
+// fins que es clica "Fet". "edit" = rider ja existent, amb desat automàtic.
+type Mode = "edit" | "counter" | "new";
 
 const SECTIONS = [
   { id: "escenari", label: "Escenari" },
@@ -334,7 +337,7 @@ function StageCanvas({ stage, onChange, onItemAdded }: {
 
 export default function RiderStudio({
   bandId, bandName, riderId, initialName, initialContent, mode, backHref, publicToken, counterNoteInit, onSubmitCounter,
-  bandMembers = [], bandCrew = [],
+  bandMembers = [], bandCrew = [], agencyContacts = [],
 }: {
   bandId: string;
   bandName: string;
@@ -349,6 +352,10 @@ export default function RiderStudio({
   // Per triar contactes en comptes d'escriure'ls a mà: músics i crew del grup.
   bandMembers?: Person[];
   bandCrew?: Person[];
+  // Contactes ja desats a l'agència, per suggerir-los mentre s'escriu el
+  // "Nom" d'un contacte del rider (com al full de ruta). Buit al flux
+  // extern de contraproposta perquè no se'n filtri cap.
+  agencyContacts?: Contact[];
 }) {
   const router = useRouter();
   const [name, setName] = useState(initialName);
@@ -551,12 +558,9 @@ export default function RiderStudio({
           <div className="rider-block-title">Monitoratge</div>
           <button type="button" className="btn-outline" onClick={() => set("monitors", content.monitors.concat([{ who: "", kind: "Cunya", notes: "" }]))}>+ Monitor</button>
         </div>
-        {content.monitors.length === 0 ? (
-          <div className="t-dim" style={{ fontSize: 13 }}>Defineix qui necessita monitor i quina mescla hi vol.</div>
-        ) : (
-          <div className="rider-table" {...monitorDrag.containerHandlers()}>
-            <div className="rider-table-head rider-monitor-cols"><div></div><div>Per a qui</div><div>Tipus</div><div>Mescla / notes</div><div></div></div>
-            {content.monitors.map((row, i) => (
+        <div className="rider-table" {...monitorDrag.containerHandlers()}>
+          <div className="rider-table-head rider-monitor-cols"><div></div><div>Per a qui</div><div>Tipus</div><div>Mescla / notes</div><div></div></div>
+          {content.monitors.map((row, i) => (
               <div key={i} ref={monitorDrag.registerRow(i)} style={monitorDrag.rowStyle(i)}
                 className={monitorDrag.rowClass(i, "rider-table-row rider-monitor-cols")} {...monitorDrag.rowHandlers(i)}>
                 <div className="setlist-order">
@@ -570,9 +574,8 @@ export default function RiderStudio({
                 <input className="field-input compact-field" placeholder="Més veu, poc bombo…" value={row.notes} onChange={(e) => set("monitors", content.monitors.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))} />
                 <button type="button" className="row-delete-btn" onClick={() => set("monitors", content.monitors.filter((_, j) => j !== i))}>✕</button>
               </div>
-            ))}
-          </div>
-        )}
+          ))}
+        </div>
       </div>
     ),
 
@@ -582,35 +585,34 @@ export default function RiderStudio({
           <div className="rider-block-title">Backline</div>
           <button type="button" className="btn-outline" onClick={() => set("backline", content.backline.concat([{ item: "", providedBy: "organitzacio", notes: "" }]))}>+ Element</button>
         </div>
-        {content.backline.length === 0 ? (
-          <div className="t-dim" style={{ fontSize: 13 }}>Què ha de posar l&apos;organització i què porteu vosaltres.</div>
-        ) : (
-          <div className="rider-table" {...backlineDrag.containerHandlers()}>
-            <div className="rider-table-head rider-backline-cols"><div></div><div>Element</div><div>Qui el porta</div><div>Notes</div><div></div></div>
-            {content.backline.map((row, i) => (
-              <div key={i} ref={backlineDrag.registerRow(i)} style={backlineDrag.rowStyle(i)}
-                className={backlineDrag.rowClass(i, "rider-table-row rider-backline-cols")} {...backlineDrag.rowHandlers(i)}>
-                <div className="setlist-order">
-                  <span className="setlist-drag-handle" title="Arrossega per canviar l'ordre" {...backlineDrag.handleProps(i)}>⠿</span>
-                  <span className="setlist-num">{i + 1}</span>
-                </div>
-                <input className="field-input compact-field" placeholder="Bateria completa, ampli de baix…" value={row.item} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, item: e.target.value } : x))} />
-                <select className="field-input compact-field" value={row.providedBy} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, providedBy: e.target.value as "grup" | "organitzacio" } : x))}>
-                  <option value="organitzacio">Organització</option>
-                  <option value="grup">El grup</option>
-                </select>
-                <input className="field-input compact-field" value={row.notes} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))} />
-                <button type="button" className="row-delete-btn" onClick={() => set("backline", content.backline.filter((_, j) => j !== i))}>✕</button>
+        <div className="rider-table" {...backlineDrag.containerHandlers()}>
+          <div className="rider-table-head rider-backline-cols"><div></div><div>Element</div><div>Qui el porta</div><div>Notes</div><div></div></div>
+          {content.backline.map((row, i) => (
+            <div key={i} ref={backlineDrag.registerRow(i)} style={backlineDrag.rowStyle(i)}
+              className={backlineDrag.rowClass(i, "rider-table-row rider-backline-cols")} {...backlineDrag.rowHandlers(i)}>
+              <div className="setlist-order">
+                <span className="setlist-drag-handle" title="Arrossega per canviar l'ordre" {...backlineDrag.handleProps(i)}>⠿</span>
+                <span className="setlist-num">{i + 1}</span>
               </div>
-            ))}
-          </div>
-        )}
+              <input className="field-input compact-field" placeholder="Bateria completa, ampli de baix…" value={row.item} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, item: e.target.value } : x))} />
+              <select className="field-input compact-field" value={row.providedBy} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, providedBy: e.target.value as "grup" | "organitzacio" } : x))}>
+                <option value="organitzacio">Organització</option>
+                <option value="grup">El grup</option>
+              </select>
+              <input className="field-input compact-field" value={row.notes} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))} />
+              <button type="button" className="row-delete-btn" onClick={() => set("backline", content.backline.filter((_, j) => j !== i))}>✕</button>
+            </div>
+          ))}
+        </div>
       </div>
     ),
 
     contactes: (
       <div className="studio-section">
-        <div className="rider-block-title">Contactes del rider</div>
+        <div className="rider-block-head">
+          <div className="rider-block-title">Contactes del rider</div>
+          <button type="button" className="btn-outline" disabled={!!contactDraft} onClick={() => setContactDraft(emptyContactDraft)}>+ Afegeix contacte nou</button>
+        </div>
 
         {content.contacts.length > 0 && (
           <div className="rider-table" style={{ marginTop: 10 }} {...contactDrag.containerHandlers()}>
@@ -619,7 +621,11 @@ export default function RiderStudio({
                 className={contactDrag.rowClass(i, "rider-table-row rider-contact-cols")} {...contactDrag.rowHandlers(i)}>
                 <span className="setlist-drag-handle" title="Arrossega per canviar l'ordre" {...contactDrag.handleProps(i)}>⠿</span>
                 <input className="field-input compact-field" placeholder="Càrrec" value={row.role} onChange={(e) => set("contacts", content.contacts.map((x, j) => j === i ? { ...x, role: e.target.value } : x))} />
-                <input className="field-input compact-field" placeholder="Nom" value={row.name} onChange={(e) => set("contacts", content.contacts.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} />
+                <ContactAutocomplete
+                  className="field-input compact-field" placeholder="Nom" value={row.name} contacts={agencyContacts}
+                  onNameChange={(v) => set("contacts", content.contacts.map((x, j) => j === i ? { ...x, name: v } : x))}
+                  onPick={(c) => set("contacts", content.contacts.map((x, j) => j === i ? { ...x, name: c.name, role: x.role || c.role, phone: x.phone || c.phone, email: x.email || c.email } : x))}
+                />
                 <input className="field-input compact-field" placeholder="Telèfon" value={row.phone} onChange={(e) => set("contacts", content.contacts.map((x, j) => j === i ? { ...x, phone: e.target.value } : x))} />
                 <input className="field-input compact-field" placeholder="Correu" value={row.email} onChange={(e) => set("contacts", content.contacts.map((x, j) => j === i ? { ...x, email: e.target.value } : x))} />
                 <button type="button" className="row-delete-btn" onClick={() => set("contacts", content.contacts.filter((_, j) => j !== i))}>✕</button>
@@ -632,7 +638,11 @@ export default function RiderStudio({
           <div className="instr-panel" style={{ marginTop: content.contacts.length > 0 ? 12 : 10 }}>
             <div className="rider-table-row rider-contact-draft-cols" style={{ marginTop: 0 }}>
               <input className="field-input compact-field" placeholder="Càrrec" value={contactDraft.role} onChange={(e) => setContactDraft({ ...contactDraft, role: e.target.value })} />
-              <input className="field-input compact-field" placeholder="Nom" value={contactDraft.name} onChange={(e) => setContactDraft({ ...contactDraft, name: e.target.value })} />
+              <ContactAutocomplete
+                className="field-input compact-field" placeholder="Nom" value={contactDraft.name} contacts={agencyContacts}
+                onNameChange={(v) => setContactDraft({ ...contactDraft, name: v })}
+                onPick={(c) => setContactDraft({ role: contactDraft.role || c.role, name: c.name, phone: contactDraft.phone || c.phone, email: contactDraft.email || c.email })}
+              />
               <input className="field-input compact-field" placeholder="Telèfon" value={contactDraft.phone} onChange={(e) => setContactDraft({ ...contactDraft, phone: e.target.value })} />
               <input className="field-input compact-field" placeholder="Correu" value={contactDraft.email} onChange={(e) => setContactDraft({ ...contactDraft, email: e.target.value })} />
               <button type="button" className="row-rs-btn" title="Desa el contacte" disabled={!contactDraft.name.trim()}
@@ -682,10 +692,6 @@ export default function RiderStudio({
               <div className="t-dim" style={{ fontSize: 12, marginTop: 10 }}>Encara no hi ha ningú al grup per triar — pots omplir les caselles a mà.</div>
             )}
           </div>
-        )}
-
-        {!contactDraft && (
-          <button type="button" className="btn-outline" style={{ marginTop: 12 }} onClick={() => setContactDraft(emptyContactDraft)}>+ Afegeix contacte nou</button>
         )}
       </div>
     ),
@@ -807,12 +813,45 @@ export default function RiderStudio({
         <div className="studio-band-name">{bandName}</div>
         <input className="rider-name-input studio-name" value={name} onChange={(e) => setName(e.target.value)} disabled={mode === "counter"} placeholder="Nom del rider" />
         <div className="studio-topbar-right">
-          {mode === "edit" ? (
+          {mode === "new" ? (
+            // Encara no s'ha desat res: ni "Previsualitza" ni "Fet" no
+            // guarden fins que es cliquen. Si se surt sense tocar cap dels
+            // dos, no queda cap entrada nova. "Previsualitza" desa el rider
+            // i passa a l'editor normal (mode edició, amb desat automàtic).
+            <>
+              <SpecularButton
+                size="md" radius={12} tint="#8b7bff" tintOpacity={0.16} baseColor="#6a5fd0" lineColor="#cfc5ff"
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true);
+                  const { id, publicToken: tok } = await saveRiderAction({ id: null, bandId, name, content });
+                  // Mateixa vista que "Obre" des de la pestanya Documents:
+                  // el document públic del rider (/m/[token]), des d'on es
+                  // descarrega en PDF A4 de diverses pàgines.
+                  if (tok) window.open(`/m/${tok}`, "_blank");
+                  router.replace(`/rider/${id}`);
+                }}
+              >
+                Previsualitza
+              </SpecularButton>
+              <SpecularButton
+                size="md" radius={12} tint="#8b7bff" tintOpacity={0.35} baseColor="#8b7bff" lineColor="#ffffff"
+                disabled={saving}
+                onClick={async () => {
+                  setSaving(true);
+                  await saveRiderAction({ id: null, bandId, name, content });
+                  router.push(backHref);
+                }}
+              >
+                {saving ? "Desant…" : "Fet"}
+              </SpecularButton>
+            </>
+          ) : mode === "edit" ? (
             <>
               <span className="t-dim" style={{ fontSize: 12 }}>{saving ? "Desant…" : "Desat ✓"}</span>
               {publicToken && (
                 <SpecularButton size="md" radius={12} tint="#8b7bff" tintOpacity={0.16} baseColor="#6a5fd0" lineColor="#cfc5ff"
-                  onClick={() => window.open(`/api/rider-pdf/${publicToken}`, "_blank")}>
+                  onClick={() => window.open(`/m/${publicToken}`, "_blank")}>
                   Previsualitza
                 </SpecularButton>
               )}
@@ -852,6 +891,11 @@ export default function RiderStudio({
         {SECTIONS.map((s) => (
           <button key={s.id} type="button" className={"studio-tab" + (section === s.id ? " active" : "")} onClick={() => setSection(s.id)}>
             {s.label}
+            {mode === "new" && s.id === "escenari" && (
+              <span className="beta-badge" style={{ marginLeft: 8, marginRight: 0 }}>
+                <span aria-hidden="true" style={{ marginRight: 5 }}>🚧</span>Beta
+              </span>
+            )}
           </button>
         ))}
       </div>

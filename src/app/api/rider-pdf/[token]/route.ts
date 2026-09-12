@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from "pdf-lib";
 import { db } from "@/lib/db";
-import { normalizeRiderContent, type RiderContent } from "@/lib/material-types";
+import { normalizeRiderContent, riderFileId, type RiderContent } from "@/lib/material-types";
 import { getFileBlob } from "@/lib/blob-storage";
 
 export const dynamic = "force-dynamic";
@@ -122,6 +122,31 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
 
   const rider: RiderContent = normalizeRiderContent(row.content);
 
+  // Rider-document: un PDF penjat tal qual, sense res creat des de l'app.
+  // Es retorna el fitxer original byte a byte — cap generació amb pdf-lib,
+  // cap portada afegida.
+  const fileId = riderFileId(rider);
+  if (fileId) {
+    const meta = (await db().query("select blob_url, mime, name from files where id=$1", [fileId])).rows[0];
+    if (meta && meta.blob_url) {
+      const bytes = await fetchBlobBytes(meta.blob_url);
+      if (bytes) {
+        const mime = meta.mime || "application/pdf";
+        const isPdf = mime === "application/pdf";
+        const filename = (row.name || "rider") + (isPdf ? ".pdf" : "");
+        return new NextResponse(new Uint8Array(bytes), {
+          headers: {
+            "Content-Type": mime,
+            "Content-Disposition": `${forceDownload ? "attachment" : "inline"}; filename="${encodeURIComponent(filename)}"`,
+            "Cache-Control": "no-store",
+          },
+        });
+      }
+    }
+    // Si el fitxer no es pot llegir, continua avall i genera el PDF de
+    // sempre (portarà una nota que el document no s'ha pogut incorporar).
+  }
+
   const doc = await PDFDocument.create();
   const font = await doc.embedFont(StandardFonts.Helvetica);
   const bold = await doc.embedFont(StandardFonts.HelveticaBold);
@@ -153,16 +178,18 @@ export async function GET(req: Request, { params }: { params: Promise<{ token: s
       rider.inputs.filter((i) => i.source.trim()).map((i) => [i.ch, i.source, i.mic, i.stand, i.notes]));
   }
 
-  if (rider.monitors.length > 0) {
+  const monitorRows = rider.monitors.filter((m) => m.who.trim() || m.notes.trim());
+  if (monitorRows.length > 0) {
     w.heading("Monitoratge");
     w.table(["Per a qui", "Tipus", "Mescla / notes"], [150, 110, 245],
-      rider.monitors.map((m) => [m.who, m.kind, m.notes]));
+      monitorRows.map((m) => [m.who, m.kind, m.notes]));
   }
 
-  if (rider.backline.length > 0) {
+  const backlineRows = rider.backline.filter((b) => b.item.trim() || b.notes.trim());
+  if (backlineRows.length > 0) {
     w.heading("Backline");
     w.table(["Element", "Qui el porta", "Notes"], [180, 120, 205],
-      rider.backline.map((b) => [b.item, b.providedBy === "grup" ? "El grup" : "Organització", b.notes]));
+      backlineRows.map((b) => [b.item, b.providedBy === "grup" ? "El grup" : "Organització", b.notes]));
   }
 
   const fixedTitles: Record<string, string> = { audio: "Àudio", lighting: "Llums", power: "Corrent elèctric", hospitality: "Hospitalitat" };

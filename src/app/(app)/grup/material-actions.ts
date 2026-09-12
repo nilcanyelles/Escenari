@@ -44,24 +44,25 @@ function newToken(prefix: string): string {
 
 // ---------- Riders ----------
 
-export async function saveRiderAction(input: { id: string | null; bandId: string; name: string; content: RiderContent }): Promise<{ id: string }> {
+export async function saveRiderAction(input: { id: string | null; bandId: string; name: string; content: RiderContent }): Promise<{ id: string; publicToken: string }> {
   const { workspaceId } = await requireMaterialAccess(input.bandId, "riders");
   const pool = db();
   if (input.id) {
-    await pool.query(
-      "update riders set name=$1, content=$2 where id=$3 and band_id=$4",
+    const r = await pool.query(
+      "update riders set name=$1, content=$2 where id=$3 and band_id=$4 returning public_token",
       [(input.name || "Rider").trim(), JSON.stringify(input.content), input.id, input.bandId]
     );
     revalidateMaterial(input.bandId);
-    return { id: input.id };
+    return { id: input.id, publicToken: r.rows[0]?.public_token || "" };
   }
   const id = "rd" + Date.now();
+  const token = newToken("r");
   await pool.query(
     "insert into riders (id, workspace_id, band_id, name, content, public_token) values ($1,$2,$3,$4,$5,$6)",
-    [id, workspaceId, input.bandId, (input.name || "Rider").trim(), JSON.stringify(input.content), newToken("r")]
+    [id, workspaceId, input.bandId, (input.name || "Rider").trim(), JSON.stringify(input.content), token]
   );
   revalidateMaterial(input.bandId);
-  return { id };
+  return { id, publicToken: token };
 }
 
 export async function deleteRiderAction(bandId: string, riderId: string) {

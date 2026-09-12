@@ -12,6 +12,7 @@ import { emailConfigured } from "@/lib/email";
 import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
 import { getWorkspaceBilling, activeLinksForConcert } from "@/lib/billing";
+import { ensureShareLinkForConcert } from "@/app/(app)/concerts/share-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,9 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
   if (!concert) notFound();
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
+  // Bolos creats abans d'aquesta funcionalitat (o per qualsevol altre camí):
+  // l'enllaç de regidor s'hi afegeix ara mateix, aquí, si encara no en té.
+  await ensureShareLinkForConcert(id, workspaceId);
   // Aquestes consultes són totes independents entre si (cap depèn del
   // resultat de cap altra), així que van juntes en un sol Promise.all en
   // comptes d'esperar-les una darrere l'altra — abans transactions i les

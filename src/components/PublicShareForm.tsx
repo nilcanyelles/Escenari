@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Vehicle, Contact } from "@/lib/types";
-import { rsItemHasContent, type RouteSheet } from "@/lib/route-sheet";
+import type { RouteSheet } from "@/lib/route-sheet";
 import { formatDateFull, capitalize, today } from "@/lib/format";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import {
@@ -93,15 +93,16 @@ const SAVE_DELAY_MS = 800;
 // Enrere/Següent a dalt i a baix, i tot desat automàticament a mesura que
 // s'omple — no cal cap botó d'enviar fins al "Finalitza" de l'última
 // pàgina (que només tanca amb el missatge de gràcies; les dades ja hi són).
-export default function PublicShareForm({ token, scope, recipientName, alreadySubmitted, concert, routeSheet, vehicles = [], assignedRider = null }: {
+export default function PublicShareForm({ token, sections, recipientName, alreadySubmitted, concert, routeSheet, vehicles = [], assignedRider = null, agency = null }: {
   token: string;
-  scope: "info" | "ruta" | "both";
+  sections: string[];
   recipientName: string;
   alreadySubmitted: boolean;
   concert: ConcertLite;
   routeSheet: RouteSheet;
   vehicles?: Vehicle[];
   assignedRider?: { name: string; publicToken: string } | null;
+  agency?: { name: string; logo: string } | null;
 }) {
   const [info, setInfo] = useState<ShareInfoPayload>({
     date: concert.date, time: concert.time, city: concert.city,
@@ -125,9 +126,7 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
   // directament. El mateix per al document de contrarider ja penjat.
   const [pendingRemove, setPendingRemove] = useState<{ kind: "item"; section: RsSection; index: number } | { kind: "file" } | null>(null);
   function confirmedRemove(section: RsSection, i: number) {
-    const item = (rs[section] as unknown[])[i];
-    if (rsItemHasContent(section, item, { address, exactTime })) setPendingRemove({ kind: "item", section, index: i });
-    else removeItem(section, i);
+    setPendingRemove({ kind: "item", section, index: i });
   }
   function removeCounterFile() {
     updateSection("tecnic", (arr) => arr.map((x, xi) => xi === counterRiderIndex ? { ...x, counterFileUrl: undefined, counterFileMime: undefined, counterFileName: undefined } : x));
@@ -165,10 +164,10 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const showInfo = scope === "info" || scope === "both";
-  const showRuta = scope === "ruta" || scope === "both";
-  // Les pàgines del formulari, segons l'àmbit de l'enllaç.
-  const pages = useMemo<Section[]>(() => ALL_SECTIONS.filter((s) => (s === "info" ? showInfo : showRuta)), [showInfo, showRuta]);
+  const showInfo = sections.includes("info");
+  const showRuta = sections.some((s) => s !== "info");
+  // Les pàgines del formulari, segons l'abast fi de l'enllaç.
+  const pages = useMemo<Section[]>(() => ALL_SECTIONS.filter((s) => sections.includes(s)), [sections]);
 
   // Recinte dins el full de ruta (Lloc) — cas rar/heretat, sense resoldre
   // adreça (vegeu RecinteSearchField); el de més amunt, a "Informació
@@ -232,7 +231,9 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
     // ("schedule") — no es tornen a comptar aquí perquè el progrés no
     // s'infli (són el mateix camp compartit, editable des de tots dos
     // llocs, com al formulari normal amb els seus dos indicadors separats).
-    check(info.date); check(info.time); check(info.city); check(info.venue); check(info.festaEntitat);
+    // "Hora aproximada" no compta — no és un camp de veres necessari, és
+    // orientatiu fins que hi hagi l'hora exacta.
+    check(info.date); check(info.city); check(info.venue); check(info.festaEntitat);
     if (concert.kind === "bolo") {
       check(info.canAnnounce);
       // "Fins al dia" només compta si de veres cal (canAnnounce === "no") —
@@ -268,19 +269,19 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
     return out;
   });
 
-  // Progrés global del formulari (què queda per omplir).
+  // Progrés global del formulari (què queda per omplir) — només de les
+  // seccions que aquest enllaç de veres dona.
   const progress = useMemo(() => {
     let total = 0, filled = 0;
     if (showInfo) { const s = infoStats(); total += s.total; filled += s.filled; }
-    if (showRuta) {
-      (["lloc", "contacts", "schedule", "hospitalitat", "tecnic"] as RsSection[]).forEach((s) => {
-        const st = sectionStats(s);
-        total += st.total; filled += st.filled;
-      });
-    }
+    (["lloc", "contacts", "schedule", "hospitalitat", "tecnic"] as RsSection[]).forEach((s) => {
+      if (!sections.includes(s)) return;
+      const st = sectionStats(s);
+      total += st.total; filled += st.filled;
+    });
     return total ? Math.round((filled / total) * 100) : 0;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [info, rs, address, exactTime, showInfo, showRuta]);
+  }, [info, rs, address, exactTime, showInfo, sections]);
 
   // ---- Desat automàtic ----
   // Cada canvi programa un desat al cap de SAVE_DELAY_MS sense tocar res;
@@ -701,14 +702,27 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
   return (
     <div className="pf-screen">
       <div className="pf-container">
-        <div className="pf-brand"><img className="pf-logo" src="/logo-escenari.png" alt="Escenari" /></div>
+        <div className="pf-gate-brand-row">
+          <img className="brand-mark pf-gate-mark" src="/logo-mark.png" alt="" />
+          <span className="brand-name pf-gate-name">ESCENARI</span>
+          {agency?.logo && (
+            <>
+              <span className="page-header-sep">/</span>
+              <img className="pf-gate-agency-logo" src={agency.logo} alt={agency.name} />
+            </>
+          )}
+        </div>
 
-        <div className="pf-hero">
-          <div className="pf-hero-band">{concert.bandName}</div>
+        <div className="pf-hero pf-hero-share">
+          <div className="pf-hero-band">Actuació musical — &quot;{concert.bandName}&quot;</div>
+          {concert.festaEntitat && <div className="pf-hero-title">{concert.festaEntitat}</div>}
           <div className="pf-hero-date">{capitalize(formatDateFull(concert.date))}{concert.city ? ` · ${concert.city}` : ""}</div>
           <p className="pf-hero-text">
             Hola{recipientName ? ` ${recipientName}` : ""}! 👋 Ens ajudes a completar les dades d&apos;aquesta actuació?
             Tot es desa sol a mesura que ho omples — pots tancar i tornar-hi més tard mentre l&apos;enllaç sigui vàlid.
+          </p>
+          <p className="pf-hero-privacy">
+            Aquest formulari és privat i queda prohibit reenviar-lo a gent de fora de l&apos;organització de l&apos;esdeveniment.
           </p>
           <div className="pf-progress">
             <div className="pf-progress-track"><div className="pf-progress-fill" style={{ width: progress + "%" }}></div></div>
@@ -740,8 +754,8 @@ export default function PublicShareForm({ token, scope, recipientName, alreadySu
       </div>
       {pendingRemove && (
         <ConfirmDialog
-          title={pendingRemove.kind === "file" ? "Eliminar el document?" : "Eliminar aquest camp?"}
-          message={pendingRemove.kind === "file" ? "El document de contrarider es traurà del full de ruta." : "Aquest camp ja té informació escrita. Segur que el vols eliminar?"}
+          title={pendingRemove.kind === "file" ? "Eliminar el document?" : "Estàs segur?"}
+          message={pendingRemove.kind === "file" ? "El document de contrarider es traurà del full de ruta." : "Aquest camp s'eliminarà del formulari."}
           confirmLabel="Elimina"
           onCancel={() => setPendingRemove(null)}
           onConfirm={() => {

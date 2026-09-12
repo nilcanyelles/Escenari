@@ -7,6 +7,21 @@ import { LyricsView } from "@/components/SongsPanel";
 import { instrumentIconFor } from "@/lib/tags";
 import PdfViewer from "@/components/PdfViewer";
 import { setSetlistHighlightsAction } from "@/app/(app)/concerts/actions";
+// @ts-expect-error soundtouchjs no porta tipus TS
+import { PitchShifter } from "soundtouchjs";
+
+// Interfície mínima del PitchShifter de soundtouchjs (nou amb
+// context+buffer): time-stretch (tempo) i pitch-shift (pitchSemitones)
+// independents, sobre un AudioBuffer ja decodificat.
+type PitchShifterInstance = {
+  tempo: number;
+  pitchSemitones: number;
+  percentagePlayed: number;
+  timePlayed: number;
+  connect: (node: AudioNode) => void;
+  disconnect: () => void;
+  on: (event: "play", cb: (d: { timePlayed: number; percentagePlayed: number }) => void) => void;
+};
 
 // "Gralla dolça 1" -> "Gralla dolça" (per buscar la icona de l'instrument
 // sense l'índex de la instància).
@@ -191,6 +206,23 @@ export default function PerformView({
   const rafRef = useRef<number>(0);
   const masterGainRef = useRef<GainNode | null>(null);
   const [masterVolume, setMasterVolume] = useState(1);
+  // Tempo (0,5×–1,5×) i to (±12 semitons), independents. Amb tempo=1 i
+  // to=0 les pistes sonen pel camí ràpid de sempre (AudioBufferSourceNode,
+  // sincronia mostra-a-mostra). Quan se'n toca algun, es passa a
+  // soundtouchjs (PitchShifter per pista) que fa time-stretch i pitch-shift
+  // per separat. Els refs els llegeix playFrom sense dependre de re-renders.
+  const [playbackRate, setPlaybackRate] = useState(1);
+  // To: semitons sencers (botons) + un ajust fi en centèssimes de semitò
+  // (barra). El valor efectiu que rep soundtouchjs és pitchSemis + cents/100.
+  const [pitchSemis, setPitchSemis] = useState(0);
+  const [pitchCents, setPitchCents] = useState(0);
+  const rateRef = useRef(1);
+  const pitchRef = useRef(0);
+  const pitchTotal = pitchSemis + pitchCents / 100;
+  const shiftersRef = useRef<Record<string, PitchShifterInstance | null>>({});
+  const engineRef = useRef<"buffer" | "shift">("buffer");
+  const shiftPosRef = useRef(0);
+  const [tracksOpen, setTracksOpen] = useState(false);
 
   const song = songs[idx] || null;
   const tracks = song?.tracks || [];
@@ -255,8 +287,17 @@ export default function PerformView({
   const duration = tracks.reduce((max, t) => Math.max(max, trackDurations[t.id] || 0), 0);
 
   function ctx(): AudioContext {
-    if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
-    return audioCtxRef.current;
+    const cur = audioCtxRef.current;
+    if (cur && cur.state !== "closed") return cur;
+    // Context nou: primer ús, o bé el d'abans s'ha tancat en
+    // desmuntar/remuntar (p. ex. el doble muntatge de React en dev). El
+    // guany mestre i els de pista penjaven d'aquell context i ja no
+    // serveixen — es refan sols amb el context nou.
+    const ac = new AudioContext();
+    audioCtxRef.current = ac;
+    masterGainRef.current = null;
+    gainNodesRef.current = {};
+    return ac;
   }
 
   // Guany mestre: totes les pistes hi passen abans de la sortida.
@@ -275,30 +316,72 @@ export default function PerformView({
     if (masterGainRef.current) masterGainRef.current.gain.value = masterVolume;
   }, [masterVolume]);
 
+  function dspActive() {
+    return rateRef.current !== 1 || pitchRef.current !== 0;
+  }
+
+  // Guany d'una pista (crea'l si cal, connectat al master) amb el volum /
+  // mute actuals ja aplicats.
+  function gainFor(id: string): GainNode {
+    const ac = ctx();
+    const g = gainNodesRef.current[id] || (gainNodesRef.current[id] = ac.createGain());
+    g.connect(masterGain());
+    const anySolo = tracks.some((t) => trackMix[t.id]?.solo);
+    const m = trackMix[id];
+    if (m) g.gain.value = (m.muted || (anySolo && !m.solo)) ? 0 : m.volume;
+    return g;
+  }
+
+  // Posició actual dins la cançó (segons d'origen), independentment del motor.
+  function curPosition(): number {
+    if (engineRef.current === "shift") return shiftPosRef.current;
+    return Math.max(0, ctx().currentTime - playStartCtxTimeRef.current) + playStartOffsetRef.current;
+  }
+
   function stopAllSources() {
     Object.values(sourceNodesRef.current).forEach((src) => { try { src?.stop(); } catch { /* ja aturada */ } });
     sourceNodesRef.current = {};
+    Object.values(shiftersRef.current).forEach((sh) => { try { sh?.disconnect(); } catch { /* ja desconnectat */ } });
+    shiftersRef.current = {};
   }
 
-  // Arrenca (o reprèn) totes les pistes exactament al mateix instant, des
-  // del segon indicat. Sempre síncrona: quan torna, playStartCtxTimeRef ja
-  // està assignat — si no ho fos, l'efecte que engega el rellotge visual
-  // (disparat pel setPlaying(true) que ve just després) podria arrencar
-  // abans i llegir un valor vell, fent creure que la cançó ja s'ha acabat.
+  // Arrenca (o reprèn) totes les pistes des del segon indicat. Amb tempo=1
+  // i to=0: AudioBufferSourceNode, totes amb el mateix .start(when) —
+  // sincronia exacta. Altrament: un PitchShifter (soundtouchjs) per pista,
+  // amb tempo i to per separat; s'arrenquen totes de cop (petita variació
+  // de sincronia possible, assumida).
   function playFrom(offsetSec: number) {
     const ac = ctx();
     stopAllSources();
+    if (dspActive()) {
+      engineRef.current = "shift";
+      shiftPosRef.current = offsetSec;
+      const dur = duration || Math.max(1, ...tracks.map((t) => buffersRef.current[t.id]?.duration || 0));
+      tracks.forEach((t, i) => {
+        const buf = buffersRef.current[t.id];
+        if (!buf) return;
+        const sh = new PitchShifter(ac, buf, 16384) as PitchShifterInstance;
+        sh.tempo = rateRef.current;
+        sh.pitchSemitones = pitchRef.current;
+        sh.percentagePlayed = Math.min(0.999, offsetSec / dur);
+        sh.connect(gainFor(t.id));
+        shiftersRef.current[t.id] = sh;
+        if (i === 0) sh.on("play", (d) => {
+          shiftPosRef.current = d.timePlayed;
+          if (d.percentagePlayed >= 100) { stopAllSources(); setPlaying(false); shiftPosRef.current = 0; setCurTime(0); }
+        });
+      });
+      playStartOffsetRef.current = offsetSec;
+      return;
+    }
+    engineRef.current = "buffer";
     const when = ac.currentTime + 0.08; // marge mínim perquè totes arrenquin juntes
-    const anySolo = tracks.some((t) => trackMix[t.id]?.solo);
     tracks.forEach((t) => {
       const buf = buffersRef.current[t.id];
       if (!buf) return;
       const src = ac.createBufferSource();
       src.buffer = buf;
-      const gain = gainNodesRef.current[t.id] || (gainNodesRef.current[t.id] = ac.createGain());
-      const m = trackMix[t.id];
-      if (m) gain.gain.value = (m.muted || (anySolo && !m.solo)) ? 0 : m.volume;
-      src.connect(gain).connect(masterGain());
+      src.connect(gainFor(t.id));
       src.start(when, Math.min(offsetSec, buf.duration));
       sourceNodesRef.current[t.id] = src;
     });
@@ -307,12 +390,33 @@ export default function PerformView({
   }
 
   function pausePlayback() {
-    const ac = ctx();
-    const elapsed = Math.max(0, ac.currentTime - playStartCtxTimeRef.current) + playStartOffsetRef.current;
+    const elapsed = curPosition();
     stopAllSources();
     playStartOffsetRef.current = elapsed;
+    shiftPosRef.current = elapsed;
     setCurTime(elapsed);
   }
+
+  // Canvi de tempo / to: si es creua el llindar del motor (tempo=1 & to=0 ↔
+  // qualsevol altre valor) es reinicia des de la posició actual; si no,
+  // s'apliquen en viu als PitchShifters.
+  useEffect(() => {
+    const wasDsp = rateRef.current !== 1 || pitchRef.current !== 0;
+    rateRef.current = playbackRate;
+    pitchRef.current = pitchTotal;
+    const nowDsp = dspActive();
+    if (!playing) return;
+    if (wasDsp !== nowDsp) {
+      playFrom(curPosition());
+      return;
+    }
+    if (nowDsp) {
+      Object.values(shiftersRef.current).forEach((sh) => {
+        if (sh) { sh.tempo = playbackRate; sh.pitchSemitones = pitchTotal; }
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [playbackRate, pitchTotal]);
 
   function togglePlay() {
     if (loadState !== "ready") return;
@@ -325,6 +429,7 @@ export default function PerformView({
 
   function seekAll(time: number) {
     playStartOffsetRef.current = time;
+    shiftPosRef.current = time;
     setCurTime(time);
     if (playing) playFrom(time);
   }
@@ -336,6 +441,13 @@ export default function PerformView({
     setPlaying(false);
     setCurTime(0);
     playStartOffsetRef.current = 0;
+    shiftPosRef.current = 0;
+    engineRef.current = "buffer";
+    rateRef.current = 1;
+    pitchRef.current = 0;
+    setPlaybackRate(1);
+    setPitchSemis(0);
+    setPitchCents(0);
     buffersRef.current = {};
     gainNodesRef.current = {};
     setTrackDurations({});
@@ -373,10 +485,11 @@ export default function PerformView({
   // el mateix origen de temps, per això n'hi ha prou seguint-ne un de sol).
   useEffect(() => {
     if (!playing) { cancelAnimationFrame(rafRef.current); return; }
-    const ac = ctx();
     const tick = () => {
-      const elapsed = Math.max(0, ac.currentTime - playStartCtxTimeRef.current) + playStartOffsetRef.current;
-      if (duration > 0 && elapsed >= duration) {
+      const elapsed = curPosition();
+      // El final el detecta el propi PitchShifter (motor "shift"); aquí
+      // només cal per al motor de buffers.
+      if (engineRef.current === "buffer" && duration > 0 && elapsed >= duration) {
         stopAllSources();
         setPlaying(false);
         playStartOffsetRef.current = 0;
@@ -415,11 +528,18 @@ export default function PerformView({
     setTrackMix((prev) => ({ ...prev, [id]: { ...(prev[id] || defaultMix("")), ...patch } }));
   }
 
-  // En sortir del mode escenari, atura del tot la reproducció.
+  // En sortir del mode escenari, atura del tot la reproducció. Es buida la
+  // ref abans de tancar perquè un remuntatge (el doble muntatge de dev)
+  // en creï un de nou en comptes de fer servir un context ja tancat (que
+  // decodifica àudio però peta en crear la font i deixa el play sense so).
   useEffect(() => {
     return () => {
       stopAllSources();
-      audioCtxRef.current?.close().catch(() => { /* ja tancat */ });
+      const ac = audioCtxRef.current;
+      audioCtxRef.current = null;
+      masterGainRef.current = null;
+      gainNodesRef.current = {};
+      ac?.close().catch(() => { /* ja tancat */ });
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -430,7 +550,9 @@ export default function PerformView({
     if (!metronomeOn || !song?.tempo) return;
     const ac = ctx();
     beatRef.current = 0;
-    const interval = 60000 / song.tempo;
+    // Segueix el mateix tempo triat a la mescla per no anar a contratemps
+    // amb les pistes.
+    const interval = 60000 / (song.tempo * playbackRate);
     const tick = () => {
       const accent = beatRef.current % 4 === 0;
       const osc = ac.createOscillator();
@@ -446,7 +568,7 @@ export default function PerformView({
     tick();
     metroTimerRef.current = window.setInterval(tick, interval);
     return () => { if (metroTimerRef.current) window.clearInterval(metroTimerRef.current); };
-  }, [metronomeOn, idx, song?.tempo]);
+  }, [metronomeOn, idx, song?.tempo, playbackRate]);
 
   // ---- To inicial ----
   function playPitch() {
@@ -587,6 +709,57 @@ export default function PerformView({
     </button>
   );
 
+  // Barra de reproducció (cerca + transport + volum general). Es fa servir
+  // tant a sota de les lletres com dins del visor de partitura a pantalla
+  // completa, perquè amb àudios penjats el reproductor hi sigui també.
+  const audioBar = (
+    <div className="perform-audiobar">
+      {tracks.length > 0 && (
+        <div className="perform-audio-seek">
+          <span className="perform-audio-time">{fmtTime(curTime)}</span>
+          <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(curTime, duration || 0)}
+            disabled={loadState !== "ready"} onChange={(e) => seekAll(parseFloat(e.target.value))} />
+          <span className="perform-audio-time">{fmtTime(duration)}</span>
+        </div>
+      )}
+      <div className="perform-audio-controls">
+        <div className="perform-audio-info">
+          {loadState === "loading" && `Carregant pistes… ${loadDone}/${tracks.length}`}
+          {loadState === "error" && "No s'han pogut carregar les pistes"}
+        </div>
+        <div className="perform-transport">
+          {prevBtn}
+          {tracks.length > 0 && (
+            <button type="button" className="perform-audio-play" disabled={loadState !== "ready"}
+              title={loadState !== "ready" ? "Carregant…" : playing ? "Pausa" : "Reprodueix"} onClick={togglePlay}>
+              {loadState === "loading" ? <span className="perform-audio-spinner" /> : playing ? "⏸" : "▶"}
+            </button>
+          )}
+          {nextBtn}
+        </div>
+        <div className="perform-audio-master">
+          {tracks.length > 0 && (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+              <input type="range" min={0} max={1} step={0.01} value={masterVolume}
+                title={`Volum general ${Math.round(masterVolume * 100)}%`}
+                onChange={(e) => setMasterVolume(parseFloat(e.target.value))} />
+              <span className="perform-audio-master-val">{Math.round(masterVolume * 100)}%</span>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  // Fletxeta lateral per obrir/tancar el mesclador — flota per sobre de tot
+  // (també del visor de partitura).
+  const mixerTab = tracks.length > 0 && (
+    <button type="button" className={"perform-mixer-tab" + (mixerOpen ? " open" : "")} title="Mescla" onClick={() => setMixerOpen((v) => !v)}>
+      ‹
+    </button>
+  );
+
   return (
     <div className="perform">
       <div className="perform-topbar">
@@ -606,8 +779,8 @@ export default function PerformView({
             </div>
           )}
           {song && song.tempo > 0 && (
-            <button type="button" className={"perform-ctl" + (metronomeOn ? " active" : "")} title={`Metrònom ${song.tempo} BPM`} onClick={() => setMetronomeOn((v) => !v)}>
-              ♩ {song.tempo}
+            <button type="button" className={"perform-ctl" + (metronomeOn ? " active" : "")} title={`Metrònom ${Math.round(song.tempo * playbackRate)} BPM`} onClick={() => setMetronomeOn((v) => !v)}>
+              ♩ {Math.round(song.tempo * playbackRate)}
             </button>
           )}
           {song?.key && <button type="button" className="perform-ctl" title="Toca el to inicial" onClick={playPitch}>♪ {song.key}</button>}
@@ -654,41 +827,9 @@ export default function PerformView({
         <div style={{ height: "45vh" }}></div>
       </div>
 
-      <div className="perform-bottom">
-        <div className="perform-audiobar">
-          {tracks.length > 0 && (
-            <div className="perform-audio-seek">
-              <span className="perform-audio-time">{fmtTime(curTime)}</span>
-              <input type="range" min={0} max={duration || 0} step={0.1} value={Math.min(curTime, duration || 0)}
-                disabled={loadState !== "ready"} onChange={(e) => seekAll(parseFloat(e.target.value))} />
-              <span className="perform-audio-time">{fmtTime(duration)}</span>
-            </div>
-          )}
-          <div className="perform-audio-controls">
-            <div className="perform-audio-info">
-              {loadState === "loading" && `Carregant pistes… ${loadDone}/${tracks.length}`}
-              {loadState === "error" && "No s'han pogut carregar les pistes"}
-            </div>
-            <div className="perform-transport">
-              {prevBtn}
-              {tracks.length > 0 && (
-                <button type="button" className="perform-audio-play" disabled={loadState !== "ready"}
-                  title={loadState !== "ready" ? "Carregant…" : playing ? "Pausa" : "Reprodueix"} onClick={togglePlay}>
-                  {loadState === "loading" ? <span className="perform-audio-spinner" /> : playing ? "⏸" : "▶"}
-                </button>
-              )}
-              {nextBtn}
-            </div>
-            <div />
-          </div>
-        </div>
-      </div>
+      <div className="perform-bottom">{audioBar}</div>
 
-      {tracks.length > 0 && (
-        <button type="button" className={"perform-mixer-tab" + (mixerOpen ? " open" : "")} title="Mescla" onClick={() => setMixerOpen((v) => !v)}>
-          ‹
-        </button>
-      )}
+      {mixerTab}
 
       {listOpen && createPortal(
         <div className="perform-sidebar-overlay" onClick={() => setListOpen(false)}>
@@ -719,11 +860,78 @@ export default function PerformView({
               <div className="perform-mixer-title">Mescla — {song?.title}</div>
               <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setMixerOpen(false)}>✕</button>
             </div>
-            <div className="perform-mixer-master">
-              <span className="perform-mixer-master-label">Master</span>
-              <input type="range" min={0} max={1} step={0.01} value={masterVolume} onChange={(e) => setMasterVolume(parseFloat(e.target.value))} />
-              <span className="perform-mixer-vol">{Math.round(masterVolume * 100)}%</span>
+            <div className="perform-mixer-master perform-mixer-tempo">
+              <div className="perform-mixer-tempo-top">
+                <span className="perform-mixer-master-label">
+                  <svg className="perform-mixer-label-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 3h6l3.4 15.3A2 2 0 0 1 16.4 21H7.6a2 2 0 0 1-2-2.7L9 3z" />
+                    <line x1="7" y1="15" x2="17" y2="15" />
+                    <line x1="12" y1="18" x2="16" y2="7" />
+                  </svg>
+                  Tempo
+                </span>
+                <button type="button" className="perform-mixer-btn" title={song && song.tempo > 0 ? "−1 BPM" : "−1%"}
+                  disabled={playbackRate <= 0.5}
+                  onClick={() => setPlaybackRate((r) => {
+                    const step = song && song.tempo > 0 ? 1 / song.tempo : 0.01;
+                    return Math.max(0.5, Math.round((r - step) * 1000) / 1000);
+                  })}>−</button>
+                <button type="button" className="perform-mixer-btn" title={song && song.tempo > 0 ? "+1 BPM" : "+1%"}
+                  disabled={playbackRate >= 1.5}
+                  onClick={() => setPlaybackRate((r) => {
+                    const step = song && song.tempo > 0 ? 1 / song.tempo : 0.01;
+                    return Math.min(1.5, Math.round((r + step) * 1000) / 1000);
+                  })}>+</button>
+                <span className="perform-mixer-tempo-val">
+                  {song && song.tempo > 0 ? `${Math.round(song.tempo * playbackRate)} BPM` : `${Math.round(playbackRate * 100)}%`}
+                </span>
+                <button type="button" className={"perform-mixer-tempo-reset" + (playbackRate === 1 ? " is-hidden" : "")}
+                  disabled={playbackRate === 1} title="Tempo original" onClick={() => setPlaybackRate(1)}>↺</button>
+              </div>
+              <input type="range" min={0.5} max={1.5} step={0.01} value={playbackRate}
+                onChange={(e) => setPlaybackRate(parseFloat(e.target.value))} />
             </div>
+            <div className="perform-mixer-master perform-mixer-tempo">
+              <div className="perform-mixer-tempo-top">
+                <span className="perform-mixer-master-label">
+                  <svg className="perform-mixer-label-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M8 3v8a4 4 0 0 0 8 0V3" />
+                    <line x1="12" y1="15" x2="12" y2="21" />
+                    <line x1="9" y1="21" x2="15" y2="21" />
+                  </svg>
+                  Pitch
+                </span>
+                <button type="button" className="perform-mixer-btn" title="−1 semitò"
+                  disabled={pitchSemis <= -12}
+                  onClick={() => setPitchSemis((s) => Math.max(-12, s - 1))}>−</button>
+                <button type="button" className="perform-mixer-btn" title="+1 semitò"
+                  disabled={pitchSemis >= 12}
+                  onClick={() => setPitchSemis((s) => Math.min(12, s + 1))}>+</button>
+                <span className="perform-mixer-tempo-val">
+                  {pitchSemis > 0 ? `+${pitchSemis}` : pitchSemis}
+                  {pitchCents !== 0 ? ` ${pitchCents > 0 ? "+" : "−"}${Math.abs(pitchCents)}¢` : " st"}
+                </span>
+                <button type="button" className={"perform-mixer-tempo-reset" + (pitchSemis === 0 && pitchCents === 0 ? " is-hidden" : "")}
+                  disabled={pitchSemis === 0 && pitchCents === 0} title="To original" onClick={() => { setPitchSemis(0); setPitchCents(0); }}>↺</button>
+              </div>
+              <input type="range" min={-50} max={50} step={1} value={pitchCents}
+                title="Ajust fi (centèssimes de semitò)"
+                onChange={(e) => setPitchCents(parseInt(e.target.value, 10))} />
+            </div>
+            <button type="button" className={"perform-mixer-tracks-toggle" + (tracksOpen ? " open" : "")}
+              onClick={() => setTracksOpen((v) => !v)}>
+              <span className="perform-mixer-tracks-toggle-label">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="4" y1="21" x2="4" y2="14" /><line x1="4" y1="10" x2="4" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="12" /><line x1="12" y1="8" x2="12" y2="3" />
+                  <line x1="20" y1="21" x2="20" y2="16" /><line x1="20" y1="12" x2="20" y2="3" />
+                  <line x1="1" y1="14" x2="7" y2="14" /><line x1="9" y1="8" x2="15" y2="8" /><line x1="17" y1="16" x2="23" y2="16" />
+                </svg>
+                Canals{tracks.length ? ` (${tracks.length})` : ""}
+              </span>
+              <span className="perform-mixer-caret">▾</span>
+            </button>
+            {tracksOpen && (
             <div className="perform-mixer-tracks">
               {tracks.map((t) => {
                 const m = trackMix[t.id] || { name: t.name, volume: 1, muted: false, solo: false };
@@ -746,6 +954,7 @@ export default function PerformView({
                 );
               })}
             </div>
+            )}
           </div>
         </div>
       )}
@@ -789,6 +998,9 @@ export default function PerformView({
               <a className="perform-score-fallback" href={`/api/file/${curScore.id}`} target="_blank" rel="noopener noreferrer">Obre &ldquo;{curScore.name}&rdquo;</a>
             )}
           </div>
+          {tracks.length > 0 && (
+            <div className="perform-score-fs-audio">{audioBar}</div>
+          )}
         </div>,
         document.body
       )}

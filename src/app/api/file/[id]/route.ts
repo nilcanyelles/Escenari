@@ -26,6 +26,8 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     `select 1 from person_profiles where photo_file_id=$1
      union all
      select 1 from bands where logo=$2 or cover_url=$2
+     union all
+     select 1 from workspaces where logo=$2
      limit 1`,
     [id, `/api/file/${id}`]
   )).rows.length > 0;

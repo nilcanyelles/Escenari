@@ -123,3 +123,65 @@ export async function photonReverseGeocode(lat: number, lon: number): Promise<{ 
     return null;
   }
 }
+
+// Resol un detall de recinte (Google Place o Photon) en {venue, city,
+// address} — versió de servidor de la mateixa lògica que fa servir
+// VenueSearchField (resolvePlaceToVenueFields), per a la importació
+// d'Excel: allà no hi ha cap desplegable per triar, així que es fa servir
+// directament amb el detall de la primera opció de la cerca.
+export async function resolveVenueFromDetails(v: { name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null }): Promise<{ venue: string; city?: string; address?: string }> {
+  let street = v.street || "", housenumber = v.housenumber || "", city = v.city;
+  if (!housenumber && v.lat != null && v.lon != null) {
+    const rev = await photonReverseGeocode(v.lat, v.lon);
+    if (rev) {
+      if (rev.street) street = rev.street;
+      if (rev.housenumber) housenumber = rev.housenumber;
+      if (!city && rev.city) city = rev.city;
+    }
+  }
+  const addressParts = [[street, housenumber].filter(Boolean).join(" "), city].filter(Boolean);
+  return {
+    venue: v.name,
+    ...(city ? { city } : {}),
+    ...(addressParts.length ? { address: addressParts.join(", ") } : {}),
+  };
+}
+
+// Geocodificació d'un recinte (no només poblacions, com geocodeOne a
+// lib/geocode.ts — aquí no es filtra per tipus "ciutat", perquè el que es
+// busca sol ser una sala, un parc o una plaça) amb reserva: Photon primer
+// (ràpid) i, si falla, no respon a temps o no en troba cap, Nominatim
+// (OpenStreetMap oficial) com a segon intent — dues APIs independents
+// perquè una caiguda puntual de la primera no deixi el mapa del pòster
+// sense punt on marcar.
+export async function geocodePlace(query: string): Promise<{ lat: number; lon: number } | null> {
+  const q = (query || "").trim();
+  if (!q) return null;
+  try {
+    const res = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=1`, { signal: AbortSignal.timeout(5000) });
+    if (res.ok) {
+      const data = await res.json();
+      const c = data.features?.[0]?.geometry?.coordinates;
+      if (c) return { lat: c[1], lon: c[0] };
+    }
+  } catch { /* prova Nominatim */ }
+  try {
+    const url = new URL("https://nominatim.openstreetmap.org/search");
+    url.searchParams.set("q", q);
+    url.searchParams.set("format", "jsonv2");
+    url.searchParams.set("limit", "1");
+    const res = await fetch(url.toString(), {
+      headers: { "User-Agent": "EscenariApp/1.0 (pòster del concert - mini-mapa)" },
+      signal: AbortSignal.timeout(5000),
+    });
+    if (res.ok) {
+      const rows: { lat: string; lon: string }[] = await res.json();
+      const r = rows[0];
+      if (r) {
+        const lat = parseFloat(r.lat), lon = parseFloat(r.lon);
+        if (Number.isFinite(lat) && Number.isFinite(lon)) return { lat, lon };
+      }
+    }
+  } catch { /* cap dels dos ha trobat res */ }
+  return null;
+}

@@ -20,6 +20,34 @@ function revalidateGroup() {
   revalidatePath("/artista/grup");
 }
 
+// Elimina un grup sencer i tot el que en depèn — concerts, factures,
+// enllaços de regidor, sol·licituds de suplent, riders, setlists, membres...
+// Irreversible: només un admin de l'agència pot fer-ho, i cal escriure el
+// nom del grup exactament (comprovat també aquí, mai només al client).
+export async function deleteBandAction(bandId: string, confirmName: string): Promise<{ ok: boolean; error?: string }> {
+  const { workspaceId, agencyOwner } = await requireManagerAction();
+  if (!agencyOwner) return { ok: false, error: "Només un admin de l'agència pot eliminar un grup" };
+  const band = (await db().query("select name from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
+  if (!band) return { ok: false, error: "Grup no trobat" };
+  if ((confirmName || "").trim() !== band.name) return { ok: false, error: "El nom no coincideix" };
+
+  const pool = db();
+  // concerts.band_id és "on delete set null" (no cascada) — cal buidar-los
+  // primer, com fa deleteConcertAction per a un de sol, perquè el grup se
+  // n'endugui de veres tot el seu historial en comptes de deixar-lo orfe.
+  await pool.query("delete from invoices where concert_id in (select id from concerts where band_id=$1)", [bandId]);
+  await pool.query("delete from concerts where band_id=$1", [bandId]);
+  // La resta (membres, riders, setlists, xarxes, cerques de suplent...) ja
+  // cascada sola en eliminar el grup mateix.
+  await pool.query("delete from bands where id=$1 and workspace_id=$2", [bandId, workspaceId]);
+
+  revalidateGroup();
+  revalidatePath("/agencia");
+  revalidatePath("/agenda");
+  revalidatePath("/estadistiques");
+  return { ok: true };
+}
+
 // Desa la llista de suplents de confiança d'un grup.
 export async function saveBandBackupsAction(bandId: string, backups: BackupPerson[]) {
   const { workspaceId } = await requireManagerAction();

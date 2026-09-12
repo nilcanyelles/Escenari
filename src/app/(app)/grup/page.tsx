@@ -82,6 +82,7 @@ export default async function GrupPage() {
         igByName={igByName}
         socialPrev={socialPrev}
         today={today()}
+        agencyOwner={profile.agencyOwner}
       />
     </Suspense>
   );

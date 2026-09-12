@@ -14,7 +14,6 @@ import {
 } from "@/lib/resum-helpers";
 import type { Transaction } from "@/lib/finance";
 import FinancePanel from "@/components/FinancePanel";
-import MunicipalityMap from "@/components/MunicipalityMap";
 
 const NBSP = " ";
 
@@ -171,7 +170,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
   const [range, setRange] = useState<"year" | "all">("year");
   const [year, setYear] = useState(currentYear);
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
-  const [showMuniMap, setShowMuniMap] = useState(false);
+  const [mapOpen, setMapOpen] = useState(true);
 
   // Geografia: coordenades de cada població (cache de geocodificació de
   // l'app) i, a partir d'elles, comarca / regió / país amb els contorns
@@ -303,7 +302,6 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
     });
     const cityEntries = Object.entries(byCity).sort((a, b) => b[1] - a[1]);
     const topCities = cityEntries.slice(0, 6).map(([label, value]) => ({ label, value }));
-    const allCities = cityEntries.map(([name, count]) => ({ name, count }));
     const bandRows = Object.entries(byBand).sort((a, b) => b[1] - a[1]).slice(0, 6)
       .map(([id, value]) => ({ label: bands.find((b) => b.id === id)?.name || "—", value, color: bandColor(id).color }));
 
@@ -399,16 +397,32 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
     ranks = (
       <>
         <div className="panel">
-          <div className="panel-header-row" style={{ marginBottom: 10 }}>
+          <div className="panel-header-row" style={{ marginBottom: mapOpen ? 10 : 0 }}>
             <div>
-              <div className="panel-title">On hem tocat</div>
+              <div className="panel-title" style={{ display: "flex", alignItems: "center" }}>
+                On hem tocat
+                <span className="beta-badge" style={{ marginLeft: 8, marginRight: 0 }}>
+                  <span aria-hidden="true" style={{ marginRight: 5 }}>🚧</span>Beta
+                </span>
+              </div>
               <div className="t-dim" style={{ fontSize: 12.5 }}>
                 {pins.length} {pins.length === 1 ? "població" : "poblacions"} al mapa{unlocated > 0 && !geoLoading ? ` · ${unlocated} concerts sense localitzar` : ""}
               </div>
             </div>
-            <button type="button" className="btn-outline" onClick={() => setShowMuniMap(true)}>Mapa de municipis</button>
+            <button
+              type="button"
+              className="panel-icon-btn"
+              aria-expanded={mapOpen}
+              aria-label={mapOpen ? "Plega el mapa" : "Desplega el mapa"}
+              title={mapOpen ? "Plega el mapa" : "Desplega el mapa"}
+              onClick={() => setMapOpen((v) => !v)}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" style={{ transform: mapOpen ? "none" : "rotate(-90deg)", transition: "transform .15s" }}>
+                <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
           </div>
-          <ConcertPinMap pins={pins} loading={geoLoading} />
+          {mapOpen && <ConcertPinMap pins={pins} loading={geoLoading} />}
         </div>
         <div className="chart-grid">
           <RankList title="Concerts per grup" rows={bandRows} fmt={(n) => String(n)} />
@@ -431,17 +445,6 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
             ))}
           </div>
         </div>
-        {showMuniMap && (
-          <div className="modal-overlay" onClick={() => setShowMuniMap(false)}>
-            <div className="modal muni-map-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="modal-head">
-                <div className="modal-title">Mapa de municipis</div>
-                <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setShowMuniMap(false)}>✕</button>
-              </div>
-              <MunicipalityMap cities={allCities} />
-            </div>
-          </div>
-        )}
       </>
     );
   } else {
