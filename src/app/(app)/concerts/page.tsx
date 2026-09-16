@@ -6,10 +6,15 @@ import { getSelectedBandId, resolveBandScope, scopeConcerts } from "@/lib/band-s
 
 export const dynamic = "force-dynamic";
 
-export default async function ConcertsPage() {
+// Per defecte només es carreguen els concerts dels últims 12 mesos (més
+// tots els futurs, siguin quan siguin) — evita transmetre anys d'historial
+// cada cop que s'obre la pestanya. "?full=1" (botó "Carrega tot
+// l'historial" a ConcertsView) en demana la llista sencera.
+export default async function ConcertsPage({ searchParams }: { searchParams: Promise<{ full?: string }> }) {
+  const { full } = await searchParams;
   const { workspaceId } = await requireManager();
   const [bands, concerts, contacts, selectedRaw] = await Promise.all([
-    getBands(workspaceId), getConcerts(workspaceId), getContacts(workspaceId), getSelectedBandId(),
+    getBands(workspaceId), getConcerts(workspaceId, full ? undefined : { monthsBack: 12 }), getContacts(workspaceId), getSelectedBandId(),
   ]);
   const bandId = resolveBandScope(bands, selectedRaw);
   const scoped = scopeConcerts(concerts, bandId);
@@ -20,6 +25,7 @@ export default async function ConcertsPage() {
       contacts={contacts}
       selectedBandId={bandId}
       today={today()}
+      fullHistoryLoaded={!!full}
     />
   );
 }
