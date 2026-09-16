@@ -73,6 +73,7 @@ export async function getConcerts(workspaceId: string): Promise<Concert[]> {
     amount: r.amount,
     attendance: r.attendance,
     substitutes: r.substitutes,
+    substituteConfirmed: r.substitute_confirmed || {},
     noSubstitute: r.no_substitute,
     convocatoriaExcluded: r.convocatoria_excluded || {},
     setlistHighlights: r.setlist_highlights || {},

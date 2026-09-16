@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { requireArtistAction, getProfile, type Profile } from "@/lib/current-user";
 import { createBandWithPeople, type CreateGroupInput, type CreateGroupResult } from "@/lib/group-create";
 import type { Person } from "@/lib/types";
+import { normalize } from "@/lib/text";
+import { createUnavailabilityEvent, deleteUnavailabilityEvent } from "@/lib/unavailability";
 
 function revalidateArtist() {
   revalidatePath("/artista");
@@ -48,7 +50,7 @@ async function addMembership(bandId: string, profile: Profile, opts?: { claimNam
 
   if (!existingMember) {
     if (opts?.asCrew) {
-      crew.push({ name: profile.name, role: crewRole || "Tècnic de so", email: profile.email });
+      crew.push({ name: profile.name, role: crewRole || "Tècnic de so", email: profile.email, phone: profile.phone, whatsapp: profile.whatsapp });
       await pool.query("update bands set crew=$1 where id=$2", [JSON.stringify(crew), bandId]);
     } else {
       const ins = instruments.length ? instruments : profile.instruments;
@@ -56,6 +58,8 @@ async function addMembership(bandId: string, profile: Profile, opts?: { claimNam
         name: profile.name,
         role: ins.join(", "),
         email: profile.email,
+        phone: profile.phone,
+        whatsapp: profile.whatsapp,
         instruments: ins,
       });
       await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
@@ -71,6 +75,15 @@ async function addMembership(bandId: string, profile: Profile, opts?: { claimNam
       const next = crew.map((m) => (m === existingMember ? { ...m, role: crewRole } : m));
       await pool.query("update bands set crew=$1 where id=$2", [JSON.stringify(next), bandId]);
     }
+  }
+
+  // Si es reclama algú que el gestor ja havia creat amb un nom diferent del
+  // del compte (p. ex. et vas registrar com a "Musicat Memes" però et
+  // reclames com a "Iker Salido"), el nom del compte també es corregeix —
+  // si no, la barra lateral i el menú de dalt a la dreta es queden amb el
+  // nom vell mentre "El meu perfil" ja mostra el nou.
+  if (memberName.trim().toLowerCase() !== profile.name.trim().toLowerCase()) {
+    await pool.query("update profiles set name=$1 where clerk_user_id=$2", [memberName, profile.clerkUserId]);
   }
 
   // Vincula també el perfil públic si existia (creat pel gestor).
@@ -100,27 +113,29 @@ export async function respondInvitationAction(invitationId: string, accept: bool
   return { ok: true as const };
 }
 
-// Un músic crea el seu propi grup (un de sol): es converteix en gestor de la
-// seva pròpia agència (un workspace amb aquest grup) i hi entra alhora com a
-// músic. No en podrà crear cap altre des d'aquí.
+// Un músic crea el seu propi grup: hi entra com a membre amb el permís
+// "Admin" (vegeu createBandWithPeople — qui crea el grup hi mana des del
+// primer moment), amb el mateix accés que un gestor DINS d'aquest grup
+// (vegeu requireBandAccess(bandId, "admin") i isAdminLike a GroupHomeView).
+// El compte es queda com a artista: no es toca ni el rol ni el workspace
+// del perfil, així que segueix veient i podent accedir a la resta de grups
+// on ja fos (amb els permisos que hi tingués) — abans això convertia el
+// compte en gestor de la seva pròpia agència, cosa que el desconnectava de
+// qualsevol altre grup on ja fos membre. Es pot fer servir més d'un cop:
+// cada crida crea un grup (workspace) nou i independent.
 export async function createGroupAsMusicianAction(input: CreateGroupInput, myInstruments: string[]): Promise<CreateGroupResult> {
   const profile = await requireArtistAction();
-  if (profile.workspaceId) throw new Error("Ja tens un grup creat (o formes part d'una agència).");
   if (profile.role !== "artist") throw new Error("Només els músics poden crear el seu grup des d'aquí.");
   const name = (input.name || "").trim();
   if (!name) throw new Error("Cal el nom del grup");
   const pool = db();
   const wsId = "ws" + Date.now();
   const logo = input.logo && input.logo.startsWith("data:image/") && input.logo.length < 400_000 ? input.logo : "";
-  // 14 dies de prova amb tot inclòs, sense targeta.
+  // Workspace només per allotjar aquest grup (bands.workspace_id és
+  // obligatori) — no hi ha cap gestor que en depengui, hi mana qui l'ha
+  // creat gràcies al permís d'Admin.
   await pool.query("insert into workspaces (id, name, logo, trial_ends_at) values ($1, $2, $3, now() + interval '14 days')", [wsId, name, logo]);
   await pool.query("insert into company_info (workspace_id) values ($1) on conflict do nothing", [wsId]);
-  await pool.query(
-    `update profiles set role='manager', workspace_id=$1, agency_owner=true, agency_role='Músic i gestor',
-       can_create_groups=false, view_all_groups=true
-     where clerk_user_id=$2`,
-    [wsId, profile.clerkUserId]
-  );
   const instruments = (myInstruments || []).filter(Boolean).length ? myInstruments.filter(Boolean) : profile.instruments;
   const res = await createBandWithPeople({
     workspaceId: wsId,
@@ -129,8 +144,7 @@ export async function createGroupAsMusicianAction(input: CreateGroupInput, myIns
     self: { clerkUserId: profile.clerkUserId, name: profile.name, email: profile.email, instruments },
   });
   revalidateArtist();
-  revalidatePath("/grup");
-  revalidatePath("/agencia");
+  revalidatePath("/artista/grup");
   return { bandId: res.bandId, invites: res.invites };
 }
 
@@ -150,21 +164,60 @@ export async function claimBandInvitationAction(token: string) {
 }
 
 // "extra": què hi toca en aquest grup (instruments) o quina funció hi fa
-// (crew) — es demana en unir-s'hi amb el codi.
-export async function joinByCodeAction(code: string, asCrew = false, extra?: { instruments?: string[]; role?: string }) {
+// (crew) — es demana en unir-s'hi amb el codi. "claimName": si és algú que
+// el gestor ja havia creat a mà (vist a previewBandByCodeAction), reclama
+// aquesta identitat en comptes de crear-se'n una de nova.
+export async function joinByCodeAction(code: string, asCrew = false, extra?: { instruments?: string[]; role?: string }, claimName?: string) {
   const profile = await requireArtistAction();
   const cleaned = (code || "").trim().toUpperCase();
   if (!cleaned) return { ok: false as const, error: "Escriu un codi." };
   const band = (await db().query("select id, name from bands where upper(join_code)=$1 and join_code_active", [cleaned])).rows[0];
   if (!band) return { ok: false as const, error: "No hi ha cap grup amb aquest codi." };
-  await addMembership(band.id, profile, { asCrew, instruments: extra?.instruments, role: extra?.role });
+  if (claimName && claimName.trim()) {
+    // Repetit de la comprovació que ja fa la llista de previewBandByCodeAction
+    // (perfils ja vinculats no es poden triar) — aquí per si algú l'esquiva
+    // trucant l'action directament amb un nom que ja és d'un altre compte.
+    const already = (await db().query(
+      "select 1 from band_members where band_id=$1 and lower(member_name)=lower($2) and clerk_user_id<>$3",
+      [band.id, claimName.trim(), profile.clerkUserId]
+    )).rows[0];
+    if (already) return { ok: false as const, error: "Aquest perfil ja està vinculat a un altre compte." };
+  }
+  await addMembership(band.id, profile, { asCrew, instruments: extra?.instruments, role: extra?.role, claimName });
   revalidateArtist();
   return { ok: true as const, bandName: band.name as string };
 }
 
-export async function setMyAttendanceAction(concertId: string, value: "yes" | "no") {
+export type PreviewPerson = { name: string; kind: "member" | "crew"; instruments: string[]; role: string; claimed: boolean };
+
+// Llista de músics i crew que el gestor ja ha creat a mà en aquest grup, per
+// deixar triar "qui ets" en unir-te amb el codi — els ja reclamats (amb
+// compte vinculat) surten marcats i no es poden triar.
+export async function previewBandByCodeAction(code: string): Promise<{ bandName: string; people: PreviewPerson[] } | null> {
+  await requireArtistAction();
+  const cleaned = (code || "").trim().toUpperCase();
+  if (!cleaned) return null;
+  const band = (await db().query(
+    "select id, name, members, crew from bands where upper(join_code)=$1 and join_code_active",
+    [cleaned]
+  )).rows[0];
+  if (!band) return null;
+  const linkedRows = (await db().query("select member_name from band_members where band_id=$1", [band.id])).rows;
+  const linked = new Set(linkedRows.map((r) => normalize(r.member_name)));
+  const members: Person[] = band.members || [];
+  const crew: Person[] = band.crew || [];
+  const people: PreviewPerson[] = [
+    ...members.map((m) => ({ name: m.name, kind: "member" as const, instruments: m.instruments || [], role: m.role || "", claimed: linked.has(normalize(m.name)) })),
+    ...crew.map((m) => ({ name: m.name, kind: "crew" as const, instruments: [], role: m.role || "", claimed: linked.has(normalize(m.name)) })),
+  ];
+  return { bandName: band.name, people };
+}
+
+// "value" null = treu la resposta (torna a "pendent") — clicar la mateixa
+// que ja tenies marcada la dessel·lecciona.
+export async function setMyAttendanceAction(concertId: string, value: "yes" | "no" | "potser" | null) {
   const profile = await requireArtistAction();
-  if (value !== "yes" && value !== "no") return;
+  if (value !== null && value !== "yes" && value !== "no" && value !== "potser") return;
   const pool = db();
   const membership = (
     await pool.query(
@@ -186,11 +239,17 @@ export async function setMyAttendanceAction(concertId: string, value: "yes" | "n
        where id = $2`,
       [membership.member_name, concertId]
     );
-  } else {
+  } else if (value === null) {
     await pool.query(
-      `update concerts set attendance = attendance || jsonb_build_object($1::text, 'no')
-       where id = $2`,
+      `update concerts set attendance = attendance - $1 where id = $2`,
       [membership.member_name, concertId]
+    );
+  } else {
+    // "no" o "potser": no toquen el substitut que el gestor hagi posat.
+    await pool.query(
+      `update concerts set attendance = attendance || jsonb_build_object($1::text, $3::text)
+       where id = $2`,
+      [membership.member_name, concertId, value]
     );
   }
   revalidateArtist();
@@ -321,4 +380,25 @@ export async function setDayAvailabilityAction(day: string, available: boolean |
   revalidatePath("/suplencies");
   revalidatePath("/suplents");
   revalidatePath("/artista/perfil");
+}
+
+// Esdeveniments de "no disponible" (vacances, etc.) al perfil personal —
+// vegeu src/lib/unavailability.ts. Qualsevol compte (músic o crew) en pot
+// crear i esborrar els seus.
+export async function createUnavailabilityAction(input: {
+  title: string; startDate: string; startTime: string; endDate: string; endTime: string; allDay: boolean;
+}) {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startDate)) throw new Error("Data d'inici no vàlida");
+  const created = await createUnavailabilityEvent(profile.clerkUserId, input);
+  revalidateArtist();
+  return created;
+}
+
+export async function deleteUnavailabilityAction(id: string) {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  await deleteUnavailabilityEvent(profile.clerkUserId, id);
+  revalidateArtist();
 }

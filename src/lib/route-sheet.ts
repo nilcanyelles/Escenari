@@ -1,4 +1,5 @@
 import type { Concert } from "./types";
+import { mapsHrefFor } from "./nav-app";
 
 export const RS_SECTION_ICONS: Record<string, string> = {
   "Informació general": '<circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line>',
@@ -208,14 +209,14 @@ export function withLiveAddress(lloc: LlocItem[] | undefined, address: string): 
 // desat si n'hi ha, si no un de construït a partir del text de "Detalls" —
 // mateix criteri que RouteSheetPreviewDoc, per si cal en algun altre lloc
 // (com la vista del dia de bolo). Retorna "" si no hi ha res d'aprofitable.
-export function llocItemMapsHref(item: LlocItem | undefined): string {
+export function llocItemMapsHref(item: LlocItem | undefined, navApp?: string): string {
   if (!item) return "";
   const value = item.value || "";
   const legacyValueIsLink = !item.link && !!value && /^https?:\/\//i.test(value.trim());
   const link = item.link && item.link.trim() ? item.link.trim() : legacyValueIsLink ? value.trim() : "";
   if (link) return link;
   const text = legacyValueIsLink ? "" : value;
-  return text.trim() ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(text)}` : "";
+  return text.trim() ? mapsHrefFor(navApp, text) : "";
 }
 
 // La mateixa idea per a l'hora d'inici de la fase "Concert" dels horaris —

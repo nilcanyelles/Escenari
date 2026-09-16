@@ -105,8 +105,11 @@ export type Concert = {
   tags: string[];
   status: "confirmat" | "pendent" | "reservat" | "cancel·lat";
   amount: number;
-  attendance: Record<string, "yes" | "no">;
+  attendance: Record<string, "yes" | "no" | "potser">;
   substitutes: Record<string, string>;
+  // Nom escrit al camp de suplent (substitutes) confirmat de veres — no
+  // n'hi ha prou d'escriure'l perquè compti com a assistència resolta.
+  substituteConfirmed: Record<string, boolean>;
   noSubstitute: Record<string, boolean>;
   // Membres exclosos de la convocatòria d'aquest concert (name -> true):
   // no s'eliminen del grup, es desactiven només per a aquest bolo.

@@ -23,17 +23,20 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
   const [editing, setEditing] = useState(false);
   const [attendance, setAttendanceState] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutesState] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
+  // Escriure el nom d'un suplent no el confirma sol — cal marcar-lo amb el
+  // tick del costat.
+  const [substituteConfirmed, setSubstituteConfirmedState] = useState<Record<string, boolean>>({ ...(concert.substituteConfirmed || {}) });
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
   const people = [...(band?.members || []), ...(band?.crew || [])];
   const backups = band?.backups || [];
 
-  function persist(att: Record<string, string>, subs: Record<string, string>, debounce: boolean) {
+  function persist(att: Record<string, string>, subs: Record<string, string>, debounce: boolean, subConfirmed: Record<string, boolean> = substituteConfirmed) {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     const run = async () => {
       setSaving(true);
-      await setConvocatoriaAction(concert.id, att as Record<string, "yes" | "no">, subs);
+      await setConvocatoriaAction(concert.id, att as Record<string, "yes" | "no">, subs, subConfirmed);
       setSaving(false);
     };
     if (debounce) saveTimer.current = window.setTimeout(run, 600);
@@ -53,7 +56,18 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
     const next = { ...substitutes };
     if (val) next[name] = val; else delete next[name];
     setSubstitutesState(next);
-    persist(attendance, next, true);
+    // Canviar (o esborrar) el nom treu qualsevol confirmació anterior.
+    const nextConfirmed = { ...substituteConfirmed };
+    let confirmedChanged = false;
+    if (nextConfirmed[name]) { delete nextConfirmed[name]; confirmedChanged = true; }
+    if (confirmedChanged) setSubstituteConfirmedState(nextConfirmed);
+    persist(attendance, next, true, nextConfirmed);
+  }
+  function toggleSubConfirmed(name: string) {
+    const next = { ...substituteConfirmed };
+    if (next[name]) delete next[name]; else next[name] = true;
+    setSubstituteConfirmedState(next);
+    persist(attendance, substitutes, false, next);
   }
 
   return (
@@ -82,8 +96,19 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
                   <button type="button" className={"cd-att-btn no" + (a === "no" ? " active" : "")} onClick={() => setAtt(p.name, a === "no" ? null : "no")}>No</button>
                 </div>
                 {a === "no" && (
-                  <input className="field-input compact-field" type="text" list="dia-backups-list" placeholder="Nom del suplent…"
-                    value={substitutes[p.name] || ""} onChange={(e) => setSub(p.name, e.target.value)} />
+                  <>
+                    <input className="field-input compact-field" type="text" list="dia-backups-list" placeholder="Nom del suplent…"
+                      value={substitutes[p.name] || ""} onChange={(e) => setSub(p.name, e.target.value)} />
+                    {substitutes[p.name] && (
+                      <button
+                        type="button" className={"cd-att-btn cd-att-icon-btn yes" + (substituteConfirmed[p.name] ? " active" : "")}
+                        title={substituteConfirmed[p.name] ? "Suplent confirmat — toca per treure la confirmació" : "Marca el suplent com a confirmat"}
+                        onClick={() => toggleSubConfirmed(p.name)}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
             );

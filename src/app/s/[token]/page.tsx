@@ -107,7 +107,7 @@ export default async function SubstituteLinkPage({ params }: { params: Promise<{
         token={token}
         bandName={req.band_name}
         defaultName={defaultName}
-        defaultInstruments={profile?.instruments || []}
+        defaultInstruments={[]}
         hasProfile={!!profile}
         existingStatus={(mine?.status as "pendent" | "acceptada" | "rebutjada" | undefined) || null}
       />

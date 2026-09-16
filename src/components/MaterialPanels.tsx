@@ -287,9 +287,7 @@ export function RidersPanel({ band, riders, linkedMembers, editors, canEdit, isM
           )}
         </div>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
-          El rider és el document que reps la sala o el festival abans del bolo: escenari, entrades de so, backline,
-          monitors i hospitalitat. Crea&apos;n un per cada format del grup (banda completa, acústic…) i assigna&apos;l a cada concert.
-          {canEdit && <> Si ja el tens fet, puja&apos;l (o arrossega&apos;l aquí) i es desa tal qual amb el nom del document: es pot obrir, descarregar i compartir, però no editar.</>}
+          Crea o arrossega un rider
         </div>
         {dragOver && <div className="studio-dropzone-hint">Deixa anar per crear un rider amb aquest document (PDF)</div>}
         {riders.length === 0 ? (

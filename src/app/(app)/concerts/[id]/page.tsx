@@ -13,6 +13,7 @@ import { today } from "@/lib/format";
 import { requireManager } from "@/lib/current-user";
 import { getWorkspaceBilling, activeLinksForConcert } from "@/lib/billing";
 import { ensureShareLinkForConcert } from "@/app/(app)/concerts/share-actions";
+import { getUnavailabilityTitlesOnDate } from "@/lib/unavailability";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,12 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
   const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
   const photosByName: Record<string, string> = {};
   photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+
+  // Qui dels convocats amb compte d'Escenari s'ha marcat "no disponible" al
+  // seu perfil personal aquest mateix dia — avís a la pestanya Convocatòria.
+  const unavailTitles = await getUnavailabilityTitlesOnDate(linkedMembers.map((lm) => lm.clerkUserId), concert.date);
+  const unavailByMember: Record<string, string> = {};
+  linkedMembers.forEach((lm) => { if (unavailTitles[lm.clerkUserId]) unavailByMember[lm.memberName] = unavailTitles[lm.clerkUserId]; });
 
   // Conflictes: només quan coincideixen dia I hora — mateix grup, o un membre
   // compromès amb un altre grup a la mateixa hora.
@@ -103,6 +110,7 @@ export default async function ConcertDetailPage({ params }: { params: Promise<{ 
       clientDetails={clientDetails}
       contacts={contacts}
       linkedMembers={linkedMembers}
+      unavailByMember={unavailByMember}
       shareLinks={shareLinks}
       backupRequests={backupRequests}
       riders={riders}

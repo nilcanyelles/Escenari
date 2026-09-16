@@ -50,7 +50,7 @@ export async function deleteBandAction(bandId: string, confirmName: string): Pro
 
 // Desa la llista de suplents de confiança d'un grup.
 export async function saveBandBackupsAction(bandId: string, backups: BackupPerson[]) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   await db().query(
     "update bands set backups=$1 where id=$2 and workspace_id=$3",
     [JSON.stringify(backups || []), bandId, workspaceId]
@@ -61,7 +61,7 @@ export async function saveBandBackupsAction(bandId: string, backups: BackupPerso
 // Afegeix una persona (de la borsa de suplències) als suplents de confiança
 // d'un grup, si no hi és ja.
 export async function addTrustedBackupAction(bandId: string, person: BackupPerson): Promise<{ ok: boolean }> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   const band = (await db().query("select backups from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
   const backups: BackupPerson[] = band.backups || [];
@@ -79,7 +79,7 @@ export async function addTrustedBackupAction(bandId: string, person: BackupPerso
 // Desa la llista de vehicles del grup (tipus, color, propietari, matrícula) — es fan servir per
 // triar-los ràpid a "Matrícules autoritzades" del full de ruta.
 export async function saveBandVehiclesAction(bandId: string, vehicles: Vehicle[]) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   await db().query(
     "update bands set vehicles=$1 where id=$2 and workspace_id=$3",
     [JSON.stringify(vehicles || []), bandId, workspaceId]
@@ -90,13 +90,11 @@ export async function saveBandVehiclesAction(bandId: string, vehicles: Vehicle[]
 // ---------- Aparença del grup: logo, portada i colors ----------
 
 export async function uploadBandImageAction(formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
-  const { workspaceId } = await requireManagerAction();
   const bandId = String(formData.get("bandId") || "");
   const kind = String(formData.get("kind") || "logo"); // logo | cover
   const file = formData.get("file") as File | null;
   if (!bandId || !file) return { ok: false, error: "Falta el fitxer" };
-  const owns = (await db().query("select 1 from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
-  if (!owns) return { ok: false, error: "Grup no trobat" };
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   if (!file.type.startsWith("image/")) return { ok: false, error: "Ha de ser una imatge" };
   if (file.size > 8 * 1024 * 1024) return { ok: false, error: "Màxim 8 MB" };
   const buf = Buffer.from(await file.arrayBuffer());
@@ -122,7 +120,7 @@ export async function uploadBandImageAction(formData: FormData): Promise<{ ok: b
 }
 
 export async function saveBandAppearanceAction(bandId: string, input: { name: string; color1: string; color2: string; tags: string[]; logoAspect?: string; coverPos?: string }) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   const name = (input.name || "").trim();
   // El punt focal de la portada només s'accepta en format "X% Y%".
   const coverPos = /^\d{1,3}% \d{1,3}%$/.test(input.coverPos || "") ? input.coverPos! : "";
@@ -253,9 +251,7 @@ export async function setMemberPermAction(bandId: string, memberName: string, ke
 // queda vinculada exactament a aquest membre (mateix nom → mateixa
 // assistència i historial).
 export async function invitePersonAction(bandId: string, memberName: string, email: string): Promise<{ ok: boolean; error?: string }> {
-  const { workspaceId } = await requireManagerAction();
-  const owns = (await db().query("select 1 from bands where id=$1 and workspace_id=$2", [bandId, workspaceId])).rows[0];
-  if (!owns) return { ok: false, error: "Grup no trobat" };
+  await requireBandAccess(bandId, "admin");
   const cleaned = email.trim().toLowerCase();
   if (!/.+@.+\..+/.test(cleaned)) return { ok: false, error: "Correu no vàlid" };
   await db().query(
@@ -270,7 +266,7 @@ export async function invitePersonAction(bandId: string, memberName: string, ema
 
 // Visibilitat del caixet per als membres del grup (àrea d'artista).
 export async function setShowFeesAction(bandId: string, show: boolean) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   await db().query("update bands set show_fees=$1 where id=$2 and workspace_id=$3", [show, bandId, workspaceId]);
   revalidatePath("/grup");
   revalidatePath("/artista");
@@ -280,7 +276,7 @@ export async function setShowFeesAction(bandId: string, show: boolean) {
 // es fan servir per omplir el repartiment dels concerts que encara no en
 // tinguin cap de desat.
 export async function saveDefaultPayoutSplitAction(bandId: string, split: Record<string, number>) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   await db().query(
     "update bands set default_payout_split=$1 where id=$2 and workspace_id=$3",
     [JSON.stringify(split || {}), bandId, workspaceId]
@@ -294,7 +290,7 @@ export async function saveDefaultPayoutSplitAction(bandId: string, split: Record
 // detalls ni enllaços concrets, que ja s'han retallat abans de cridar això).
 // Es fusiona amb la resta de seccions ja desades sense tocar-les.
 export async function saveDefaultRouteSheetSectionAction(bandId: string, section: string, items: unknown[]) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   const { rows } = await db().query<{ default_route_sheet: Record<string, unknown> | null }>(
     "select default_route_sheet from bands where id=$1 and workspace_id=$2",
     [bandId, workspaceId]
@@ -320,7 +316,7 @@ export async function publishBackupRequestAction(input: {
   role?: string;
   note: string;
 }) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(input.bandId, "admin");
   const id = "br" + Date.now();
   await db().query(
     `insert into backup_requests (id, workspace_id, band_id, concert_id, member_name, instruments, role, note)
@@ -333,7 +329,9 @@ export async function publishBackupRequestAction(input: {
 }
 
 export async function setBackupRequestStatusAction(id: string, status: "oberta" | "coberta" | "cancel·lada") {
-  const { workspaceId } = await requireManagerAction();
+  const reqBand = (await db().query("select band_id from backup_requests where id=$1", [id])).rows[0];
+  if (!reqBand) throw new Error("Cerca no trobada");
+  const { workspaceId } = await requireBandAccess(reqBand.band_id, "admin");
   await db().query(
     "update backup_requests set status=$1 where id=$2 and workspace_id=$3",
     [status, id, workspaceId]
@@ -346,7 +344,9 @@ export async function setBackupRequestStatusAction(id: string, status: "oberta" 
 // confiança del grup (per poder-lo triar a qualsevol bolo) i queda com a
 // substitut del membre que faltava en aquell concert.
 export async function respondBackupApplicationAction(requestId: string, clerkUserId: string, status: "acceptada" | "rebutjada") {
-  const { workspaceId } = await requireManagerAction();
+  const reqBand = (await db().query("select band_id from backup_requests where id=$1", [requestId])).rows[0];
+  if (!reqBand) throw new Error("Cerca no trobada");
+  const { workspaceId } = await requireBandAccess(reqBand.band_id, "admin");
   const pool = db();
   const req = (await pool.query(
     "select band_id, concert_id, member_name, role from backup_requests where id=$1 and workspace_id=$2",

@@ -37,7 +37,7 @@ export default async function ArtistGroupLayout({ children }: { children: React.
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "" }))}
       selectedBandId={selectedBandId}
       railLinks={[
-        { href: "/artista/perfil", label: "El meu perfil", emoji: "👤", icon: <IconPerson /> },
+        { href: "/artista/perfil", label: "Perfil personal", emoji: "👤", icon: <IconPerson /> },
         { href: "/artista/biblioteca", label: "Biblioteca de cançons", emoji: "🎵", icon: <IconMusic /> },
         { href: "/suplencies", label: "Suplències", emoji: "🔄", icon: <IconSwap /> },
         { href: "/els-meus-grups", label: "Uneix-te o crea un grup", emoji: "➕", icon: <IconPlus /> },

@@ -1,32 +1,38 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { Band, Concert } from "@/lib/types";
+import type { Band, Concert, Contact } from "@/lib/types";
 import type { Setlist } from "@/lib/material-types";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
+import { saveConcertAction, setConvocatoriaAction } from "@/app/(app)/concerts/actions";
 import { formatCurrency, formatDateFull, capitalize, formatDate, statusColors, formatConcertTime } from "@/lib/format";
 import { personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { rsCompletionPercent } from "@/lib/route-sheet";
 import { EXPENSE_PAYER_LABELS } from "@/lib/finance";
 import { AGENCY_PAYOUT_NAME, type PayoutSummary } from "@/lib/payouts";
+import { mapsHrefFor, readNavAppCookie, type NavApp } from "@/lib/nav-app";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
-import RouteSheetPreviewDoc from "@/components/RouteSheetPreviewDoc";
+import RouteSheetEditor from "@/components/RouteSheetEditor";
+import VenueSearchField, { resolvePlaceToVenueFields } from "@/components/VenueSearchField";
 import AttendanceButtons from "@/app/(artist)/artista/AttendanceButtons";
 import VerifiedTick from "@/components/VerifiedTick";
 import BackLink from "@/components/BackLink";
 import DiaTopActions from "@/components/DiaTopActions";
 
 const KIND_LABELS: Record<string, string> = { bolo: "Bolo", assaig: "Assaig", reunio: "Reunió", altre: "Esdeveniment" };
+const STATUS_OPTIONS = ["pendent", "reservat", "confirmat", "cancel·lat"];
 
 type Tab = "info" | "ruta" | "assistencia" | "diners";
 
 // Fitxa del concert per al músic: la mateixa portada de pòster que el gestor
 // (amb compartir i, per als admins del grup, el full de ruta), informació,
-// assistència i diners — un admin ho veu tot (caixet, despeses, comissió i
-// repartiment sencer, només lectura); la resta, només el que els toca.
-export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, isAdmin = false, money = null, photosByName = {}, setlists = [], canSetlists = false, linkedNames = [], today }: {
+// assistència i diners. Un admin del grup hi pot fer exactament el mateix
+// que el gestor: editar informació, full de ruta i assistència de tothom
+// (caixet, despeses, comissió i repartiment, ara mateix només lectura —
+// s'editen des d'Estadístiques); la resta, només el que els toca.
+export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, isAdmin = false, money = null, photosByName = {}, setlists = [], canSetlists = false, linkedNames = [], contacts = [], today }: {
   concert: Concert;
   band: Band | null;
   myName: string;
@@ -38,6 +44,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
   setlists?: Setlist[];
   canSetlists?: boolean; // amb el permís "Setlists" pot triar-la des d'aquí
   linkedNames?: string[]; // membres amb compte d'Escenari vinculat (tick lila)
+  contacts?: Contact[];
   today: string;
 }) {
   const router = useRouter();
@@ -55,14 +62,45 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
   const linkedSet = new Set(linkedNames.map(normalize));
   const kind = concert.kind || "bolo";
   const amountShown = money ? money.amount : showFees ? concert.amount : 0;
-  const mapsQuery = encodeURIComponent([concert.venue, concert.address, concert.city].filter(Boolean).join(", "));
+  const [navApp, setNavApp] = useState<NavApp>("google");
+  useEffect(() => { setNavApp(readNavAppCookie()); }, []);
+  const mapsQuery = [concert.venue, concert.address, concert.city].filter(Boolean).join(", ");
 
-  const tabs: [Tab, string][] = [
-    ["info", "Informació"],
-    ...(isAdmin ? ([["ruta", "Full de ruta"]] as [Tab, string][]) : []),
-    ["assistencia", "Assistència"],
-    ["diners", isAdmin ? "Diners" : "El meu caixet"],
-  ];
+  // Formulari d'informació de l'esdeveniment: només per als admins. El
+  // caixet real (money.amount, que ja arriba sense el filtre de "show_fees")
+  // es conserva tal qual en desar qualsevol altre camp — mai concert.amount,
+  // que un grup sense el caixet visible als membres rep sempre a 0.
+  const [form, setForm] = useState({
+    status: concert.status, date: concert.date, time: concert.time, exactTime: concert.exactTime,
+    venue: concert.venue, city: concert.city, address: concert.address, festaEntitat: concert.festaEntitat,
+  });
+  const [savingInfo, setSavingInfo] = useState(false);
+  async function persistInfo(patch: Partial<typeof form>) {
+    const next = { ...form, ...patch };
+    setForm(next);
+    setSavingInfo(true);
+    await saveConcertAction({
+      id: concert.id, bandId: band?.id, bandName: concert.bandName,
+      date: next.date, time: next.time, exactTime: next.exactTime,
+      venue: next.venue, city: next.city, address: next.address,
+      festaEntitat: next.festaEntitat, amount: money?.amount ?? concert.amount, status: next.status,
+      attendance: concert.attendance, substitutes: concert.substitutes, noSubstitute: concert.noSubstitute,
+      convocatoriaExcluded: concert.convocatoriaExcluded, contact: concert.contact,
+      canAnnounce: concert.canAnnounce, announceAfter: concert.announceAfter, ticketType: concert.ticketType,
+    });
+    setSavingInfo(false);
+    router.refresh();
+  }
+
+  const [savingAtt, setSavingAtt] = useState<string | null>(null);
+  async function setAttendanceFor(name: string, val: "yes" | "no" | null) {
+    setSavingAtt(name);
+    const att: Record<string, "yes" | "no"> = { ...(concert.attendance as Record<string, "yes" | "no">) };
+    if (val === null) delete att[name]; else att[name] = val;
+    await setConvocatoriaAction(concert.id, att, concert.substitutes || {});
+    setSavingAtt(null);
+    router.refresh();
+  }
 
   const infoRows: [string, string][] = [
     ["Tipus", KIND_LABELS[kind] || "Bolo"],
@@ -100,7 +138,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
         </div>
         {concert.city && <div className="cd-poster-title">{concert.city.split(",")[0]}</div>}
         {concert.venue && (
-          <a className="cd-poster-place" href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`} target="_blank" rel="noreferrer" title="Obre la ubicació a Google Maps">
+          <a className="cd-poster-place" href={mapsHrefFor(navApp, mapsQuery)} target="_blank" rel="noreferrer" title="Obre la ubicació">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
             {concert.venue}
           </a>
@@ -120,22 +158,50 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
       </div>
 
       <div className="stats-tabs cd-tabs">
-        {tabs.map(([k, label]) => (
-          <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k)}>{label}</button>
+        {tab === "info" && isAdmin && savingInfo && <span className="t-dim" style={{ fontSize: 11 }}>Desant…</span>}
+        {[["info", "Informació"], ...(isAdmin ? ([["ruta", "Full de ruta"]] as [Tab, string][]) : []), ["assistencia", "Assistència"], ["diners", isAdmin ? "Diners" : "El meu caixet"]].map(([k, label]) => (
+          <button key={k} type="button" className={"stats-tab" + (tab === k ? " active" : "")} onClick={() => setTab(k as Tab)}>{label}</button>
         ))}
       </div>
 
       {tab === "info" && (
         <div className="panel cd-section">
           <div className="panel-title cd-section-title">Informació</div>
-          <div className="acd-info-rows">
-            {infoRows.map(([label, value]) => (
-              <div key={label} className="acd-info-row">
-                <span className="t-dim">{label}</span>
-                <span className="t-strong">{value}</span>
+          {!isAdmin ? (
+            <div className="acd-info-rows">
+              {infoRows.map(([label, value]) => (
+                <div key={label} className="acd-info-row">
+                  <span className="t-dim">{label}</span>
+                  <span className="t-strong">{value}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                {STATUS_OPTIONS.map((s) => (
+                  <button key={s} type="button" className={"access-chip" + (form.status === s ? " active" : "")}
+                    onClick={() => persistInfo({ status: s as Concert["status"] })}>{s}</button>
+                ))}
               </div>
-            ))}
-          </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div><label className="form-label">Data</label>
+                  <input className="field-input compact-field" type="date" value={form.date} onChange={(e) => persistInfo({ date: e.target.value })} /></div>
+                <div><label className="form-label">Hora exacta</label>
+                  <input className="field-input compact-field" type="time" value={form.exactTime} onChange={(e) => persistInfo({ exactTime: e.target.value })} /></div>
+              </div>
+              <div><label className="form-label">Recinte</label>
+                <VenueSearchField venue={form.venue} onCommit={(v) => persistInfo({ venue: v.venue, city: v.city ?? form.city, address: v.address ?? form.address })} /></div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div><label className="form-label">Població</label>
+                  <input className="field-input compact-field" value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} onBlur={() => persistInfo({})} /></div>
+                <div><label className="form-label">Adreça</label>
+                  <input className="field-input compact-field" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} onBlur={() => persistInfo({})} /></div>
+              </div>
+              <div><label className="form-label">Festa / entitat</label>
+                <input className="field-input compact-field" value={form.festaEntitat} onChange={(e) => setForm({ ...form, festaEntitat: e.target.value })} onBlur={() => persistInfo({})} /></div>
+            </div>
+          )}
         </div>
       )}
 
@@ -178,16 +244,25 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
             <div className="panel-title">Full de ruta</div>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <span className="t-dim" style={{ fontSize: 12 }}>{rsPct}% complet</span>
-              <button type="button" className="btn-save" onClick={() => setRsOpen(true)}>Obre / genera PDF</button>
+              <button type="button" className="btn-outline" onClick={() => setRsOpen(true)}>Vista prèvia / PDF</button>
             </div>
           </div>
-          {concert.routeSheet ? (
-            <div className="acd-rs-inline">
-              <RouteSheetPreviewDoc concert={concert} />
-            </div>
-          ) : (
-            <div className="t-dim" style={{ fontSize: 13 }}>El gestor encara no ha omplert el full de ruta d&apos;aquest bolo.</div>
-          )}
+          <RouteSheetEditor
+            concert={concert}
+            venue={form.venue} city={form.city}
+            onVenueCityChange={async (v) => {
+              const resolved = await resolvePlaceToVenueFields(v);
+              await persistInfo({ venue: resolved.venue, city: resolved.city ?? form.city, address: resolved.address ?? form.address });
+            }}
+            address={form.address}
+            onAddressChange={(v) => { setForm({ ...form, address: v }); persistInfo({ address: v }); }}
+            exactTime={form.exactTime}
+            onExactTimeChange={(v) => persistInfo({ exactTime: v })}
+            vehicles={band?.vehicles || []}
+            bandDefaultRouteSheet={band?.defaultRouteSheet || null}
+            contacts={contacts}
+            onSaved={() => router.refresh()}
+          />
         </div>
       )}
 
@@ -215,9 +290,18 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
                       })}
                     </div>
                   </div>
-                  <span className={"cfm-badge " + (att === "yes" ? "yes" : att === "no" ? "no" : "pending")}>
-                    {att === "yes" ? "Hi serà ✓" : att === "no" ? "No hi serà" : "Pendent"}
-                  </span>
+                  {isAdmin ? (
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button type="button" className={"cd-att-btn yes" + (att === "yes" ? " active" : "")} disabled={savingAtt === m.name}
+                        onClick={() => setAttendanceFor(m.name, att === "yes" ? null : "yes")}>Sí</button>
+                      <button type="button" className={"cd-att-btn no" + (att === "no" ? " active" : "")} disabled={savingAtt === m.name}
+                        onClick={() => setAttendanceFor(m.name, att === "no" ? null : "no")}>No</button>
+                    </div>
+                  ) : (
+                    <span className={"cfm-badge " + (att === "yes" ? "yes" : att === "no" ? "no" : "pending")}>
+                      {att === "yes" ? "Hi serà ✓" : att === "no" ? "No hi serà" : "Pendent"}
+                    </span>
+                  )}
                 </div>
               );
             })}
@@ -265,6 +349,9 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
                   ))}
                 </div>
               )}
+              <div className="t-dim" style={{ fontSize: 11.5 }}>
+                Les despeses, la comissió i el repartiment s&apos;editen des d&apos;Estadístiques (mateix permís d&apos;Admin).
+              </div>
 
               <div className="acd-money-block">
                 <div className="cd-subtitle">Comissió de l&apos;agència</div>

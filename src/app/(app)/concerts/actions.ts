@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Concert } from "@/lib/types";
 import { requireManagerAction, getProfile } from "@/lib/current-user";
-import { requireBandAccess } from "@/lib/band-access";
+import { requireBandAccess, requireConcertAccess } from "@/lib/band-access";
 import { syncRouteSheetContactsToContacts } from "@/app/(app)/contactes/actions";
 import { getCompanyInfo } from "@/lib/data";
 import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonReverseGeocode, resolveVenueFromDetails, geocodePlace } from "@/lib/geo-search";
@@ -12,8 +12,22 @@ import type { ImportedConcert } from "@/lib/concert-import";
 import { geocodeCitiesCached, normalizeForMatch } from "@/lib/geocode";
 import { autoCreateShareLinkForConcert } from "@/app/(app)/concerts/share-actions";
 
+// Utilitats de cerca/geocodificació (Photon, Google Places, Overpass): no
+// toquen cap dada d'un workspace concret, són pura consulta a serveis
+// externs — hi val qualsevol sessió (gestor o artista, admin d'un grup o
+// no), no cal ser gestor.
+async function requireSignedIn() {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  return profile;
+}
+
 export type SaveConcertInput = {
   id: string | null;
+  // Si es dona (p. ex. des de la pàgina de grup d'un músic admin, que
+  // sempre sap quin és "el seu" grup), s'edita exactament aquest grup —
+  // mai es busca ni es crea per nom, com fa el gestor amb "bandName".
+  bandId?: string;
   bandName: string;
   date: string;
   time: string;
@@ -26,6 +40,7 @@ export type SaveConcertInput = {
   status: string;
   attendance: Record<string, string>;
   substitutes: Record<string, string>;
+  substituteConfirmed?: Record<string, boolean>;
   noSubstitute: Record<string, boolean>;
   convocatoriaExcluded?: Record<string, boolean>;
   contact?: { email: string; name: string; phone: string; company: string };
@@ -53,36 +68,59 @@ function generateJoinCode(): string {
 }
 
 export async function saveConcertAction(data: SaveConcertInput) {
-  const { workspaceId } = await requireManagerAction();
   const pool = db();
   const typedName = (data.bandName || "").trim();
   const typedLower = typedName.toLowerCase();
 
-  let bandRow = (await pool.query("select * from bands where lower(name) = $1 and workspace_id=$2", [typedLower, workspaceId])).rows[0];
+  let workspaceId: string;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let bandRow: any;
 
-  if (!bandRow && data.id) {
-    const existing = (await pool.query("select * from concerts where id=$1 and workspace_id=$2", [data.id, workspaceId])).rows[0];
-    if (existing) {
-      bandRow = (await pool.query("select * from bands where id=$1 and workspace_id=$2", [existing.band_id, workspaceId])).rows[0];
-      if (bandRow && typedName && bandRow.name !== typedName) {
-        await pool.query("update bands set name=$1 where id=$2", [typedName, bandRow.id]);
-        await pool.query("update concerts set band_name=$1 where band_id=$2", [typedName, bandRow.id]);
-        bandRow.name = typedName;
+  if (data.bandId) {
+    // Ve d'un grup concret i conegut (l'admin d'un grup sempre sap quin és
+    // el seu bandId) — es va directe a aquell grup, sense cercar-lo ni
+    // crear-ne un altre per nom (evita que un typo al nom en creï un de
+    // duplicat, i evita haver de confiar en el nom com a identificador).
+    const access = await requireBandAccess(data.bandId, "admin");
+    workspaceId = access.workspaceId;
+    bandRow = (await pool.query("select * from bands where id=$1", [data.bandId])).rows[0];
+    if (!bandRow) throw new Error("Grup no trobat");
+  } else {
+    ({ workspaceId } = await requireManagerAction());
+    bandRow = (await pool.query("select * from bands where lower(name) = $1 and workspace_id=$2", [typedLower, workspaceId])).rows[0];
+
+    if (!bandRow && data.id) {
+      const existing = (await pool.query("select * from concerts where id=$1 and workspace_id=$2", [data.id, workspaceId])).rows[0];
+      if (existing) {
+        bandRow = (await pool.query("select * from bands where id=$1 and workspace_id=$2", [existing.band_id, workspaceId])).rows[0];
+        if (bandRow && typedName && bandRow.name !== typedName) {
+          await pool.query("update bands set name=$1 where id=$2", [typedName, bandRow.id]);
+          await pool.query("update concerts set band_name=$1 where band_id=$2", [typedName, bandRow.id]);
+          bandRow.name = typedName;
+        }
       }
     }
+    if (!bandRow && typedName) {
+      const newId = "b" + Date.now();
+      await pool.query(
+        "insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code) values ($1,$2,$3,$4,'','', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $5, $6)",
+        [newId, typedName, data.city || "—", Math.round(data.amount) || 0, workspaceId, generateJoinCode()]
+      );
+      bandRow = (await pool.query("select * from bands where id=$1", [newId])).rows[0];
+    }
+    if (!bandRow && !data.skipDefaults) {
+      bandRow = (await pool.query("select * from bands where workspace_id=$1 order by name limit 1", [workspaceId])).rows[0];
+    }
+    if (!bandRow && !data.skipDefaults) return;
   }
-  if (!bandRow && typedName) {
-    const newId = "b" + Date.now();
-    await pool.query(
-      "insert into bands (id, name, city, rate, contact, phone, tags, members, crew, workspace_id, join_code) values ($1,$2,$3,$4,'','', '[]'::jsonb, '[]'::jsonb, '[]'::jsonb, $5, $6)",
-      [newId, typedName, data.city || "—", Math.round(data.amount) || 0, workspaceId, generateJoinCode()]
-    );
-    bandRow = (await pool.query("select * from bands where id=$1", [newId])).rows[0];
+
+  // Editant un concert existent: cal que sigui d'aquest mateix grup — evita
+  // que un admin (amb bandId fix) pugui tocar el concert d'un altre grup
+  // passant-hi el seu id a mà.
+  if (data.bandId && data.id) {
+    const existing = (await pool.query("select band_id from concerts where id=$1 and workspace_id=$2", [data.id, workspaceId])).rows[0];
+    if (existing && existing.band_id !== data.bandId) throw new Error("Aquest concert no és d'aquest grup");
   }
-  if (!bandRow && !data.skipDefaults) {
-    bandRow = (await pool.query("select * from bands where workspace_id=$1 order by name limit 1", [workspaceId])).rows[0];
-  }
-  if (!bandRow && !data.skipDefaults) return;
 
   const venue = data.skipDefaults ? data.venue.trim() : (data.venue.trim() || "Sala per determinar");
   const city = data.skipDefaults ? data.city.trim() : (data.city.trim() || bandRow.city);
@@ -95,16 +133,16 @@ export async function saveConcertAction(data: SaveConcertInput) {
   const announceAfter = data.announceAfter || "";
   const ticketType = data.ticketType === "pagament" ? "pagament" : data.ticketType === "gratuit" ? "gratuit" : "";
   await pool.query(
-    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, no_substitute, convocatoria_excluded, contact, can_announce, announce_after, ticket_type, workspace_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22)
+    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, substitute_confirmed, no_substitute, convocatoria_excluded, contact, can_announce, announce_after, ticket_type, workspace_id)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
      on conflict (id) do update set
        date=$2, time=$3, exact_time=$4, venue=$5, city=$6, address=$7, festa_entitat=$8, band_id=$9, band_name=$10, tags=$11, status=$12, amount=$13,
-       attendance=$14, substitutes=$15, no_substitute=$16, convocatoria_excluded=$17, contact=$18, can_announce=$19, announce_after=$20, ticket_type=$21
+       attendance=$14, substitutes=$15, substitute_confirmed=$16, no_substitute=$17, convocatoria_excluded=$18, contact=$19, can_announce=$20, announce_after=$21, ticket_type=$22
      where concerts.workspace_id = excluded.workspace_id`,
     [
       id, data.date, data.time, exactTime, venue, city, address, (data.festaEntitat || "").trim(),
       bandRow ? bandRow.id : null, bandRow ? bandRow.name : "", JSON.stringify(bandRow?.tags || []), data.status, Math.round(data.amount) || 0,
-      JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.noSubstitute || {}),
+      JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.substituteConfirmed || {}), JSON.stringify(data.noSubstitute || {}),
       JSON.stringify(data.convocatoriaExcluded || {}), JSON.stringify(contact), canAnnounce, announceAfter, ticketType,
       workspaceId,
     ]
@@ -145,6 +183,7 @@ export async function saveConcertAction(data: SaveConcertInput) {
     amount: Math.round(data.amount) || 0,
     attendance: data.attendance || {},
     substitutes: data.substitutes || {},
+    substituteConfirmed: data.substituteConfirmed || {},
     noSubstitute: data.noSubstitute || {},
     convocatoriaExcluded: data.convocatoriaExcluded || {},
     contact,
@@ -156,7 +195,7 @@ export async function saveConcertAction(data: SaveConcertInput) {
 }
 
 export async function saveRouteSheetAction(concertId: string, routeSheet: unknown) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   const pool = db();
   await pool.query("update concerts set route_sheet = $1 where id = $2 and workspace_id=$3", [JSON.stringify(routeSheet), concertId, workspaceId]);
   const contacts = (routeSheet as { contacts?: { name: string; role: string; phone: string; company: string }[] } | null)?.contacts;
@@ -168,7 +207,7 @@ export async function saveRouteSheetAction(concertId: string, routeSheet: unknow
 // Recordatori d'assistència: correu als membres vinculats que encara no han
 // dit ni sí ni no a un bolo.
 export async function nudgeAttendanceAction(concertId: string): Promise<{ ok: boolean; sent?: number; error?: string }> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   const { emailConfigured, sendEmail } = await import("@/lib/email");
   if (!emailConfigured()) return { ok: false, error: "Configura RESEND_API_KEY per enviar correus" };
   const { rows } = await db().query(
@@ -379,7 +418,7 @@ export async function createEventAction(input: {
 
 // Tipus d'esdeveniment del calendari (bolo, assaig, reunió, altre).
 export async function setConcertKindAction(id: string, kind: "bolo" | "assaig" | "reunio" | "altre") {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(id, "admin");
   await db().query("update concerts set kind=$1 where id=$2 and workspace_id=$3", [kind, id, workspaceId]);
   revalidateAll();
   revalidatePath(`/concerts/${id}`);
@@ -391,7 +430,7 @@ export async function setConcertKindAction(id: string, kind: "bolo" | "assaig" |
 // assistència ni substituts, que són propis de cada dia). Topall de
 // seguretat perquè una data massa llunyana no en generi milers.
 export async function repeatConcertAction(id: string, freq: "setmanal" | "quinzenal" | "mensual", untilDate: string): Promise<{ created: number }> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(id, "admin");
   const pool = db();
   const c = (await pool.query("select * from concerts where id=$1 and workspace_id=$2", [id, workspaceId])).rows[0];
   if (!c || !untilDate) return { created: 0 };
@@ -420,7 +459,7 @@ export async function repeatConcertAction(id: string, freq: "setmanal" | "quinze
 
 // Repartiment del caixet entre les persones del bolo: { "Nom": import en € }.
 export async function savePayoutsAction(concertId: string, payouts: Record<string, number>) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await db().query("update concerts set payouts=$1 where id=$2 and workspace_id=$3", [JSON.stringify(payouts || {}), concertId, workspaceId]);
   revalidatePath(`/concerts/${concertId}`);
 }
@@ -428,7 +467,7 @@ export async function savePayoutsAction(concertId: string, payouts: Record<strin
 // Si l'agència assumeix les despeses del bolo (% sobre el net) o no (%
 // sobre el brut, i les despeses les absorbeix només la resta).
 export async function setAgencyAssumesExpensesAction(concertId: string, value: boolean) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await db().query("update concerts set agency_assumes_expenses=$1 where id=$2 and workspace_id=$3", [value, concertId, workspaceId]);
   revalidatePath(`/concerts/${concertId}`);
 }
@@ -436,7 +475,7 @@ export async function setAgencyAssumesExpensesAction(concertId: string, value: b
 // Percentatge fix de la comissió de l'agència (es manté fix encara que
 // canviïn les despeses o el caixet).
 export async function setAgencyPctAction(concertId: string, pct: number) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await db().query("update concerts set agency_pct=$1 where id=$2 and workspace_id=$3", [pct, concertId, workspaceId]);
   revalidatePath(`/concerts/${concertId}`);
 }
@@ -444,7 +483,7 @@ export async function setAgencyPctAction(concertId: string, pct: number) {
 // Horaris del pòster del concert (l'oficial + els que s'hagin afegit per
 // altres actuacions el mateix dia), editables des del modal del pòster.
 export async function savePosterScheduleAction(concertId: string, items: { time: string; label: string; isOwn?: boolean }[]) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await db().query(
     "update concerts set poster_schedule=$1 where id=$2 and workspace_id=$3",
     [JSON.stringify(items || []), concertId, workspaceId]
@@ -453,20 +492,22 @@ export async function savePosterScheduleAction(concertId: string, items: { time:
 }
 
 export async function setInvoiceStateAction(invoiceId: string, state: "pagada" | "pendent" | "vençuda") {
-  const { workspaceId } = await requireManagerAction();
+  const inv = (await db().query("select concert_id from invoices where id=$1", [invoiceId])).rows[0];
+  if (!inv?.concert_id) throw new Error("Factura no trobada");
+  const { workspaceId } = await requireConcertAccess(inv.concert_id, "admin");
   await db().query("update invoices set state=$1 where id=$2 and workspace_id=$3", [state, invoiceId, workspaceId]);
   revalidateAll();
   revalidatePath("/facturacio");
 }
 
 export async function setConcertStatusAction(id: string, status: string) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(id, "admin");
   await db().query("update concerts set status=$1 where id=$2 and workspace_id=$3", [status, id, workspaceId]);
   revalidateAll();
 }
 
 export async function deleteConcertAction(id: string) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(id, "admin");
   const pool = db();
   await pool.query("delete from invoices where concert_id=$1 and workspace_id=$2", [id, workspaceId]);
   await pool.query("delete from concerts where id=$1 and workspace_id=$2", [id, workspaceId]);
@@ -479,7 +520,7 @@ export async function deleteConcertAction(id: string) {
 // nuclis de població: ciutats, viles i pobles), descartant carrers, comarques
 // i altres resultats que no siguin una població.
 export async function searchCitiesAction(query: string): Promise<{ description: string; placeId: string }[]> {
-  await requireManagerAction();
+  await requireSignedIn();
   const q = (query || "").trim();
   if (!q || q.length < 2) return [];
   const url = new URL("https://photon.komoot.io/api/");
@@ -517,7 +558,7 @@ export async function searchCitiesAction(query: string): Promise<{ description: 
 // de detall). Sense GOOGLE_MAPS_API_KEY, torna una llista buida en comptes
 // de trencar — el camp es pot seguir omplint a mà.
 export async function searchVenuesGoogleAction(query: string): Promise<{ description: string; placeId: string }[]> {
-  await requireManagerAction();
+  await requireSignedIn();
   return googlePlacesAutocomplete(query);
 }
 
@@ -525,7 +566,7 @@ export async function searchVenuesGoogleAction(query: string): Promise<{ descrip
 // carrer i número (buit si aquell lloc no en té, per exemple una plaça) i
 // coordenades — per si calgués una geocodificació inversa de reserva.
 export async function getPlaceDetailsAction(placeId: string): Promise<{ name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null } | null> {
-  await requireManagerAction();
+  await requireSignedIn();
   return googlePlaceDetails(placeId);
 }
 
@@ -534,7 +575,7 @@ export async function getPlaceDetailsAction(placeId: string): Promise<{ name: st
 // type="city" perquè un recinte és un punt d'interès concret, no una
 // població — es descarten només els resultats sense nom.
 export async function searchVenuesAction(query: string): Promise<{ description: string; name: string; city: string; street: string; housenumber: string; lat: number | null; lon: number | null; placeId: string }[]> {
-  await requireManagerAction();
+  await requireSignedIn();
   return photonSearch(query);
 }
 
@@ -543,7 +584,7 @@ export async function searchVenuesAction(query: string): Promise<{ description: 
 // es completa amb una geocodificació inversa de les seves coordenades: la
 // direcció etiquetada més propera (amb carrer i número de veritat).
 export async function reverseGeocodeAction(lat: number, lon: number): Promise<{ street: string; housenumber: string; city: string } | null> {
-  await requireManagerAction();
+  await requireSignedIn();
   return photonReverseGeocode(lat, lon);
 }
 
@@ -556,7 +597,7 @@ export async function reverseGeocodeAction(lat: number, lon: number): Promise<{ 
 // resol un recinte, mai més cal tornar a demanar-lo a cap API externa,
 // encara que aquella falli puntualment la propera vegada.
 export async function geocodePosterVenueAction(query: string): Promise<{ lat: number; lon: number } | null> {
-  await requireManagerAction();
+  await requireSignedIn();
   const q = (query || "").trim();
   if (!q) return null;
   const pool = db();
@@ -589,7 +630,7 @@ export async function getStreetWaysAction(lat: number, lon: number, radiusM = 90
   bbox: [number, number, number, number];
   ways: { highway: string; pts: [number, number][] }[];
 }> {
-  await requireManagerAction();
+  await requireSignedIn();
   const dLat = radiusM / 111320;
   const dLon = dLat / Math.max(0.2, Math.cos((lat * Math.PI) / 180));
   const south = lat - dLat, north = lat + dLat, west = lon - dLon, east = lon + dLon;
@@ -785,7 +826,7 @@ async function fetchAdminBoundary(opts: {
 // hi coincideixen (comarca i municipi alhora, per exemple), es tria la del
 // nom exacte i, si cap no hi coincideix, la més petita de totes.
 export async function getMunicipalityBoundaryAction(city: string, lat: number, lon: number): Promise<AdminBoundary | null> {
-  await requireManagerAction();
+  await requireSignedIn();
   const name = (city || "").trim();
   if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return fetchAdminBoundary({
@@ -802,7 +843,7 @@ export async function getMunicipalityBoundaryAction(city: string, lat: number, l
 // perquè es noti la diferència. El cache va per nom (no pel punt): una
 // comarca és sempre la mateixa, la demani qui la demani.
 export async function getComarcaBoundaryAction(comarca: string, lat: number, lon: number): Promise<AdminBoundary | null> {
-  await requireManagerAction();
+  await requireSignedIn();
   const name = (comarca || "").trim();
   if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) return null;
   return fetchAdminBoundary({
@@ -818,7 +859,7 @@ export async function getComarcaBoundaryAction(comarca: string, lat: number, lon
 // permanent a la base de dades — la lògica viu a src/lib/geocode.ts,
 // compartida amb la borsa de suplències (distància des de casa del músic).
 export async function geocodeCitiesAction(cities: string[]): Promise<Record<string, { lat: number; lon: number } | null>> {
-  await requireManagerAction();
+  await requireSignedIn();
   return geocodeCitiesCached(cities);
 }
 
@@ -842,12 +883,13 @@ export async function getAgencyNameAction(): Promise<string> {
 export async function setConvocatoriaAction(
   concertId: string,
   attendance: Record<string, "yes" | "no">,
-  substitutes: Record<string, string>
+  substitutes: Record<string, string>,
+  substituteConfirmed?: Record<string, boolean>
 ): Promise<void> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await db().query(
-    "update concerts set attendance=$1, substitutes=$2 where id=$3 and workspace_id=$4",
-    [JSON.stringify(attendance), JSON.stringify(substitutes), concertId, workspaceId]
+    "update concerts set attendance=$1, substitutes=$2, substitute_confirmed=$3 where id=$4 and workspace_id=$5",
+    [JSON.stringify(attendance), JSON.stringify(substitutes), JSON.stringify(substituteConfirmed || {}), concertId, workspaceId]
   );
   revalidatePath(`/concerts/${concertId}`);
   revalidatePath(`/concerts/${concertId}/dia`);
@@ -857,7 +899,7 @@ export async function setConvocatoriaAction(
 // concret (vegeu Concert.setlistHighlights) — la mateixa setlist pot
 // repetir-se a diversos assaigs amb destacades diferents a cada un.
 export async function setSetlistHighlightsAction(concertId: string, highlights: Record<string, boolean>): Promise<void> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await db().query(
     "update concerts set setlist_highlights=$1 where id=$2 and workspace_id=$3",
     [JSON.stringify(highlights), concertId, workspaceId]

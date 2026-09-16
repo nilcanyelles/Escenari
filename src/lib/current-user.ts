@@ -16,6 +16,15 @@ export type Profile = {
   canCreateGroups: boolean;
   viewAllGroups: boolean;
   assignedBandIds: string[];
+  // Perfil propi de l'artista, independent de qualsevol grup (foto, bio,
+  // IG, contacte) — es mostra al "El teu perfil" abans d'unir-se a cap grup.
+  photoFileId: string | null;
+  bio: string;
+  igHandle: string;
+  phone: string;
+  whatsapp: string;
+  // App amb què s'obren els enllaços d'ubicació del full de ruta.
+  navApp: "google" | "waze" | "apple";
 };
 
 // cache(): una sola consulta per petició encara que la cridin layout i pàgina.
@@ -24,7 +33,8 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
   if (!userId) return null;
   const { rows } = await db().query(
     `select clerk_user_id, email, role, name, instruments, workspace_id,
-            agency_role, agency_owner, can_create_groups, view_all_groups, assigned_band_ids
+            agency_role, agency_owner, can_create_groups, view_all_groups, assigned_band_ids,
+            photo_file_id, bio, ig_handle, phone, whatsapp, nav_app
      from profiles where clerk_user_id = $1`,
     [userId]
   );
@@ -42,6 +52,12 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     canCreateGroups: r.agency_owner || r.can_create_groups !== false,
     viewAllGroups: r.agency_owner || r.view_all_groups !== false,
     assignedBandIds: r.assigned_band_ids || [],
+    photoFileId: r.photo_file_id || null,
+    bio: r.bio || "",
+    igHandle: r.ig_handle || "",
+    phone: r.phone || "",
+    whatsapp: r.whatsapp || "",
+    navApp: r.nav_app === "waze" || r.nav_app === "apple" ? r.nav_app : "google",
   };
 });
 

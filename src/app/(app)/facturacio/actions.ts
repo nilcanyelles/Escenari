@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { today, addDays, formatDate, formatCurrency } from "@/lib/format";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireConcertAccess } from "@/lib/band-access";
 import { requireFeature } from "@/lib/billing";
 import { syncClientToContacts } from "@/app/(app)/contactes/actions";
 import { sendEmail, emailConfigured } from "@/lib/email";
@@ -24,7 +25,7 @@ function invoiceHash(fields: { workspaceId: string; id: string; issueDate: strin
 }
 
 export async function generateInvoiceAction(concertId: string) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   await requireFeature(workspaceId, "invoices");
   const pool = db();
   const client = await pool.connect();
@@ -96,7 +97,9 @@ export async function editInvoiceAction(input: {
   depositAmount: number;
   depositPaid: boolean;
 }) {
-  const { workspaceId } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from invoices where id=$1", [input.id])).rows[0];
+  if (!pre?.concert_id) throw new Error("Factura no trobada");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   const row = (await db().query("select prev_hash from invoices where id=$1 and workspace_id=$2", [input.id, workspaceId])).rows[0];
   if (!row) throw new Error("Factura no trobada");
   const base = Math.round(input.baseAmount) || 0;
@@ -119,7 +122,9 @@ export async function editInvoiceAction(input: {
 
 // Recordatori de cobrament amb el detall de la factura, per correu.
 export async function sendInvoiceReminderAction(invoiceId: string, toEmail: string): Promise<{ ok: boolean; error?: string }> {
-  const { workspaceId } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from invoices where id=$1", [invoiceId])).rows[0];
+  if (!pre?.concert_id) return { ok: false, error: "Factura no trobada" };
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   if (!emailConfigured()) return { ok: false, error: "Configura RESEND_API_KEY per enviar correus" };
   const inv = (await db().query(
     `select i.*, ci.nom as company_nom, ci.iban from invoices i

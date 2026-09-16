@@ -20,10 +20,13 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   )).rows[0];
   if (!meta) return new NextResponse("No trobat", { status: 404 });
 
-  // Imatges públiques per disseny: fotos de perfil de músic i logos/portades
-  // de grup (surten a pàgines compartibles).
+  // Imatges públiques per disseny: fotos de perfil de músic (amb grup o
+  // sense, abans de tenir person_profiles) i logos/portades de grup (surten
+  // a pàgines compartibles).
   const isPublicImage = (await db().query(
     `select 1 from person_profiles where photo_file_id=$1
+     union all
+     select 1 from profiles where photo_file_id=$1
      union all
      select 1 from bands where logo=$2 or cover_url=$2
      union all

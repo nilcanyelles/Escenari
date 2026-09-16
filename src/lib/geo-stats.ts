@@ -1,12 +1,40 @@
 import { MAP_REGIONS, MAP_PROVINCES, MAP_COMARQUES, NEIGHBOUR_COUNTRIES, NEIGHBOUR_PLACES } from "./map-regions";
 
-// Comarca, regió (comunitat autònoma) i país d'un punt [lon, lat], només
-// amb els contorns que ja tenim a map-regions.ts — sense cap API: un cop
-// una població té coordenades (cache de geocodificació de l'app), la resta
-// es calcula aquí a l'instant. Les comarques només existeixen per a
-// Catalunya; fora, queda buida.
+// Comarca, regió i país d'un punt [lon, lat], només amb els contorns que ja
+// tenim a map-regions.ts — sense cap API: un cop una població té
+// coordenades (cache de geocodificació de l'app), la resta es calcula aquí
+// a l'instant. Les comarques (MAP_COMARQUES) cobreixen Catalunya, el País
+// Valencià i les Illes Balears; fora d'aquests, queda buida.
 
-export type GeoPlace = { comarca: string; provincia: string; regio: string; pais: string };
+export type GeoPlace = { comarca: string; provincia: string; regio: string; ccaa: string; pais: string };
+
+// "Regio" a Catalunya i el País Valencià no és la província real, sinó una
+// divisió més fina i coneguda: a Catalunya les vegueries (ja venen
+// dibuixades tal qual a MAP_PROVINCES, no cal cap taula) i al País Valencià
+// unes zones habituals (Castelló, València, Diània i Alacant i interior)
+// que aquí es dedueixen de la comarca — MAP_PROVINCES només hi té dibuixades
+// unes zones més imprecises. A la resta d'Espanya, "regio" és la província
+// de veritat (ja tal com surt a MAP_PROVINCES). La comunitat autònoma
+// pròpiament dita es guarda a part (camp "ccaa"), per a l'estadística que
+// hi és independent de com es trossegi "regio".
+const PV_ZONE_BY_COMARCA: Record<string, string> = {
+  // Castelló (província)
+  "l'Alt Maestrat": "Castelló", "el Baix Maestrat": "Castelló", "els Ports": "Castelló",
+  "l'Alt Millars": "Castelló", "l'Alcalatén": "Castelló", "la Plana Alta": "Castelló",
+  "la Plana Baixa": "Castelló", "l'Alt Palància": "Castelló",
+  // Diània: la franja costanera de la Marina i la Safor
+  "la Marina Alta": "Diània", "la Marina Baixa": "Diània", "la Safor": "Diània",
+  // Alacant i interior (resta de la província d'Alacant)
+  "l'Alacantí": "Alacant i interior", "l'Alcoià": "Alacant i interior", "el Comtat": "Alacant i interior",
+  "el Vinalopó Mitjà": "Alacant i interior", "l'Alt Vinalopó": "Alacant i interior",
+  "el Baix Vinalopó": "Alacant i interior", "el Baix Segura": "Alacant i interior",
+  // València (resta de la província de València)
+  "la Vall de Cofrents-Aiora": "València", "València": "València", "el Camp de Morvedre": "València",
+  "la Canal de Navarrés": "València", "el Racó d'Ademús": "València", "la Ribera Alta": "València",
+  "el Camp de Túria": "València", "l'Horta Nord": "València", "la Ribera Baixa": "València",
+  "la Vall d'Albaida": "València", "l'Horta Sud": "València", "la Plana d'Utiel-Requena": "València",
+  "els Serrans": "València", "la Costera": "València", "la Foia de Bunyol": "València",
+};
 
 // Ray casting clàssic: està el punt dins del polígon?
 export function pointInRing(lon: number, lat: number, ring: [number, number][]): boolean {
@@ -57,16 +85,17 @@ export function classifyPoint(lon: number, lat: number): GeoPlace {
   for (let i = 0; i < MAP_PROVINCES.length; i++) {
     if (inBbox(lon, lat, provinceBoxes[i]) && inRings(lon, lat, MAP_PROVINCES[i].rings)) {
       const p = MAP_PROVINCES[i];
-      return { comarca, provincia: p.label, regio: MAP_REGIONS[p.ccaa]?.label || "", pais: "Espanya" };
+      const regio = p.ccaa === "valencia" ? (PV_ZONE_BY_COMARCA[comarca] || p.label) : p.label;
+      return { comarca, provincia: p.label, regio, ccaa: MAP_REGIONS[p.ccaa]?.label || "", pais: "Espanya" };
     }
   }
   const place = NEIGHBOUR_PLACES.find((p) => inRings(lon, lat, p.rings));
-  if (place) return { comarca, provincia: "", regio: place.label, pais: COUNTRY_CA[place.country] || place.country };
+  if (place) return { comarca, provincia: "", regio: place.label, ccaa: "", pais: COUNTRY_CA[place.country] || place.country };
   for (let i = 0; i < NEIGHBOUR_COUNTRIES.length; i++) {
     if (inBbox(lon, lat, countryBoxes[i]) && inRings(lon, lat, NEIGHBOUR_COUNTRIES[i].rings)) {
       const n = NEIGHBOUR_COUNTRIES[i];
-      return { comarca, provincia: "", regio: "", pais: COUNTRY_CA[n.label] || n.label };
+      return { comarca, provincia: "", regio: "", ccaa: "", pais: COUNTRY_CA[n.label] || n.label };
     }
   }
-  return { comarca, provincia: "", regio: "", pais: "" };
+  return { comarca, provincia: "", regio: "", ccaa: "", pais: "" };
 }

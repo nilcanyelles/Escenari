@@ -4,6 +4,7 @@ import { getOrCreatePersonProfile, getPersonProfileData } from "@/lib/person-pro
 import { getSelectedBandId } from "@/lib/band-scope";
 import { today } from "@/lib/format";
 import ProfileView from "@/app/p/[token]/ProfileView";
+import StandaloneProfile from "./StandaloneProfile";
 
 export const dynamic = "force-dynamic";
 
@@ -27,14 +28,13 @@ export default async function ArtistProfilePage() {
 
   if (!membership) {
     return (
-      <div className="panel" style={{ maxWidth: 560 }}>
-        <div className="panel-title" style={{ marginBottom: 8 }}>El teu perfil</div>
-        <div className="t-dim" style={{ fontSize: 13.5, lineHeight: 1.6 }}>
-          Quan t&apos;uneixis a un grup (amb el codi que et passi el gestor, des de
-          &ldquo;Uneix-te a un grup&rdquo;) el teu perfil de músic apareixerà aquí:
-          foto, instruments, contacte i els teus grups.
-        </div>
-      </div>
+      <StandaloneProfile
+        name={profile.name}
+        initial={{
+          photoFileId: profile.photoFileId, bio: profile.bio, igHandle: profile.igHandle,
+          phone: profile.phone, whatsapp: profile.whatsapp, instruments: profile.instruments, navApp: profile.navApp,
+        }}
+      />
     );
   }
 
@@ -43,5 +43,5 @@ export default async function ArtistProfilePage() {
   const data = await getPersonProfileData(token);
   if (!data) return null;
 
-  return <ProfileView data={data} isOwner={true} isManager={false} today={today()} />;
+  return <ProfileView data={data} isOwner={true} isManager={false} today={today()} navApp={profile.navApp} />;
 }

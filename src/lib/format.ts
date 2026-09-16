@@ -62,7 +62,7 @@ export function addDays(dateStr: string, n: number): string {
 // (representativa del tram) perquè tota la resta de l'app (ICS, contractes,
 // factures, ordenació...) continuï funcionant sense tocar-hi res.
 export const TIME_PERIODS = ["Matí", "Migdia", "Tarda", "Vespre", "Matinada"] as const;
-const TIME_PERIOD_REPRESENTATIVE: Record<string, string> = {
+export const TIME_PERIOD_REPRESENTATIVE: Record<string, string> = {
   "Matí": "09:00", "Migdia": "13:00", "Tarda": "17:00", "Vespre": "20:30", "Matinada": "02:00",
 };
 // Article/preposició correctes en català per a cada tram ("al matí", "a la tarda"...).

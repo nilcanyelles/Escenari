@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import type { Person } from "@/lib/types";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireBandAccess } from "@/lib/band-access";
 import { syncBandPeopleToContacts } from "@/app/(app)/contactes/actions";
 
 export type SaveBandInput = {
@@ -116,7 +117,8 @@ function generateJoinCode(): string {
 }
 
 export async function generateJoinCodeAction(bandId: string): Promise<string | null> {
-  const { workspaceId } = await requireManagerAction();
+  // Gestor, o membre amb el permís "Admin" en aquest grup.
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   const pool = db();
   let joinCode = "";
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -127,14 +129,18 @@ export async function generateJoinCodeAction(bandId: string): Promise<string | n
   const { rowCount } = await pool.query("update bands set join_code=$1, join_code_active=true where id=$2 and workspace_id=$3", [joinCode, bandId, workspaceId]);
   if (!rowCount) return null;
   revalidatePath("/grups");
+  revalidatePath("/grup");
+  revalidatePath("/artista/grup");
   return joinCode;
 }
 
 export async function revokeJoinCodeAction(bandId: string) {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireBandAccess(bandId, "admin");
   const pool = db();
   await pool.query("update bands set join_code_active=false where id=$1 and workspace_id=$2", [bandId, workspaceId]);
   revalidatePath("/grups");
+  revalidatePath("/grup");
+  revalidatePath("/artista/grup");
 }
 
 // Autocompletat de ciutat real via Photon (photon.komoot.io), la mateixa

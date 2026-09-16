@@ -744,7 +744,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .cf-confirm-actions { justify-content: center; margin-top: 0; }
 .modal.band-edit-modal { width: 620px; max-width: 95vw; }
 .modal.narrow { width: 400px; }
+.modal.edit-profile-modal { width: 640px; max-width: 95vw; }
+.modal.join-claim-modal { width: 720px; max-width: 95vw; max-height: 92vh; }
 .modal.rs-modal { width: 640px; }
+/* "overflow: visible" perquè el calendari desplegable dels selectors de
+   data no quedi tallat per la vora del modal (com fa la resta de modals,
+   que sí que necessiten scroll intern). */
+.modal.unavail-modal { width: 600px; max-width: 95vw; overflow: visible; }
 .modal.concert-modal { width: 680px; max-width: 95vw; padding: 0; }
 .concert-modal .modal-form { padding: 0 24px 24px; }
 .cf-saving-indicator { font-size: 11.5px; color: var(--text-faint); font-weight: 500; }
@@ -1549,6 +1555,22 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .invite-card-sub { font-size: 12.5px; color: var(--text-muted); }
 .join-code-form { display: flex; gap: 10px; max-width: 420px; }
 .join-code-form .field-input { text-transform: uppercase; letter-spacing: 3px; font-weight: 600; }
+/* Fila d'una persona ja creada a mà, a la pestanya emergent d'unir-se amb
+   codi — triar-la en reclama la identitat. */
+.join-claim-row {
+  display: flex; align-items: center; gap: 10px; width: 100%; box-sizing: border-box;
+  padding: 8px 12px; border-radius: 10px; border: 1px solid var(--border-input);
+  background: transparent; color: var(--text); cursor: pointer; font-family: inherit; font-size: 13px; text-align: left;
+}
+.join-claim-row.active { background: oklch(0.72 0.15 155 / 0.14); border-color: oklch(0.72 0.15 155 / 0.5); }
+.join-claim-row:disabled { opacity: 0.45; cursor: default; }
+.join-claim-photo { width: 26px; height: 26px; border-radius: 50%; flex: none; object-fit: cover; }
+.join-claim-names { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.join-claim-name { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.join-claim-sub { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.join-claim-status { flex: none; font-size: 11.5px; color: var(--text-muted); }
+.join-claim-row.active .join-claim-status { color: oklch(0.78 0.15 155); font-weight: 700; }
+.join-claim-clear { align-self: flex-start; margin-top: 6px; background: none; border: none; color: var(--accent-text); font-size: 12px; cursor: pointer; padding: 0; font-family: inherit; }
 .artist-empty {
   text-align: center; color: var(--text-muted); font-size: 14px;
   padding: 48px 20px; border: 1px dashed var(--border-input); border-radius: 18px;
@@ -2082,6 +2104,13 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .member-instrument-chip img { width: 13px; height: 13px; object-fit: contain; }
 .member-count { font-size: 11px; color: var(--text-faint); }
+/* Avís a la Convocatòria: aquest membre s'ha marcat "no disponible" al seu
+   perfil personal (vegeu src/lib/unavailability.ts) el mateix dia. */
+.cd-att-unavail-warning {
+  display: flex; align-items: center; gap: 5px; margin-top: 4px;
+  font-size: 11px; font-weight: 600; color: var(--red);
+}
+.cd-att-unavail-warning::before { content: "⚠"; }
 
 .backup-list { display: flex; flex-direction: column; gap: 8px; }
 .backup-row {
@@ -2095,6 +2124,13 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .backup-photo { width: 36px; height: 36px; border-radius: 10px; }
 .backup-row-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+/* Fa clicable la foto+nom d'un suplent o candidat per obrir-ne el perfil,
+   sense interferir amb els botons d'acció (treure, acceptar, rebutjar) que
+   són germans, no fills. */
+.backup-row-click {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;
+  background: none; border: none; padding: 0; margin: 0; text-align: left; cursor: pointer; font: inherit; color: inherit;
+}
 .backup-add-form { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 12px; align-items: center; }
 .backup-add-form .field-input { width: 200px; }
 
@@ -2289,6 +2325,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   cursor: pointer;
   font-family: inherit;
 }
+/* Variant icona (tick/creu): rodona i compacta, sense el text ni l'amplada
+   mínima de "Sí"/"No". */
+.cd-att-icon-btn { min-width: 0; width: 26px; height: 26px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 .cd-att-btn.yes.active { background: oklch(0.72 0.15 155 / 0.18); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
 .cd-att-btn.no.active { background: oklch(0.68 0.18 25 / 0.18); color: oklch(0.74 0.18 25); border-color: oklch(0.68 0.18 25 / 0.5); }
 /* Variant neutra — per a triar entre opcions sense connotació positiva/
@@ -2711,6 +2750,8 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-family: inherit;
 }
 .access-chip.active { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
+.access-chip:disabled { opacity: 0.45; cursor: default; }
+.navapp-chip { display: inline-flex; align-items: center; gap: 8px; padding: 5px 14px 5px 5px; }
 /* Variant de dues línies (nom a sobre, càrrec/instrument a sota) per al
    picker de contactes del rider. */
 .access-chip-2l { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; border-radius: 10px; padding: 7px 12px; text-align: left; line-height: 1.25; }
@@ -3938,12 +3979,31 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* Assistència a la llista de concerts — mateixa barra de dos trams
    (sí en verd, no en vermell) que la del bànner del concert. */
-.cc-att { display: inline-flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; }
+.cc-att { position: relative; display: inline-flex; flex-direction: column; align-items: center; gap: 4px; width: 52px; }
 .cc-att-track { width: 100%; height: 6px; background: oklch(1 0 0 / 0.08); border-radius: 999px; overflow: hidden; display: flex; }
 .cc-att-fill { height: 100%; border-radius: 0; flex: none; transition: width 0.3s; }
 .cc-att-fill:first-child { border-radius: 999px 0 0 999px; }
 .cc-att-fill:last-child { border-radius: 0 999px 999px 0; }
 .cc-att-count { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; color: var(--text-muted); white-space: nowrap; }
+/* Tooltip amb qui ha dit sí/no/pendent, ancorat just a sota de la barra
+   dins la mateixa columna d'Assistència (posicionament CSS pur — sense
+   coordenades de ratolí calculades per JS, que en aquest entorn sortien
+   desplaçades) — mateixa llista de "bombolles" (cd-att-bubble) que
+   l'AttendanceMeter de la fitxa de concert, aquí en columna i amb amplada
+   fixa. La taula és "no-clip" (overflow: visible) perquè no el talli.
+   Surt cap avall (no cap amunt) perquè les files de dalt de tot no quedin
+   tapades per la capçalera fixa (sticky) de la taula. */
+.cc-att-tooltip {
+  position: absolute; top: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: var(--bg-card-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 10px 14px; min-width: 170px;
+  box-shadow: 0 10px 30px oklch(0 0 0 / 0.4); white-space: nowrap; text-align: left;
+  opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 9999;
+}
+.cc-att:hover .cc-att-tooltip { opacity: 1; }
+.cc-att-tooltip-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
+.cc-att-tooltip-list { display: flex; flex-direction: column; gap: 6px; }
+.cc-att-tooltip-list .cd-att-bubble { width: 100%; box-sizing: border-box; }
 
 /* Edició de factura + recordatoris */
 .cd-invoice-edit {
@@ -4989,6 +5049,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   background: rgba(10, 8, 18, 0.8);
   color: white;
   font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
   cursor: pointer;
   backdrop-filter: blur(8px);
 }
@@ -5607,6 +5668,20 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .calx-ev-time { display: flex; opacity: 0.75; flex-shrink: 0; }
 .calx-ev-time svg { display: block; width: 11px; height: 11px; }
 .calx-compact { display: flex; gap: 4px; flex-wrap: wrap; }
+/* Esdeveniment personal de "no disponible" (vacances, etc.) — sempre
+   vermell, sigui quin sigui el tipus de concert. Si és de tot el dia,
+   creix (flex: 1) i ocupa tota la resta de la casella; si té una hora
+   aproximada, és una píndola petita més, com un .calx-ev. */
+.calx-unavail {
+  background: var(--red); color: white; border-radius: 5px; padding: 3px 6px;
+  font-size: 10.5px; font-weight: 700; cursor: pointer; flex: none;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.calx-unavail:hover { filter: brightness(1.15); }
+.calx-unavail.allday {
+  flex: 1; display: flex; align-items: center; justify-content: center; text-align: center;
+  font-size: 12px; padding: 6px 4px; white-space: normal; min-height: 30px;
+}
 .calx-compact-chip {
   display: inline-flex;
   align-items: center;
@@ -6709,7 +6784,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cfm-identity-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .cfm-identity-name { font-weight: 700; font-size: 14px; }
 .cfm-identity-sub { font-size: 11.5px; color: var(--text-faint); }
-.cfm-gate-btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.cfm-gate-btns { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; justify-content: center; }
 .cfm-gate-btns .btn-primary, .cfm-gate-btns .btn-outline {
   text-decoration: none; width: auto; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
 }
@@ -6722,8 +6797,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .cfm-row.yes { border-color: oklch(0.72 0.15 155 / 0.45); }
 .cfm-row.no { border-color: oklch(0.62 0.19 25 / 0.4); }
-.cfm-row-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.cfm-row-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .cfm-row-date { font-weight: 700; font-size: 14px; }
+.cfm-row-kind-sub { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .cfm-row-sub { font-size: 12px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cfm-row-btns { display: flex; gap: 6px; flex-shrink: 0; }
 .cfm-row-btn {
@@ -6736,6 +6812,12 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cfm-row-btn:disabled { opacity: 0.6; cursor: default; }
 .cfm-row-btn.yes.active { background: oklch(0.72 0.15 155 / 0.18); color: oklch(0.78 0.15 155); border-color: oklch(0.72 0.15 155 / 0.5); }
 .cfm-row-btn.no.active { background: oklch(0.62 0.19 25 / 0.14); color: oklch(0.72 0.18 25); border-color: oklch(0.62 0.19 25 / 0.4); }
+/* Variant icona (tick/creu, sense text) — rodona i compacta. */
+.cfm-row-btn.icon { padding: 0; width: 32px; height: 32px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center; }
+/* Llista d'assistència del dia (nom, foto, instruments, resposta) dins de
+   "Detalls del dia" — mateixes files que la fitxa del gestor (cd-att-row),
+   en només lectura. */
+.cfm-att-list { display: flex; flex-direction: column; gap: 8px; }
 .cfm-row-expand { all: unset; cursor: pointer; grid-column: 1 / -1; font-size: 12px; color: var(--text-faint); display: inline-flex; align-items: center; gap: 5px; }
 .cfm-row-expand:hover { color: var(--text); }
 .cfm-row-expand svg { transition: transform .15s; }

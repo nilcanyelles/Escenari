@@ -6,7 +6,6 @@ import { MONTH_ABBR, WEEKDAY_SHORT, formatCurrency, isConcertOver } from "@/lib/
 import { geocodeCitiesAction } from "@/app/(app)/concerts/actions";
 import { classifyPoint, type GeoPlace } from "@/lib/geo-stats";
 import ConcertPinMap, { type ConcertPin } from "@/components/ConcertPinMap";
-import { KIND_META } from "@/components/CalendariView";
 import { bandColor } from "@/lib/tags";
 import {
   computeMonthAgg, computeYearAgg, computeInvoiceMonthAgg, computeProjectedMonthAgg,
@@ -314,7 +313,7 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
       />
     );
     // ---- Geografia, recintes, festes, tipus, dies de la setmana, caixet ----
-    const geoAgg = { comarca: {} as Record<string, number>, regio: {} as Record<string, number>, pais: {} as Record<string, number> };
+    const geoAgg = { comarca: {} as Record<string, number>, regio: {} as Record<string, number>, ccaa: {} as Record<string, number>, pais: {} as Record<string, number> };
     let located = 0;
     concertsPool.forEach((c) => {
       const g = geo[(c.city || "").split(",")[0].trim()];
@@ -322,17 +321,10 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
       located++;
       if (g.place.comarca) geoAgg.comarca[g.place.comarca] = (geoAgg.comarca[g.place.comarca] || 0) + 1;
       if (g.place.regio) geoAgg.regio[g.place.regio] = (geoAgg.regio[g.place.regio] || 0) + 1;
+      if (g.place.ccaa) geoAgg.ccaa[g.place.ccaa] = (geoAgg.ccaa[g.place.ccaa] || 0) + 1;
       if (g.place.pais) geoAgg.pais[g.place.pais] = (geoAgg.pais[g.place.pais] || 0) + 1;
     });
     const toRows = (m: Record<string, number>, n = 8) => Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, n).map(([label, value]) => ({ label, value }));
-    const byVenue: Record<string, number> = {}, byFesta: Record<string, number> = {}, byKind: Record<string, number> = {};
-    concertsPool.forEach((c) => {
-      const v = (c.venue || "").trim();
-      if (v && v !== "Sala per determinar") byVenue[v] = (byVenue[v] || 0) + 1;
-      const f = (c.festaEntitat || "").trim();
-      if (f) byFesta[f] = (byFesta[f] || 0) + 1;
-    });
-    pool.forEach((c) => { const k = KIND_META[c.kind || "bolo"]?.label || "Bolo"; byKind[k] = (byKind[k] || 0) + 1; });
     const weekday = Array.from({ length: 7 }, () => 0); // dl … dg
     concertsPool.forEach((c) => {
       const p = c.date.split("-").map(Number);
@@ -376,11 +368,11 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
           <div className="card card-centered"><div className="card-title">Poblacions diferents</div><div className="card-value">{cityEntries.length}</div></div>
           <div className="card card-centered"><div className="card-title">Comarques</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.comarca).length}</div></div>
           <div className="card card-centered"><div className="card-title">Regions</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.regio).length}</div></div>
+          <div className="card card-centered"><div className="card-title">Comunitats autònomes</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.ccaa).length}</div></div>
           <div className="card card-centered">
             <div className="card-title">Països</div><div className="card-value">{geoLoading ? "…" : Object.keys(geoAgg.pais).length}</div>
             {!geoLoading && unlocated > 0 && <div className="t-dim" style={{ fontSize: 11 }}>{unlocated} sense localitzar</div>}
           </div>
-          <div className="card card-centered"><div className="card-title">Recintes diferents</div><div className="card-value">{Object.keys(byVenue).length}</div></div>
           <div className="card card-centered">
             <div className="card-title">Caixet mitjà</div><div className="card-value">{formatCurrency(avgFee)}</div>
             {maxFee > 0 && <div className="t-dim" style={{ fontSize: 11 }}>màx. {formatCurrency(maxFee)}</div>}
@@ -429,10 +421,8 @@ export default function StatsView({ bands, concerts, invoices, transactions = []
           <RankList title="Poblacions més repetides" rows={topCities} fmt={(n) => String(n)} />
           <RankList title="Comarques" rows={toRows(geoAgg.comarca)} fmt={(n) => String(n)} />
           <RankList title="Regions" rows={toRows(geoAgg.regio)} fmt={(n) => String(n)} />
+          <RankList title="Comunitats autònomes" rows={toRows(geoAgg.ccaa)} fmt={(n) => String(n)} />
           <RankList title="Països" rows={toRows(geoAgg.pais)} fmt={(n) => String(n)} />
-          <RankList title="Recintes més repetits" rows={toRows(byVenue)} fmt={(n) => String(n)} />
-          <RankList title="Festes i entitats" rows={toRows(byFesta)} fmt={(n) => String(n)} />
-          <RankList title="Tipus d'esdeveniment" rows={toRows(byKind)} fmt={(n) => String(n)} />
         </div>
         <div className="panel">
           <div className="panel-title" style={{ marginBottom: 12 }}>Concerts per dia de la setmana</div>
