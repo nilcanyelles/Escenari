@@ -10,12 +10,15 @@ import { db } from "@/lib/db";
 export const dynamic = "force-dynamic";
 
 // Llistat de concerts del músic: mateixa taula que el gestor, sense diners
-// ni esborrat, i amb la fitxa de només lectura.
-export default async function ArtistConcertsPage() {
+// ni esborrat, i amb la fitxa de només lectura. Per defecte només els
+// últims 12 mesos + tots els futurs (vegeu getConcerts a data.ts) —
+// "?full=1" en carrega tot l'historial.
+export default async function ArtistConcertsPage({ searchParams }: { searchParams: Promise<{ full?: string }> }) {
+  const { full } = await searchParams;
   const profile = await requireArtist();
   const [bands, concerts, selectedRaw] = await Promise.all([
     getArtistBandsFull(profile.clerkUserId),
-    getArtistConcertsFull(profile.clerkUserId),
+    getArtistConcertsFull(profile.clerkUserId, full ? undefined : { monthsBack: 12 }),
     getSelectedBandId(),
   ]);
   const bandId = bands.length === 1 ? bands[0].id : bands.some((b) => b.id === selectedRaw) ? selectedRaw : "";
@@ -54,6 +57,7 @@ export default async function ArtistConcertsPage() {
       detailBase="/artista/concerts"
       myNames={myNames}
       today={today()}
+      fullHistoryLoaded={!!full}
     />
   );
 }

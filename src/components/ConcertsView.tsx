@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
 import { formatDate, statusColors, isConcertOver } from "@/lib/format";
 import { KIND_META } from "@/components/CalendariView";
@@ -91,11 +91,12 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, allowBolo, detailBase = "/concerts", contacts = [], myNames, today }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string }) {
+export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, allowBolo, detailBase = "/concerts", contacts = [], myNames, today, fullHistoryLoaded = true }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string; fullHistoryLoaded?: boolean }) {
   const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
   const router = useRouter();
+  const pathname = usePathname();
   // Un cop respost (sí o no) a la teva pròpia convocatòria, la fila mostra
   // el resum d'assistència en comptes dels botons — mateix comportament que
   // "Els meus grups" (tocar-lo torna a mostrar els botons).
@@ -396,6 +397,11 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           {pastVisible < pastList.length && (
             <button type="button" className="load-more-btn" onClick={() => setPastVisible((v) => v + PAGE_SIZE)}>
               Mostra {Math.min(PAGE_SIZE, pastList.length - pastVisible)} més ({pastList.length - pastVisible} restants)
+            </button>
+          )}
+          {!fullHistoryLoaded && (
+            <button type="button" className="load-more-btn" onClick={() => router.push(`${pathname}?full=1`)}>
+              Només es mostren els últims 12 mesos — Carrega tot l&apos;historial
             </button>
           )}
         </div>

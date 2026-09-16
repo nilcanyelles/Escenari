@@ -153,7 +153,11 @@ export async function getArtistBandsFull(clerkUserId: string): Promise<import(".
 // les vistes de calendari i llistat de l'àrea d'artista. Amaga els diners:
 // amount es posa a 0 tret que el grup mostri caixets, i respecta els convidats
 // dels esdeveniments que no són bolos.
-export async function getArtistConcertsFull(clerkUserId: string): Promise<import("./types").Concert[]> {
+// "monthsBack": vegeu getConcerts a data.ts — mateix estalvi per a la
+// pestanya "Concerts" del músic, sense tocar la resta de pantalles que
+// segueixen fent servir aquesta mateixa funció sense l'opció (calendari,
+// estadístiques...).
+export async function getArtistConcertsFull(clerkUserId: string, opts?: { monthsBack?: number }): Promise<import("./types").Concert[]> {
   const { rows } = await db().query(
     `select c.*, b.show_fees, bm.member_name
      from concerts c
@@ -162,8 +166,9 @@ export async function getArtistConcertsFull(clerkUserId: string): Promise<import
      where (coalesce(c.kind, 'bolo') = 'bolo'
             or jsonb_array_length(coalesce(c.invited, '[]'::jsonb)) = 0
             or c.invited ? bm.member_name)
+       and ($2::int is null or c.date >= (current_date - ($2 || ' months')::interval))
      order by c.date desc`,
-    [clerkUserId]
+    [clerkUserId, opts?.monthsBack ?? null]
   );
   return rows.map((r) => ({
     id: r.id,

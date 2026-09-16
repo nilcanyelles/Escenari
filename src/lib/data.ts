@@ -51,9 +51,19 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
   }));
 }
 
-export async function getConcerts(workspaceId: string): Promise<Concert[]> {
+// "monthsBack": si es dona, només carrega concerts des d'aquests mesos
+// enrere ençà (els futurs sempre hi entren, siguin quan siguin) — la
+// pestanya "Concerts" ho fa servir per no haver de transmetre tot
+// l'historial (que pot pesar molts MB en un workspace amb anys d'ús) cada
+// vegada que s'hi entra; un botó "Carrega tot l'historial" hi demana la
+// llista sencera quan de veres cal buscar-hi enrere.
+export async function getConcerts(workspaceId: string, opts?: { monthsBack?: number }): Promise<Concert[]> {
+  const sql = opts?.monthsBack
+    ? "select * from concerts where workspace_id=$1 and date >= (current_date - ($2 || ' months')::interval) order by date desc"
+    : "select * from concerts where workspace_id=$1 order by date desc";
+  const params = opts?.monthsBack ? [workspaceId, opts.monthsBack] : [workspaceId];
   const [{ rows: allRows }, scope] = await Promise.all([
-    db().query("select * from concerts where workspace_id=$1 order by date desc", [workspaceId]),
+    db().query(sql, params),
     visibleBandIds(),
   ]);
   const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
