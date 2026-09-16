@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
 import { caES } from "@clerk/localizations";
 import { getCustomInstruments } from "@/lib/custom-instruments";
-import { registerCustomInstruments } from "@/lib/tags";
+import { resetCustomInstruments } from "@/lib/tags";
 import InstrumentRegistry from "@/components/InstrumentRegistry";
 import "../../style.css";
 
@@ -12,10 +13,13 @@ export const metadata: Metadata = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Instruments personalitzats: es registren al servidor i al client perquè
-  // instrumentIconFor() en trobi la icona a tot arreu.
-  const customInstruments = await getCustomInstruments();
-  registerCustomInstruments(customInstruments);
+  // Instruments personalitzats: només els del compte que fa la petició. Es
+  // buida el registre abans d'omplir-lo (resetCustomInstruments) perquè un
+  // procés Node reutilitzat entre peticions (habitual a producció) no hi
+  // deixi acumulats els d'un compte d'una petició anterior.
+  const { userId } = await auth();
+  const customInstruments = await getCustomInstruments(userId);
+  resetCustomInstruments(customInstruments);
   return (
     <ClerkProvider localization={caES}>
       <html lang="ca">

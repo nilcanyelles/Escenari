@@ -3,7 +3,8 @@
 import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
-import { requireManagerAction } from "@/lib/current-user";
+import { getProfile } from "@/lib/current-user";
+import { requireConcertAccess } from "@/lib/band-access";
 import { activeLinksForConcert } from "@/lib/billing";
 import { sendEmail, emailConfigured } from "@/lib/email";
 import { formatDateLong, capitalize } from "@/lib/format";
@@ -50,7 +51,7 @@ export type CreateShareLinkInput = {
 };
 
 export async function createShareLinkAction(input: CreateShareLinkInput): Promise<{ id: string; url: string; code?: string; codeExpiresAt?: string }> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(input.concertId, "admin");
   const concert = (await db().query("select date from concerts where id=$1 and workspace_id=$2", [input.concertId, workspaceId])).rows[0];
   if (!concert) throw new Error("Concert no trobat");
   // Límit d'enllaços actius per grup del pla gratuït.
@@ -130,7 +131,9 @@ function codeDaysFor(validity: CodeValidity, concertDate: string): number {
 // Regenera el codi d'un enllaç existent (o li en crea un si encara no en
 // tenia — "Genera un codi d'accés" als enllaços d'abans d'aquesta funció).
 export async function setShareLinkCodeAction(linkId: string, validity: CodeValidity): Promise<{ code: string; codeExpiresAt: string }> {
-  const { workspaceId } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from share_links where id=$1", [linkId])).rows[0];
+  if (!pre) throw new Error("Enllaç no trobat");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   const link = (await db().query(
     `select sl.concert_id, c.date from share_links sl join concerts c on c.id = sl.concert_id
      where sl.id=$1 and sl.workspace_id=$2`,
@@ -152,7 +155,9 @@ export async function setShareLinkCodeAction(linkId: string, validity: CodeValid
 // Creu de la fila "Codi d'accés": elimina el codi (torna a "sense codi"),
 // mai l'enllaç en si — l'enllaç és permanent, només el codi es gestiona.
 export async function clearShareLinkCodeAction(linkId: string): Promise<void> {
-  const { workspaceId } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from share_links where id=$1", [linkId])).rows[0];
+  if (!pre) throw new Error("Enllaç no trobat");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   const link = (await db().query(
     `update share_links set access_code=null, code_expires_at=null where id=$1 and workspace_id=$2 returning concert_id`,
     [linkId, workspaceId]
@@ -164,7 +169,9 @@ export async function clearShareLinkCodeAction(linkId: string): Promise<void> {
 // "Envia-ho a un altre contacte": canvia el destinatari de l'enllaç ja
 // existent, en lloc de crear-ne un altre.
 export async function updateShareLinkRecipientAction(linkId: string, name: string, email: string): Promise<void> {
-  const { workspaceId } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from share_links where id=$1", [linkId])).rows[0];
+  if (!pre) throw new Error("Enllaç no trobat");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   const link = (await db().query(
     `update share_links set recipient_name=$1, recipient_email=$2 where id=$3 and workspace_id=$4 returning concert_id`,
     [name.trim(), email.trim(), linkId, workspaceId]
@@ -198,19 +205,24 @@ export async function verifyShareLinkAccessCodeAction(token: string, code: strin
 }
 
 export async function revokeShareLinkAction(id: string) {
-  const { workspaceId } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from share_links where id=$1", [id])).rows[0];
+  if (!pre) throw new Error("Enllaç no trobat");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   await db().query("update share_links set revoked=true where id=$1 and workspace_id=$2", [id, workspaceId]);
   revalidatePath("/concerts");
 }
 
 export async function isEmailConfiguredAction(): Promise<boolean> {
-  await requireManagerAction();
+  if (!(await getProfile())) throw new Error("Sessió no vàlida");
   return emailConfigured();
 }
 
 // Envia l'enllaç del formulari per correu "des d'Escenari".
 export async function sendShareLinkEmailAction(id: string): Promise<{ ok: boolean; error?: string }> {
-  const { workspaceId, name } = await requireManagerAction();
+  const pre = (await db().query("select concert_id from share_links where id=$1", [id])).rows[0];
+  if (!pre) return { ok: false, error: "Enllaç no trobat" };
+  const { workspaceId, profile } = await requireConcertAccess(pre.concert_id, "admin");
+  const name = profile.name;
   const row = (await db().query(
     `select sl.*, c.date, c.city, c.venue, c.band_name from share_links sl
      join concerts c on c.id = sl.concert_id

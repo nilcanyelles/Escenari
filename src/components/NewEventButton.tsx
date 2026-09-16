@@ -23,11 +23,12 @@ const KINDS: { kind: "bolo" | "assaig" | "reunio" | "altre"; label: string; icon
 // "+ Nou esdeveniment": primer es tria el tipus. Un bolo obre la fitxa
 // completa; assaig/reunió/altre es creen en un moment des d'un popup amb
 // data, convidats i repetició estil Google Calendar.
-export default function NewEventButton({ bands, selectedBandId = "", allowBolo = true, defaultDate }: {
+export default function NewEventButton({ bands, selectedBandId = "", allowBolo = true, defaultDate, detailBase = "/concerts" }: {
   bands: Band[];
   selectedBandId?: string;
   allowBolo?: boolean; // els músics amb permís creen assajos/reunions, no bolos
   defaultDate?: string;
+  detailBase?: string; // "/concerts" (gestor) o "/artista/concerts" (músic)
 }) {
   const router = useRouter();
   const todayStr = new Date().toISOString().slice(0, 10);
@@ -73,13 +74,13 @@ export default function NewEventButton({ bands, selectedBandId = "", allowBolo =
   async function createBolo() {
     setBusy(true);
     const created = await saveConcertAction({
-      id: null, bandName: band?.name || "", date: date || defaultDate || todayStr,
+      id: null, bandId: band?.id, bandName: band?.name || "", date: date || defaultDate || todayStr,
       time: "", venue: "", city: "", festaEntitat: "", amount: 0, status: "pendent",
       attendance: {}, substitutes: {}, noSubstitute: {}, skipDefaults: true,
     });
     setBusy(false);
     setStep("closed");
-    if (created) router.push(`/concerts/${created.id}`);
+    if (created) router.push(`${detailBase}/${created.id}`);
   }
 
   async function chooseKind(k: "bolo" | "assaig" | "reunio" | "altre") {

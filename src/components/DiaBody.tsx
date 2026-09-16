@@ -1,5 +1,6 @@
 import type { Concert, Band } from "@/lib/types";
 import { normalizeRouteSheet, type RouteSheet, formatPhoneDisplay, rsFormatDuration, llocItemMapsHref, RS_LLOC_ICONS } from "@/lib/route-sheet";
+import { mapsHrefFor } from "@/lib/nav-app";
 import DiaQuiVeCard from "@/components/DiaQuiVeCard";
 
 // Cos de la vista "dia de bolo" (bombolles de mapa, horaris, contactes, qui
@@ -10,15 +11,15 @@ import DiaQuiVeCard from "@/components/DiaQuiVeCard";
 // dia, no només un formulari d'assistència. "editable" activa el llapis
 // de "Qui ve" (només a la vista de gestor — mai a la pàgina pública).
 // "linkedNames": membres amb compte d'Escenari vinculat (tick lila a "Qui ve").
-export default function DiaBody({ concert: c, band, editable = false, linkedNames = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[] }) {
+export default function DiaBody({ concert: c, band, editable = false, linkedNames = [], navApp, hideQuiVe = false }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[]; navApp?: string; hideQuiVe?: boolean }) {
   const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
 
   // L'adreça és el mateix camp que "Informació general" (mai un text lliure
   // propi del full de ruta) — es fa servir sempre la del concert.
   const address = c.address || "";
-  const mapsQuery = encodeURIComponent([c.venue, address, c.city].filter(Boolean).join(", "));
-  const descarregaHref = llocItemMapsHref(rs.lloc.find((l) => l.label.trim().toLowerCase() === "descàrrega"));
-  const parkingHref = llocItemMapsHref(rs.lloc.find((l) => l.label.trim().toLowerCase() === "parking"));
+  const mapsQuery = [c.venue, address, c.city].filter(Boolean).join(", ");
+  const descarregaHref = llocItemMapsHref(rs.lloc.find((l) => l.label.trim().toLowerCase() === "descàrrega"), navApp);
+  const parkingHref = llocItemMapsHref(rs.lloc.find((l) => l.label.trim().toLowerCase() === "parking"), navApp);
 
   // Allotjament té la seva pròpia targeta amb tots els detalls (telèfon,
   // check-in/out, pàrquing, esmorzar) — la resta d'hospitalitat es queda a
@@ -32,7 +33,7 @@ export default function DiaBody({ concert: c, band, editable = false, linkedName
   return (
     <>
       <div className="dia-map-bubbles">
-        <a className="dia-map-bubble" href={`https://www.google.com/maps/search/?api=1&query=${mapsQuery}`} target="_blank" rel="noreferrer">
+        <a className="dia-map-bubble" href={mapsHrefFor(navApp, mapsQuery)} target="_blank" rel="noreferrer">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
           <span>Recinte</span>
         </a>
@@ -99,7 +100,7 @@ export default function DiaBody({ concert: c, band, editable = false, linkedName
       </div>
 
       {/* Formació */}
-      <DiaQuiVeCard key={c.id} concert={c} band={band} editable={editable} linkedNames={linkedNames} />
+      {!hideQuiVe && <DiaQuiVeCard key={c.id} concert={c} band={band} editable={editable} linkedNames={linkedNames} />}
 
       {/* Hospitalitat ràpida */}
       {otherHosp.length > 0 && (

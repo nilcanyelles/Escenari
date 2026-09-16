@@ -5,13 +5,17 @@ import type { Concert } from "@/lib/types";
 import { formatDate, formatDateFull, capitalize } from "@/lib/format";
 import { KIND_META } from "@/components/CalendariView";
 import { createAttendanceLinkAction, type AttendanceLinkConcert } from "@/app/conf/actions";
+import { normalize } from "@/lib/text";
 
 export type AttendanceLinkIntent = "wa" | "copy" | "open";
 const INTENT_LABEL: Record<AttendanceLinkIntent, string> = { wa: "Envia per WhatsApp", copy: "Copia l'enllaç", open: "Obre l'enllaç" };
 
 function concertSub(c: { kind: string; festaEntitat: string; city: string; venue: string }): string {
   const kind = c.kind && c.kind !== "bolo" ? KIND_META[c.kind]?.label : "";
-  return [kind, c.festaEntitat, c.city ? c.city.split(",")[0] : c.venue].filter(Boolean).join(" · ");
+  // El títol de l'esdeveniment ("Assaig", "Reunió"...) sovint repeteix el
+  // nom del tipus — no el mostris dues vegades.
+  const festa = c.festaEntitat && normalize(c.festaEntitat) !== normalize(kind) ? c.festaEntitat : "";
+  return [kind, festa, c.city ? c.city.split(",")[0] : c.venue].filter(Boolean).join(" · ");
 }
 
 // Pregunta prèvia a generar l'enllaç de confirmació d'assistència: només
@@ -34,6 +38,14 @@ export default function AttendanceLinkModal({ concert, others, intent, onClose, 
   const [error, setError] = useState<string | null>(null);
 
   const multi = mode === "multi" && (allFuture || picked.size > 0);
+
+  // Llista ordenada per data, amb "aquest" al seu lloc cronològic (no
+  // sempre primer) — hi pot haver concerts propers anteriors al que tens
+  // obert, i "Tots els propers concerts" també els inclou.
+  const merged = [
+    { id: concert.id, date: concert.date, time: concert.time, venue: concert.venue, city: concert.city, festaEntitat: concert.festaEntitat, kind: concert.kind || "bolo", isThis: true },
+    ...others.map((o) => ({ ...o, isThis: false })),
+  ].sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
 
   function togglePick(id: string) {
     setPicked((prev) => {
@@ -80,17 +92,18 @@ export default function AttendanceLinkModal({ concert, others, intent, onClose, 
               <label className="atl-all">
                 <input type="checkbox" checked={allFuture} onChange={(e) => setAllFuture(e.target.checked)} />
                 <span>
-                  <strong>Tots els propers concerts</strong>
+                  <strong>Tots els propers esdeveniments</strong>
                   <span className="atl-all-sub">També els que s&apos;afegeixin més endavant — un sol enllaç per al grup.</span>
                 </span>
               </label>
               <div className="atl-list">
-                <div className="atl-item disabled">
-                  <input type="checkbox" checked disabled readOnly />
-                  <span className="atl-item-date">{formatDate(concert.date)}</span>
-                  <span className="atl-item-sub">{concertSub({ kind: concert.kind || "bolo", festaEntitat: concert.festaEntitat, city: concert.city, venue: concert.venue })} · aquest</span>
-                </div>
-                {others.map((o) => (
+                {merged.map((o) => o.isThis ? (
+                  <div key={o.id} className="atl-item disabled">
+                    <input type="checkbox" checked disabled readOnly />
+                    <span className="atl-item-date">{formatDate(o.date)}</span>
+                    <span className="atl-item-sub">{concertSub(o)} · aquest</span>
+                  </div>
+                ) : (
                   <label key={o.id} className={"atl-item" + (allFuture ? " disabled" : "")}>
                     <input type="checkbox" checked={allFuture || picked.has(o.id)} disabled={allFuture} onChange={() => togglePick(o.id)} />
                     <span className="atl-item-date">{formatDate(o.date)}</span>

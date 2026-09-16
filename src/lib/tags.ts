@@ -150,6 +150,17 @@ const CUSTOM_INSTRUMENTS = new Map<string, CustomInstrument>();
 export function registerCustomInstruments(list: CustomInstrument[]) {
   list.forEach((c) => { if (c.name && c.name.trim()) CUSTOM_INSTRUMENTS.set(c.name.trim().toLowerCase(), { name: c.name.trim(), icon: c.icon || "" }); });
 }
+// Els personalitzats són propis de cada compte: el layout (servidor) hi
+// crida a cada petició amb NOMÉS els de qui ha fet la petició — buidant
+// abans el registre, si no, en un procés Node reutilitzat entre peticions
+// (habitual a producció) hi quedarien acumulats per sempre els d'altres
+// comptes que hi haguessin passat abans. registerCustomInstruments() es
+// manté additiu perquè l'InstrumentPicker (client) l'usa per afegir-ne un
+// de nou sense perdre la resta que ja tenia carregada.
+export function resetCustomInstruments(list: CustomInstrument[]) {
+  CUSTOM_INSTRUMENTS.clear();
+  registerCustomInstruments(list);
+}
 export function customInstrumentList(): CustomInstrument[] {
   return Array.from(CUSTOM_INSTRUMENTS.values()).sort((a, b) => a.name.localeCompare(b.name, "ca"));
 }

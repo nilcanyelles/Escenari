@@ -8,6 +8,7 @@ import {
 } from "@/lib/route-sheet";
 import { capitalize, formatDateFull } from "@/lib/format";
 import { getAgencyNameAction } from "@/app/(app)/concerts/actions";
+import { mapsHrefFor, readNavAppCookie, type NavApp } from "@/lib/nav-app";
 
 const RS_LABEL_COLOR = "oklch(0.15 0.01 258)";
 const RS_VALUE_COLOR = "oklch(0.42 0.01 258)";
@@ -74,7 +75,7 @@ function MapLinkBtn({ href, title, iconPath }: { href: string; title: string; ic
   );
 }
 
-function LlocLine({ item }: { item: LlocItem }) {
+function LlocLine({ item, navApp }: { item: LlocItem; navApp: NavApp }) {
   const label = item.label, value = item.value;
   const isParking = label && label.trim().toLowerCase() === "parking";
   const isAdreça = label && label.trim().toLowerCase() === "adreça";
@@ -88,9 +89,9 @@ function LlocLine({ item }: { item: LlocItem }) {
   const shownValue = legacyValueIsLink ? "" : value;
   if (!shownValue && !link && !plateList.length) return null;
   const iconPath = RS_LLOC_ICONS[(label || "").trim().toLowerCase()];
-  // L'adreça no és un enllaç guardat com Descàrrega/Parking — Maps
-  // s'obté sempre a partir del propi text.
-  const mapsHref = isAdreça && shownValue ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(shownValue)}` : "";
+  // L'adreça no és un enllaç guardat com Descàrrega/Parking — el mapa
+  // s'obté sempre a partir del propi text, amb l'app triada al perfil.
+  const mapsHref = isAdreça && shownValue ? mapsHrefFor(navApp, shownValue) : "";
   const primaryHref = isAdreça ? mapsHref : (shownValue ? link : "");
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
@@ -104,7 +105,7 @@ function LlocLine({ item }: { item: LlocItem }) {
       )}
       {/* Sense text de detalls però amb enllaç: la pròpia icona del camp
           (caixa, pàrquing…) fa de botó per obrir-lo. */}
-      {!shownValue && iconPath && link && <MapLinkBtn href={link} title={label + " — obre a Google Maps"} iconPath={iconPath} />}
+      {!shownValue && iconPath && link && <MapLinkBtn href={link} title={label + " — obre la ubicació"} iconPath={iconPath} />}
       {plateList.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 1, color: RS_VALUE_COLOR }}>
           {plateList.map((p, i) => <span key={i}>{p}</span>)}
@@ -114,7 +115,7 @@ function LlocLine({ item }: { item: LlocItem }) {
   );
 }
 
-function HotelLine({ it }: { it: HospitalitatItem }) {
+function HotelLine({ it, navApp }: { it: HospitalitatItem; navApp: NavApp }) {
   const isHotel = it.label && it.label.trim().toLowerCase() === "allotjament";
   const included = it.included !== false;
   if (!isHotel) return <InclusionLine label={it.label} included={included} value={it.value} />;
@@ -136,7 +137,7 @@ function HotelLine({ it }: { it: HospitalitatItem }) {
     // (dades antigues d'abans que el camp fos només adreça).
     const locationHref = /^https?:\/\//i.test(it.location.trim())
       ? it.location.trim()
-      : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(it.location)}`;
+      : mapsHrefFor(navApp, it.location);
     icons.push(
       <a key="loc" href={locationHref} target="_blank" rel="noopener" title="Ubicació de l'allotjament" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", width: 19, height: 19, borderRadius: 5, background: "oklch(0.68 0.19 290 / 0.14)", color: "oklch(0.55 0.19 290)", flex: "none", marginLeft: 3, verticalAlign: "middle" }}>
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
@@ -193,6 +194,12 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
   // demana un cop en muntar.
   const [agencyName, setAgencyName] = useState("");
   useEffect(() => { getAgencyNameAction().then(setAgencyName).catch(() => {}); }, []);
+
+  // App de navegació preferida de qui mira: es llegeix de la cookie que
+  // /artista/perfil desa en triar-la (aquest component tampoc la rep per
+  // props, pel mateix motiu que agencyName). "google" fins que es llegeixi.
+  const [navApp, setNavApp] = useState<NavApp>("google");
+  useEffect(() => { setNavApp(readNavAppCookie()); }, []);
   const footerParts = [
     "Escenari",
     concert.bandName,
@@ -200,7 +207,7 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
     concert.date.split("-")[0],
   ].filter(Boolean);
 
-  const llocLines = withLiveAddress(rs.lloc, concert.address).map((f, i) => <LlocLine key={i} item={f} />);
+  const llocLines = withLiveAddress(rs.lloc, concert.address).map((f, i) => <LlocLine key={i} item={f} navApp={navApp} />);
   const contacts = rs.contacts.filter((ct) => ct.role || ct.name);
   const contactsHtml = contacts.length ? (
     <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", columnGap: 6, rowGap: 8 }}>
@@ -222,7 +229,7 @@ export default function RouteSheetPreviewDoc({ concert }: { concert: Concert }) 
     </div>
   ) : null;
 
-  const hospLines = rs.hospitalitat.map((f, i) => <HotelLine key={i} it={f} />).filter((n) => n !== null);
+  const hospLines = rs.hospitalitat.map((f, i) => <HotelLine key={i} it={f} navApp={navApp} />).filter((n) => n !== null);
   const tecLines = rs.tecnic.map((f, i) => <TecnicLine key={i} it={f} />);
 
   const phases = withLiveConcertStart(rs.schedule, concert.exactTime).filter((ph) => ph.phase && (ph.start || ph.end));

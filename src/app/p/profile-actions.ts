@@ -7,6 +7,21 @@ import { getOrCreatePersonProfile } from "@/lib/person-profile";
 import { normalize } from "@/lib/text";
 import { uploadFileBlob } from "@/lib/blob-storage";
 
+// person_profiles té un índex únic (workspace_id, lower(person_name)): si
+// ja hi ha una altra fila amb aquest nom al mateix workspace (típic quan el
+// gestor n'havia creat una a mà amb el mateix nom abans que es reclamés),
+// renombrar-hi feia petar tot el desat amb un error de clau duplicada. Amb
+// aquesta comprovació, si hi ha xoc es deixa aquesta fila concreta amb el
+// nom vell — la resta (bands, band_members, profiles) es desa igualment.
+async function renamePersonProfileSafely(pool: ReturnType<typeof db>, id: string, workspaceId: string, newName: string) {
+  const clash = (await pool.query(
+    "select 1 from person_profiles where workspace_id=$1 and lower(person_name)=lower($2) and id<>$3",
+    [workspaceId, newName, id]
+  )).rows[0];
+  if (clash) return;
+  await pool.query("update person_profiles set person_name=$1 where id=$2", [newName, id]);
+}
+
 // Qui pot editar un perfil: el músic vinculat (tot el seu) o el gestor del
 // workspace (nom, instruments i foto quan el músic no té compte).
 async function accessFor(token: string): Promise<{ row: Record<string, unknown>; isOwner: boolean; isManager: boolean }> {
@@ -84,8 +99,22 @@ export async function uploadProfilePhotoAction(formData: FormData): Promise<{ ok
 }
 
 // Nom, instruments i contacte (telèfon/correu): el gestor (quan el músic no
-// té compte) o el mateix músic. Actualitza les entrades de members i crew de
-// tots els grups del workspace.
+// té compte) o el mateix músic.
+//
+// Compte vinculat (isOwner): la font de veritat de "com et diuen a cada
+// grup" és band_members (una fila per grup+compte) — mai person_name de
+// person_profiles, que és només l'etiqueta d'UN workspace i es podia haver
+// desincronitzat per una edició feta per un altre camí (p. ex. "Edita
+// membres" del gestor). Buscar l'entrada a renombrar pel nom vell de
+// person_profiles feia que, si ja hi havia hagut cap desincronia, el
+// following no trobés res a canviar i semblés que "no es desava" — per
+// això ara es fa per band_members.member_name, sempre. El nom es corregeix
+// a TOTS els grups on siguis (fins i tot d'altres agències); instruments,
+// telèfon i correu només al grup d'aquest perfil (són propis de cada grup).
+//
+// Sense compte (el gestor gestiona un perfil sense músic vinculat): només
+// aquest workspace, i el matching és pel nom perquè no hi ha band_members
+// ni res més fiable a què agafar-se.
 export async function updatePersonAction(token: string, input: { name: string; instruments: string[]; phone?: string; email?: string }) {
   const { row, isOwner, isManager } = await accessFor(token);
   if (!isOwner && !isManager) throw new Error("Sense permís");
@@ -93,31 +122,84 @@ export async function updatePersonAction(token: string, input: { name: string; i
 
   const pool = db();
   const newName = (input.name || String(row.person_name)).trim();
-  const oldKey = normalize(String(row.person_name));
-  const patchPerson = (m: { name: string; role: string; instruments?: string[]; phone?: string; email?: string }, isMember: boolean) => ({
-    ...m,
-    name: newName,
-    instruments: isMember ? input.instruments : m.instruments,
-    role: isMember ? (input.instruments.join(", ") || m.role) : m.role,
-    phone: input.phone !== undefined ? input.phone : m.phone,
-    email: input.email !== undefined ? input.email : m.email,
-  });
-  const bands = (await pool.query("select id, members, crew from bands where workspace_id=$1", [row.workspace_id])).rows;
-  for (const b of bands) {
-    let changed = false;
-    const members = (b.members || []).map((m: { name: string; role: string }) => {
-      if (normalize(m.name) !== oldKey) return m;
-      changed = true;
-      return patchPerson(m, true);
+  const clerkUserId = row.clerk_user_id as string | null;
+
+  if (clerkUserId) {
+    const memberships = (await pool.query(
+      `select bm.band_id, bm.member_name, b.workspace_id from band_members bm
+       join bands b on b.id = bm.band_id
+       where bm.clerk_user_id=$1`,
+      [clerkUserId]
+    )).rows;
+    for (const ms of memberships) {
+      const b = (await pool.query("select members, crew from bands where id=$1", [ms.band_id])).rows[0];
+      if (!b) continue;
+      const key = normalize(ms.member_name);
+      const sameWorkspace = ms.workspace_id === row.workspace_id;
+      let changed = false;
+      const members = (b.members || []).map((m: { name: string; role: string; instruments?: string[]; phone?: string; email?: string }) => {
+        if (normalize(m.name) !== key) return m;
+        changed = true;
+        return {
+          ...m,
+          name: newName,
+          instruments: sameWorkspace ? input.instruments : m.instruments,
+          role: sameWorkspace ? (input.instruments.join(", ") || m.role) : m.role,
+          phone: sameWorkspace && input.phone !== undefined ? input.phone : m.phone,
+          email: sameWorkspace && input.email !== undefined ? input.email : m.email,
+        };
+      });
+      const crew = (b.crew || []).map((m: { name: string; role: string; phone?: string; email?: string }) => {
+        if (normalize(m.name) !== key) return m;
+        changed = true;
+        return {
+          ...m,
+          name: newName,
+          phone: sameWorkspace && input.phone !== undefined ? input.phone : m.phone,
+          email: sameWorkspace && input.email !== undefined ? input.email : m.email,
+        };
+      });
+      if (changed) await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), ms.band_id]);
+    }
+    // band_members.member_name és la clau amb què concerts.attendance sap
+    // qui ets — es corregeix a tots els grups, no només el d'aquest perfil.
+    await pool.query("update band_members set member_name=$1 where clerk_user_id=$2", [newName, clerkUserId]);
+    // person_profiles: un per workspace on ja en tingui — es renombren tots
+    // (saltant, sense petar, el/s que xoquin amb una altra fila ja existent).
+    const myProfiles = (await pool.query("select id, workspace_id from person_profiles where clerk_user_id=$1", [clerkUserId])).rows;
+    for (const pp of myProfiles) await renamePersonProfileSafely(pool, pp.id, pp.workspace_id, newName);
+    // profiles.name és el nom del compte, independent de qualsevol grup: el
+    // fa servir la barra lateral, "El meu perfil" i el perfil sense grup.
+    await pool.query("update profiles set name=$1 where clerk_user_id=$2", [newName, clerkUserId]);
+  } else {
+    const oldKey = normalize(String(row.person_name));
+    const patchPerson = (m: { name: string; role: string; instruments?: string[]; phone?: string; email?: string }, isMemberEntry: boolean) => ({
+      ...m,
+      name: newName,
+      instruments: isMemberEntry ? input.instruments : m.instruments,
+      role: isMemberEntry ? (input.instruments.join(", ") || m.role) : m.role,
+      phone: input.phone !== undefined ? input.phone : m.phone,
+      email: input.email !== undefined ? input.email : m.email,
     });
-    const crew = (b.crew || []).map((m: { name: string; role: string }) => {
-      if (normalize(m.name) !== oldKey) return m;
-      changed = true;
-      return patchPerson(m, false);
-    });
-    if (changed) await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), b.id]);
+    const bands = (await pool.query("select id, members, crew from bands where workspace_id=$1", [row.workspace_id])).rows;
+    for (const b of bands) {
+      let changed = false;
+      const members = (b.members || []).map((m: { name: string; role: string }) => {
+        if (normalize(m.name) !== oldKey) return m;
+        changed = true;
+        return patchPerson(m, true);
+      });
+      const crew = (b.crew || []).map((m: { name: string; role: string }) => {
+        if (normalize(m.name) !== oldKey) return m;
+        changed = true;
+        return patchPerson(m, false);
+      });
+      if (changed) await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), b.id]);
+    }
+    await renamePersonProfileSafely(pool, token, row.workspace_id as string, newName);
   }
-  await pool.query("update person_profiles set person_name=$1 where id=$2", [newName, token]);
+
   revalidatePath(`/p/${token}`);
   revalidatePath("/grup");
+  revalidatePath("/artista");
 }

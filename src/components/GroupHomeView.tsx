@@ -114,7 +114,7 @@ function PencilIcon() {
 // obre'n el PDF/públic (el mateix camí que "Obre / PDF" a la fitxa del
 // concert); sense cap assignada, un avís explica que en falta una en
 // comptes de no fer res — igual de desplegable que el menú de compartir.
-function SetlistButton({ c, band, setlists, songs, canEdit, iconBtnClass }: {
+export function SetlistButton({ c, band, setlists, songs, canEdit, iconBtnClass }: {
   c: Concert; band: Band; setlists: Setlist[]; songs: Song[]; canEdit: boolean; iconBtnClass: string;
 }) {
   const router = useRouter();
@@ -569,6 +569,13 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const isMgr = viewer === "manager";
   const base = isMgr ? "" : "/artista"; // rutes de l'àrea d'artista
   const can: MemberPerms = isMgr ? { ...ALL_PERMS } : (caps || { ...DEFAULT_PERMS });
+  // Un membre amb el permís "Admin" veu i pot editar exactament el mateix
+  // que el gestor dins d'aquest grup (equip, aparença, codi d'unió,
+  // suplents...) — mai fora d'ell (routing/"base" es queda lligat a
+  // viewer, mai a isAdminLike). Les accions del servidor que desbloqueja
+  // ja accepten un membre "admin" del grup, no només el gestor (vegeu
+  // requireBandAccess(bandId, "admin") a grup/actions.ts i grups/actions.ts).
+  const isAdminLike = isMgr || can.admin;
   // La pestanya inicial es pot indicar per URL (p. ex. ?tab=cancons), com
   // quan es torna de l'editor d'una cançó cap a l'apartat de cançons del grup.
   const initialTabParam = searchParams.get("tab");
@@ -616,6 +623,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // Clicar un concert de la llista de "Proper concert" el fa gran (el
   // pòster), en comptes d'obrir la seva fitxa — per defecte, el més proper.
   const [selectedGigId, setSelectedGigId] = useState<string | null>(null);
+  // Un cop respost (sí o no), la fila mostra el resum d'assistència del grup
+  // en comptes dels botons — tocar-lo torna a mostrar els botons per si es
+  // vol canviar la resposta.
+  const [attEditing, setAttEditing] = useState<Set<string>>(new Set());
   // Pàgina pública del grup (es crea l'enllaç el primer cop que s'obre).
   const [shareBusy, setShareBusy] = useState(false);
   async function sharePublicPage() {
@@ -667,11 +678,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   }
   const [joinCopied, setJoinCopied] = useState(false);
   const [codeBusy, setCodeBusy] = useState(false);
+  // El codi acabat de generar es mostra a l'instant amb el que retorna
+  // l'action, sense esperar un router.refresh() — així mai depèn d'un
+  // recarregat de la pàgina i et quedes exactament on eres.
+  const [localJoinCode, setLocalJoinCode] = useState<string | null>(null);
+  const effectiveJoinCode = localJoinCode ?? band.joinCode;
+  const effectiveJoinActive = localJoinCode ? true : band.joinCodeActive;
   // Genera el codi d'unió (i el regenera: el codi anterior deixa de valer).
   async function handleGenerateCode() {
     setCodeBusy(true);
-    await generateJoinCodeAction(band.id);
-    router.refresh();
+    const code = await generateJoinCodeAction(band.id);
+    if (code) setLocalJoinCode(code);
     setCodeBusy(false);
   }
   const [copiedEmailKey, setCopiedEmailKey] = useState<string | null>(null);
@@ -719,23 +736,58 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     // l'estat (confirmat/pendent...) a la insígnia, i tenyeix també la data.
     const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
     const km = KIND_META[k];
+    // Resum d'assistència del grup (mateix càlcul que la columna
+    // "Assistència" de la taula de Concerts) — es mostra un cop has
+    // respost, en comptes dels botons.
+    const attExcluded = c.convocatoriaExcluded || {};
+    const attPeople = [...band.members, ...band.crew].filter((p) => !attExcluded[p.name]);
+    const attTotal = attPeople.length;
+    const attendanceMap = c.attendance || {};
+    const attYes = attPeople.filter((p) => attendanceMap[p.name] === "yes").length;
+    const attNo = attPeople.filter((p) => attendanceMap[p.name] === "no").length;
+    const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
+    const attNoPct = attTotal ? (attNo / attTotal) * 100 : 0;
+    const showButtons = isMgr || !myName || !myAns || attEditing.has(c.id);
     return (
       <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); setSelectedGigId(c.id); }}>
         <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>
         <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
         {!isMgr && myName ? (
-          <span className="bento-gig-att cd-att-controls" style={{ marginTop: 0 }} onClick={(e) => e.stopPropagation()}>
-            <button
-              type="button" className={"cd-att-btn yes" + (myAns === "yes" ? " active" : "")}
-              title="Hi seré"
-              onClick={async () => { await setMyAttendanceAction(c.id, "yes"); router.refresh(); }}
-            >Sí</button>
-            <button
-              type="button" className={"cd-att-btn no" + (myAns === "no" ? " active" : "")}
-              title="No hi seré"
-              onClick={async () => { await setMyAttendanceAction(c.id, "no"); router.refresh(); }}
-            >No</button>
-          </span>
+          showButtons ? (
+            <span className="bento-gig-att cd-att-controls" style={{ marginTop: 0 }} onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
+                title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
+                onClick={async () => {
+                  await setMyAttendanceAction(c.id, myAns === "yes" ? null : "yes");
+                  setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
+                  router.refresh();
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              </button>
+              <button
+                type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
+                title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
+                onClick={async () => {
+                  await setMyAttendanceAction(c.id, myAns === "no" ? null : "no");
+                  setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
+                  router.refresh();
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+              </button>
+            </span>
+          ) : (
+            <div className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
+              onClick={(e) => { e.stopPropagation(); setAttEditing((prev) => new Set(prev).add(c.id)); }}>
+              <div className="cc-att-track">
+                <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
+                <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
+              </div>
+              <div className="cc-att-count">{attYes}/{attTotal}</div>
+            </div>
+          )
         ) : (
           <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>
         )}
@@ -787,7 +839,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
 
   const memberEmails = band.members.map((m) => m.email).filter(Boolean) as string[];
   const joinMsg = (rol: "membre" | "tècnic") =>
-    `Uneix-te a ${band.name} a Escenari com a ${rol}: registra't a escenari i introdueix el codi ${band.joinCode} a "Els meus grups".`;
+    `Uneix-te a ${band.name} a Escenari com a ${rol}: registra't a escenari i introdueix el codi ${effectiveJoinCode} a "Els meus grups".`;
 
   async function persistBackups(next: BackupPerson[]) {
     setSavingBackups(true);
@@ -827,7 +879,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             <button type="button" className="btn-outline" disabled={shareBusy} onClick={sharePublicPage} title="Pàgina pública del grup, per compartir amb qui vulguis">
               {shareBusy ? "Obrint…" : "Comparteix"}
             </button>
-            {isMgr && <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>}
+            {isAdminLike && <button type="button" className="btn-outline" onClick={() => setEditOpen(true)}>Edita el grup</button>}
           </div>
         </div>
       </div>
@@ -949,13 +1001,13 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {tab === "cancons" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
           <SongsPanel band={band} songs={songs} canEdit={can.songs} />
-          <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isMgr} songs={songs} concerts={concerts} />
+          <SetlistsPanel band={band} setlists={setlists} linkedMembers={linkedMembers} editors={editors} canEdit={can.setlists} isManager={isAdminLike} songs={songs} concerts={concerts} />
         </div>
       )}
 
       {tab === "documents" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-          <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={can.riders} isManager={isMgr} />
+          <RidersPanel band={band} riders={riders} linkedMembers={linkedMembers} editors={editors} canEdit={can.riders} isManager={isAdminLike} />
 
           {/* Vehicles del grup: es trien a "Matrícules autoritzades" del full
               de ruta en comptes d'escriure-les a mà cada cop. */}
@@ -1034,7 +1086,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "permisos" && (isMgr || can.perms) && (
-        <PermsMatrix band={band} photosByName={photosByName} linkedNames={linkedNameSet} isManager={isMgr} myName={myName} />
+        <PermsMatrix band={band} photosByName={photosByName} linkedNames={linkedNameSet} isManager={isAdminLike} myName={myName} />
       )}
 
       {tab === "equip" && (<>
@@ -1077,7 +1129,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 renderItem={(m) => {
                   const item = personChromaItem(
                     m, band, openProfile, photosByName, igByName,
-                    !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                    !!linkedByName[m.name], isAdminLike ? handleInvite : undefined,
                     undefined,
                     copiedEmailKey, copyEmail,
                   );
@@ -1136,7 +1188,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 renderItem={(m) => {
                   const item = personChromaItem(
                     m, band, openProfile, photosByName, igByName,
-                    !!linkedByName[m.name], isMgr ? handleInvite : undefined,
+                    !!linkedByName[m.name], isAdminLike ? handleInvite : undefined,
                     undefined,
                     copiedEmailKey, copyEmail,
                   );
@@ -1167,8 +1219,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         )}
       </div>
 
-      {/* Uneix-te al grup (només el gestor comparteix el codi) */}
-      {isMgr && (
+      {/* Uneix-te al grup (el gestor, o un membre amb el permís "Admin") */}
+      {isAdminLike && (
       <div className="panel">
         <div className="panel-title" style={{ marginBottom: 10 }}>Uneix-te al grup</div>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 12 }}>
@@ -1176,10 +1228,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           vinculat a aquest grup, com a músic o com a tècnic de so segons el que triï en unir-s&apos;hi.
           Si la persona ja existeix aquí creada a mà, usa el botó 🔗 de la seva targeta per convidar-la a reclamar el perfil.
         </div>
-        {band.joinCodeActive && band.joinCode ? (
+        {effectiveJoinActive && effectiveJoinCode ? (
           <>
             <div className="join-box">
-              <span className="join-code">{band.joinCode}</span>
+              <span className="join-code">{effectiveJoinCode}</span>
               <button type="button" className="btn-outline"
                 onClick={async () => {
                   await navigator.clipboard.writeText(joinMsg("membre"));
@@ -1217,11 +1269,13 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="backup-list">
             {backups.map((b, i) => (
               <div key={i} className="backup-row">
-                <img className="member-photo backup-photo" src={personPhotoDataUri(b.name)} alt="" />
-                <div className="backup-row-main">
-                  <div className="member-name">{b.name}</div>
-                  <InstrumentChips items={b.instruments} />
-                </div>
+                <button type="button" className="backup-row-click" onClick={() => openProfile(b.name)}>
+                  <img className="member-photo backup-photo" src={personPhotoDataUri(b.name)} alt="" />
+                  <div className="backup-row-main">
+                    <div className="member-name">{b.name}</div>
+                    <InstrumentChips items={b.instruments} />
+                  </div>
+                </button>
                 <div className="t-dim" style={{ fontSize: 12 }}>{b.phone}</div>
                 {can.members && <button
                   type="button" className="row-delete-btn" title="Treu el suplent"
@@ -1255,7 +1309,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       </div>
 
       {/* Cerques de suplent publicades (gestió del gestor) */}
-      {isMgr && openRequests.length > 0 && (
+      {isAdminLike && openRequests.length > 0 && (
         <div className="panel">
           <div className="panel-title" style={{ marginBottom: 14 }}>Cerques de suplent obertes</div>
           <div className="backup-request-list">
@@ -1282,12 +1336,14 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                     <div className="backup-apps">
                       {r.applications.map((a) => (
                         <div key={a.clerkUserId} className="backup-app-row">
-                          <img className="member-photo backup-photo" src={personPhotoDataUri(a.name)} alt="" />
-                          <div className="backup-row-main">
-                            <div className="member-name">{a.name}<VerifiedTick size={12} /></div>
-                            <InstrumentChips items={a.instruments} />
-                            {a.message && <div className="t-dim" style={{ fontSize: 12 }}>&ldquo;{a.message}&rdquo;</div>}
-                          </div>
+                          <button type="button" className="backup-row-click" onClick={() => openProfile(a.name)}>
+                            <img className="member-photo backup-photo" src={personPhotoDataUri(a.name)} alt="" />
+                            <div className="backup-row-main">
+                              <div className="member-name">{a.name}<VerifiedTick size={12} /></div>
+                              <InstrumentChips items={a.instruments} />
+                              {a.message && <div className="t-dim" style={{ fontSize: 12 }}>&ldquo;{a.message}&rdquo;</div>}
+                            </div>
+                          </button>
                           {a.status === "pendent" ? (
                             <div style={{ display: "flex", gap: 6 }}>
                               <button type="button" className="btn-save" onClick={async () => { await respondBackupApplicationAction(r.id, a.clerkUserId, "acceptada"); router.refresh(); }}>Accepta</button>

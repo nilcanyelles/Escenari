@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { getProfile } from "@/lib/current-user";
-import { requireBandAccess as requireBandPerm } from "@/lib/band-access";
+import { requireBandAccess as requireBandPerm, requireConcertAccess } from "@/lib/band-access";
 import type { RiderContent, Song } from "@/lib/material-types";
 
 // Autorització dual: el gestor del workspace del grup, o un artista del grup
@@ -122,29 +122,26 @@ export async function setConcertMaterialAction(concertId: string, field: "rider"
 // ---------- Aprovació de riders per concert (només gestor) ----------
 
 export async function sendRiderApprovalAction(input: { concertId: string; riderId: string; recipientName: string; recipientEmail: string }): Promise<{ id: string }> {
-  const profile = await getProfile();
-  if (!profile || profile.role !== "manager" || !profile.workspaceId) throw new Error("Sessió de gestor no vàlida");
-  const owns = (await db().query(
-    "select 1 from concerts where id=$1 and workspace_id=$2", [input.concertId, profile.workspaceId]
-  )).rows[0];
-  if (!owns) throw new Error("Concert no trobat");
+  const { workspaceId } = await requireConcertAccess(input.concertId, "admin");
   const id = newToken("ap");
   await db().query(
     `insert into rider_approvals (id, workspace_id, concert_id, rider_id, recipient_name, recipient_email)
      values ($1,$2,$3,$4,$5,$6)`,
-    [id, profile.workspaceId, input.concertId, input.riderId, (input.recipientName || "").trim(), (input.recipientEmail || "").trim()]
+    [id, workspaceId, input.concertId, input.riderId, (input.recipientName || "").trim(), (input.recipientEmail || "").trim()]
   );
   revalidatePath(`/concerts/${input.concertId}`);
   return { id };
 }
 
-// El gestor accepta la contraproposta: el contingut del contrarider passa a
-// ser el contingut del rider i l'aprovació queda tancada com a aprovada.
+// El gestor (o l'admin del grup) accepta la contraproposta: el contingut
+// del contrarider passa a ser el contingut del rider i l'aprovació queda
+// tancada com a aprovada.
 export async function acceptCounterRiderAction(approvalId: string) {
-  const profile = await getProfile();
-  if (!profile || profile.role !== "manager" || !profile.workspaceId) throw new Error("Sessió de gestor no vàlida");
+  const pre = (await db().query("select concert_id from rider_approvals where id=$1", [approvalId])).rows[0];
+  if (!pre) throw new Error("Contraproposta no trobada");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
   const ap = (await db().query(
-    "select * from rider_approvals where id=$1 and workspace_id=$2", [approvalId, profile.workspaceId]
+    "select * from rider_approvals where id=$1 and workspace_id=$2", [approvalId, workspaceId]
   )).rows[0];
   if (!ap || !ap.counter_content) throw new Error("Contraproposta no trobada");
   await db().query("update riders set content=$1 where id=$2", [JSON.stringify(ap.counter_content), ap.rider_id]);
@@ -154,10 +151,11 @@ export async function acceptCounterRiderAction(approvalId: string) {
 }
 
 export async function deleteRiderApprovalAction(approvalId: string) {
-  const profile = await getProfile();
-  if (!profile || profile.role !== "manager" || !profile.workspaceId) throw new Error("Sessió de gestor no vàlida");
-  const ap = (await db().query("select concert_id from rider_approvals where id=$1 and workspace_id=$2", [approvalId, profile.workspaceId])).rows[0];
-  await db().query("delete from rider_approvals where id=$1 and workspace_id=$2", [approvalId, profile.workspaceId]);
+  const pre = (await db().query("select concert_id from rider_approvals where id=$1", [approvalId])).rows[0];
+  if (!pre) return;
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
+  const ap = (await db().query("select concert_id from rider_approvals where id=$1 and workspace_id=$2", [approvalId, workspaceId])).rows[0];
+  await db().query("delete from rider_approvals where id=$1 and workspace_id=$2", [approvalId, workspaceId]);
   if (ap) revalidatePath(`/concerts/${ap.concert_id}`);
 }
 

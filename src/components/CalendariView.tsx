@@ -3,13 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
-import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep, timePeriodFor } from "@/lib/format";
+import { MONTH_ABBR, MONTH_FULL, WEEKDAY_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDateFull, monthWithPrep, timePeriodFor, addDays } from "@/lib/format";
+import { normalize } from "@/lib/text";
 import { rsIsComplete } from "@/lib/route-sheet";
 import RouteSheetModal from "@/components/RouteSheetModal";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import NewEventButton from "@/components/NewEventButton";
+import UnavailabilityButton from "@/components/UnavailabilityButton";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { TimePeriodIcon } from "@/components/TimePeriodBubble";
-import { setDayAvailabilityAction } from "@/app/(artist)/actions";
+import { setDayAvailabilityAction, deleteUnavailabilityAction } from "@/app/(artist)/actions";
+import type { UnavailabilityEvent } from "@/lib/unavailability";
 
 // Tipus d'esdeveniment amb el seu color (la "Legend" del calendari).
 export const KIND_META: Record<string, { label: string; color: string; bg: string }> = {
@@ -38,9 +42,15 @@ function groupByDate(list: Concert[]) {
 // disponibilitat per a suplències es marca aquí mateix, dia a dia — un
 // botonet a cada cel·la que fa cicle lliure → disponible → no disponible.
 // Els dies amb bolo (busyDays) surten sols en vermell.
-export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", contacts = [], availability, busyDays = {}, today }: {
+export default function CalendariView({ bands, concerts, selectedBandId = "", icsToken = "", canCreate = true, allowBolo = true, detailBase = "/concerts", contacts = [], availability, busyDays = {}, unavailability, today }: {
   bands: Band[]; concerts: Concert[]; selectedBandId?: string; icsToken?: string; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[];
-  availability?: Record<string, boolean>; busyDays?: Record<string, string>; today: string;
+  availability?: Record<string, boolean>; busyDays?: Record<string, string>;
+  // Esdeveniments personals de "no disponible" (vacances, etc.) — només al
+  // calendari del propi perfil (vegeu (artist)/artista/agenda/page.tsx);
+  // el gestor mai els passa, així que ni el botó "+ No disponible" ni els
+  // blocs vermells surten al calendari de grup.
+  unavailability?: UnavailabilityEvent[];
+  today: string;
 }) {
   const availabilityEditable = !!availability;
   const [avail, setAvail] = useState<Record<string, boolean>>(availability || {});
@@ -50,7 +60,27 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
     setAvail((prev) => { const n = { ...prev }; if (next === null) delete n[day]; else n[day] = next; return n; });
     await setDayAvailabilityAction(day, next);
   }
+  const canMarkUnavailable = !!unavailability;
+  const [deleteTarget, setDeleteTarget] = useState<UnavailabilityEvent | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const router = useRouter();
+  async function confirmDeleteUnavailability() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    await deleteUnavailabilityAction(deleteTarget.id);
+    setDeleting(false);
+    setDeleteTarget(null);
+    router.refresh();
+  }
+  // Un esdeveniment de "no disponible" pot durar més d'un dia: s'indexa
+  // per cada data que toca (com eventsByDate, però per data string).
+  const unavailByDate: Record<string, UnavailabilityEvent[]> = {};
+  (unavailability || []).forEach((u) => {
+    for (let d = u.startDate; d <= u.endDate; d = addDays(d, 1)) {
+      (unavailByDate[d] = unavailByDate[d] || []).push(u);
+      if (d === u.endDate) break;
+    }
+  });
   const [calMonthIndex, setCalMonthIndex] = useState(() => parseInt(today.slice(5, 7), 10) - 1);
   const [calViewMode, setCalViewMode] = useState<"month" | "week" | "year">("month");
   const [calWeekOffset, setCalWeekOffset] = useState(0);
@@ -158,7 +188,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
               >
                 <span className="calx-ev-text">
                   {kindOf(c) !== "bolo"
-                    ? KIND_META[kindOf(c)].label + (c.festaEntitat ? ` · ${c.festaEntitat}` : "")
+                    ? KIND_META[kindOf(c)].label + (c.festaEntitat && normalize(c.festaEntitat) !== normalize(KIND_META[kindOf(c)].label) ? ` · ${c.festaEntitat}` : "")
                     : (c.city || c.venue || c.bandName).split(",")[0]}
                 </span>
                 {period && <span className="calx-ev-time"><TimePeriodIcon period={period} /></span>}
@@ -171,6 +201,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
 
     const busy = availabilityEditable ? busyDays[dateStr] : "";
     const availState = !availabilityEditable ? null : busy ? "busy" : avail[dateStr] === true ? "yes" : avail[dateStr] === false ? "no" : null;
+    const unavailToday = unavailByDate[dateStr] || [];
     return (
       <div
         key={dateStr}
@@ -180,6 +211,16 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
         onClick={() => setCalSelectedDate(dateStr)}
       >
         <span className={"calx-num" + (isToday ? " today" : "")}>{dayNum}</span>
+        {unavailToday.map((u) => (
+          <div
+            key={u.id}
+            className={"calx-unavail" + (u.allDay ? " allday" : "")}
+            title={u.allDay ? `${u.title} — toca per eliminar-ho` : `${u.title}${u.startTime ? ` · ${u.startTime}h` : ""} — toca per eliminar-ho`}
+            onClick={(e) => { e.stopPropagation(); setDeleteTarget(u); }}
+          >
+            {u.title}
+          </div>
+        ))}
         {availabilityEditable && dateStr >= today && (
           busy ? (
             <span className="calx-avail-btn busy" title={`Tens bolo: ${busy}`}>●</span>
@@ -307,7 +348,8 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
           <button className={"stats-tab" + (calViewMode === "year" ? " active" : "")} onClick={() => setCalViewMode("year")}>Any</button>
         </div>
         <div className="cal-view-pills-right">
-          {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo} defaultDate={calSelectedDate || today} />}
+          {canMarkUnavailable && <UnavailabilityButton defaultDate={calSelectedDate || today} />}
+          {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo} defaultDate={calSelectedDate || today} detailBase={detailBase} />}
         </div>
       </div>
 
@@ -435,6 +477,16 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
           concert={rsPreviewConcert}
           onClose={() => setRsPreviewConcertId(null)}
           onEdit={() => { setRsPreviewConcertId(null); setRsModalConcertId(rsPreviewConcert.id); }}
+        />
+      )}
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Treure la marca de no disponible?"
+          message={<>Es tornarà a poder convocar-te sense cap avís els dies de &quot;{deleteTarget.title}&quot;.</>}
+          confirmLabel="Elimina"
+          busy={deleting}
+          onConfirm={confirmDeleteUnavailability}
+          onCancel={() => setDeleteTarget(null)}
         />
       )}
     </div>

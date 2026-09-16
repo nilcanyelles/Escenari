@@ -460,8 +460,8 @@ function agencyDefaultSplit(otherNames: string[], pool: number, agencyBasis: num
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
-  billing, activeLinks, canUpgrade = true,
+  concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, unavailByMember = {}, shareLinks, backupRequests, riders, setlists, riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
+  billing, activeLinks, canUpgrade = true, base = "",
 }: {
   concert: Concert;
   band: Band | null;
@@ -471,6 +471,9 @@ export default function ConcertDetailView({
   clientDetails: Record<string, ClientDetails>;
   contacts?: Contact[];
   linkedMembers: LinkedMember[];
+  // Nom del membre → títol del seu esdeveniment personal de "no disponible"
+  // que cobreix la data d'aquest concert (vegeu src/lib/unavailability.ts).
+  unavailByMember?: Record<string, string>;
   shareLinks: ShareLink[];
   backupRequests: BackupRequest[];
   riders: Rider[];
@@ -487,6 +490,9 @@ export default function ConcertDetailView({
   billing: BillingInfo;
   activeLinks: { count: number; cap: number | null; reached: boolean };
   canUpgrade?: boolean;
+  // "" (gestor) o "/artista" (músic admin del grup) — rutes de tornada i
+  // enllaços a "dia de bolo".
+  base?: string;
 }) {
   const router = useRouter();
   const [cf, setCf] = useState({
@@ -498,6 +504,9 @@ export default function ConcertDetailView({
   });
   const [attendance, setAttendance] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutes] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
+  // Escriure el nom d'un suplent no el confirma sol — cal marcar-lo amb el
+  // tick del costat (vegeu setSub/toggleSubConfirmed).
+  const [substituteConfirmed, setSubstituteConfirmed] = useState<Record<string, boolean>>({ ...(concert.substituteConfirmed || {}) });
   const [noSubstitute, setNoSubstitute] = useState<Record<string, boolean>>({ ...(concert.noSubstitute || {}) });
   // Membres exclosos de la convocatòria d'aquest concert (name -> true):
   // no s'eliminen del grup, es desactiven només per a aquest bolo.
@@ -831,16 +840,17 @@ export default function ConcertDetailView({
   const crew = band?.crew || [];
   const backups = band?.backups || [];
 
-  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact) {
+  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact, subConfirmed = substituteConfirmed) {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(async () => {
       setSaving(true);
       await saveConcertAction({
         id: concert.id,
+        bandId: concert.bandId,
         bandName: concert.bandName,
         date: next.date, time: next.time, exactTime: next.exactTime, venue: next.venue, city: next.city, address: next.address,
         festaEntitat: next.festaEntitat, amount: parseInt(next.amount, 10) || 0, status: next.status,
-        attendance: att, substitutes: subs, noSubstitute: noSubs, convocatoriaExcluded: excl, contact: cont,
+        attendance: att, substitutes: subs, substituteConfirmed: subConfirmed, noSubstitute: noSubs, convocatoriaExcluded: excl, contact: cont,
         canAnnounce: next.canAnnounce as Concert["canAnnounce"], announceAfter: next.announceAfter,
         ticketType: next.ticketType as Concert["ticketType"],
         skipDefaults: true,
@@ -889,7 +899,18 @@ export default function ConcertDetailView({
     const noSubs = { ...noSubstitute };
     if (sub) delete noSubs[name];
     setNoSubstitute(noSubs);
-    schedulePersist(cf, attendance, subs, noSubs);
+    // Canviar el nom del suplent (o esborrar-lo) treu qualsevol confirmació
+    // anterior — cal tornar a marcar el tick per a la persona nova.
+    const subConfirmed = { ...substituteConfirmed };
+    if (subConfirmed[name]) { delete subConfirmed[name]; setSubstituteConfirmed(subConfirmed); }
+    schedulePersist(cf, attendance, subs, noSubs, convocatoriaExcluded, contact, subConfirmed);
+  }
+
+  function toggleSubConfirmed(name: string) {
+    const subConfirmed = { ...substituteConfirmed };
+    if (subConfirmed[name]) delete subConfirmed[name]; else subConfirmed[name] = true;
+    setSubstituteConfirmed(subConfirmed);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, subConfirmed);
   }
 
   // Treu (o torna a afegir) un membre de la convocatòria d'aquest concert
@@ -1204,7 +1225,7 @@ export default function ConcertDetailView({
 
       {/* Capçalera */}
       <div className="cd-topbar">
-        <BackLink href="/concerts">Concerts</BackLink>
+        <BackLink href={`${base}/concerts`}>Concerts</BackLink>
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
           {saving && <span className="t-dim" style={{ fontSize: 12 }}>Desant…</span>}
         </div>
@@ -1252,7 +1273,7 @@ export default function ConcertDetailView({
             )}
           </div>
           <div className="cd-poster-actions">
-            <Link href={`/concerts/${concert.id}/dia`} className="cd-poster-icon-btn" title="Tota la info del dia del bolo en una sola pantalla de mòbil">
+            <Link href={`${base}/concerts/${concert.id}/dia`} className="cd-poster-icon-btn" title="Tota la info del dia del bolo en una sola pantalla de mòbil">
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
             </Link>
             <button type="button" className="cd-poster-icon-btn" onClick={() => setPosterOpen(true)}
@@ -1433,7 +1454,7 @@ export default function ConcertDetailView({
               >{nudgeResult || (nudging ? "Enviant…" : "Recorda-ho als pendents")}</button>
             )}
             <div className="t-dim" style={{ fontSize: 12 }}>
-              {members.filter((m) => attendance[m.name] === "yes").length}/{members.length} confirmats
+              {members.filter((m) => !convocatoriaExcluded[m.name] && attendance[m.name] === "yes").length}/{members.filter((m) => !convocatoriaExcluded[m.name]).length} confirmats
             </div>
           </div>
         </div>
@@ -1461,6 +1482,9 @@ export default function ConcertDetailView({
                         return <span key={ins} className="member-instrument-chip">{icon && <img src={icon} alt="" />}{ins}</span>;
                       })}
                     </div>
+                    {!excluded && unavailByMember[m.name] && (
+                      <div className="cd-att-unavail-warning">Marcat com a no disponible: &quot;{unavailByMember[m.name]}&quot;</div>
+                    )}
                   </div>
                   {!excluded && (
                     <div className="cd-att-controls">
@@ -1484,6 +1508,15 @@ export default function ConcertDetailView({
                         value={substitutes[m.name] || ""}
                         onChange={(e) => setSubstituteFor(m.name, e.target.value)}
                       />
+                      {substitutes[m.name] && (
+                        <button
+                          type="button" className={"cd-att-btn cd-att-icon-btn yes" + (substituteConfirmed[m.name] ? " active" : "")}
+                          title={substituteConfirmed[m.name] ? "Suplent confirmat — toca per treure la confirmació" : "Marca el suplent com a confirmat"}
+                          onClick={() => toggleSubConfirmed(m.name)}
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                        </button>
+                      )}
                       {!substitutes[m.name] && !req && (
                         <button
                           type="button" className="btn-outline cd-publish-btn"
@@ -1521,7 +1554,7 @@ export default function ConcertDetailView({
             <div className="panel-header-row cd-section-title" style={{ marginTop: 24 }}>
               <div className="panel-title" style={{ fontSize: 15 }}>Crew</div>
               <div className="t-dim" style={{ fontSize: 12 }}>
-                {crew.filter((m) => attendance[m.name] === "yes").length}/{crew.length} confirmats
+                {crew.filter((m) => !convocatoriaExcluded[m.name] && attendance[m.name] === "yes").length}/{crew.filter((m) => !convocatoriaExcluded[m.name]).length} confirmats
               </div>
             </div>
             <div className="cd-attendance-list">
@@ -1539,6 +1572,9 @@ export default function ConcertDetailView({
                         {linked && <VerifiedTick size={13} title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`} />}
                       </div>
                       {m.role && <div className="member-instruments"><span className="member-instrument-chip">{m.role}</span></div>}
+                      {!excluded && unavailByMember[m.name] && (
+                        <div className="cd-att-unavail-warning">Marcat com a no disponible: &quot;{unavailByMember[m.name]}&quot;</div>
+                      )}
                     </div>
                     {!excluded && (
                       <div className="cd-att-controls">
@@ -1562,6 +1598,15 @@ export default function ConcertDetailView({
                           value={substitutes[m.name] || ""}
                           onChange={(e) => setSubstituteFor(m.name, e.target.value)}
                         />
+                        {substitutes[m.name] && (
+                          <button
+                            type="button" className={"cd-att-btn cd-att-icon-btn yes" + (substituteConfirmed[m.name] ? " active" : "")}
+                            title={substituteConfirmed[m.name] ? "Suplent confirmat — toca per treure la confirmació" : "Marca el suplent com a confirmat"}
+                            onClick={() => toggleSubConfirmed(m.name)}
+                          >
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                          </button>
+                        )}
                         {!substitutes[m.name] && !req && (
                           <button
                             type="button" className="btn-outline cd-publish-btn"
@@ -1808,19 +1853,19 @@ export default function ConcertDetailView({
               <label className="form-label">Raó social</label>
               <input className="field-input form-field" value={clientForm.nom}
                 onChange={(e) => setClientForm((p) => ({ ...p, nom: e.target.value }))}
-                onBlur={async () => { await upsertClientDetailsAction(clientKey, "nom", clientForm.nom); router.refresh(); }} />
+                onBlur={async () => { await upsertClientDetailsAction(clientKey, "nom", clientForm.nom, concert.id); router.refresh(); }} />
             </div>
             <div className="cd-field">
               <label className="form-label">CIF</label>
               <input className="field-input form-field" value={clientForm.cif}
                 onChange={(e) => setClientForm((p) => ({ ...p, cif: e.target.value }))}
-                onBlur={async () => { await upsertClientDetailsAction(clientKey, "cif", clientForm.cif); router.refresh(); }} />
+                onBlur={async () => { await upsertClientDetailsAction(clientKey, "cif", clientForm.cif, concert.id); router.refresh(); }} />
             </div>
             <div className="cd-field">
               <label className="form-label">Adreça</label>
               <input className="field-input form-field" value={clientForm.address}
                 onChange={(e) => setClientForm((p) => ({ ...p, address: e.target.value }))}
-                onBlur={async () => { await upsertClientDetailsAction(clientKey, "address", clientForm.address); router.refresh(); }} />
+                onBlur={async () => { await upsertClientDetailsAction(clientKey, "address", clientForm.address, concert.id); router.refresh(); }} />
             </div>
           </div>
 
@@ -2399,7 +2444,7 @@ export default function ConcertDetailView({
           onConfirm={async () => {
             setDeleting(true);
             await deleteConcertAction(concert.id);
-            router.push("/concerts");
+            router.push(`${base}/concerts`);
             router.refresh();
           }}
         />

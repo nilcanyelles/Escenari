@@ -3,6 +3,8 @@
 import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { requireManagerAction } from "@/lib/current-user";
+import { requireConcertAccess } from "@/lib/band-access";
+import { normalize } from "@/lib/text";
 import { syncClientToContacts } from "@/app/(app)/contactes/actions";
 
 function revalidateAll() {
@@ -46,8 +48,20 @@ export async function updateBandFieldAction(id: string, field: "name" | "rate", 
   revalidateAll();
 }
 
-export async function upsertClientDetailsAction(clientName: string, field: "cif" | "nom" | "address", value: string) {
-  const { workspaceId } = await requireManagerAction();
+// "concertId": quan ve de la fitxa d'un concert (l'admin del grup omplint
+// les dades fiscals del client per generar-ne la factura) — es comprova que
+// el client sigui realment el d'aquell concert abans de deixar-lo editar;
+// sense concertId (des de la Base de dades), només el gestor.
+export async function upsertClientDetailsAction(clientName: string, field: "cif" | "nom" | "address", value: string, concertId?: string) {
+  let workspaceId: string;
+  if (concertId) {
+    const access = await requireConcertAccess(concertId, "admin");
+    const c = (await db().query("select venue from concerts where id=$1", [concertId])).rows[0];
+    if (!c || normalize(c.venue) !== normalize(clientName)) throw new Error("Aquest client no correspon a aquest concert");
+    workspaceId = access.workspaceId;
+  } else {
+    ({ workspaceId } = await requireManagerAction());
+  }
   const pool = db();
   await pool.query(
     `insert into client_details (client_name, cif, nom, address, workspace_id) values ($1, '', '', '', $2)

@@ -116,6 +116,12 @@ export async function getOrCreatePersonProfile(workspaceId: string, personName: 
     [workspaceId, personName]
   )).rows[0];
 
+  // Si ja s'havia omplert el perfil propi (foto, bio, IG) abans d'unir-se a
+  // cap grup, es porta aquí perquè no calgui tornar-lo a fer.
+  const prefill = linked?.clerk_user_id
+    ? (await pool.query("select photo_file_id, bio, ig_handle from profiles where clerk_user_id=$1", [linked.clerk_user_id])).rows[0]
+    : null;
+
   // Entre la comprovació de dalt i aquest insert, una altra petició en
   // paral·lel (dues pestanyes, o dues pàgines carregant-se alhora just
   // després d'entrar) pot haver creat ja el mateix perfil — abans es
@@ -125,11 +131,12 @@ export async function getOrCreatePersonProfile(workspaceId: string, personName: 
   // fila en comptes de la que s'anava a crear aquí.
   const id = "p_" + randomBytes(10).toString("base64url");
   const inserted = (await pool.query(
-    `insert into person_profiles (id, workspace_id, person_name, clerk_user_id)
-     values ($1,$2,$3,$4)
+    `insert into person_profiles (id, workspace_id, person_name, clerk_user_id, photo_file_id, bio, ig_handle)
+     values ($1,$2,$3,$4,$5,$6,$7)
      on conflict (workspace_id, lower(person_name)) do nothing
      returning id`,
-    [id, workspaceId, personName, linked?.clerk_user_id || null]
+    [id, workspaceId, personName, linked?.clerk_user_id || null,
+      prefill?.photo_file_id || null, prefill?.bio || "", prefill?.ig_handle || ""]
   )).rows[0];
   if (inserted) return inserted.id;
   const winner = (await pool.query(

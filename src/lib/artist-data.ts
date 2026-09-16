@@ -144,6 +144,8 @@ export async function getArtistBandsFull(clerkUserId: string): Promise<import(".
     socialTracking: r.social_tracking || {},
     publicToken: r.public_token || "",
     bio: r.bio || "",
+    vehicles: r.vehicles || [],
+    defaultRouteSheet: r.default_route_sheet || null,
   }));
 }
 
@@ -179,6 +181,7 @@ export async function getArtistConcertsFull(clerkUserId: string): Promise<import
     amount: r.show_fees ? r.amount : 0,
     attendance: r.attendance,
     substitutes: r.substitutes,
+    substituteConfirmed: r.substitute_confirmed || {},
     noSubstitute: r.no_substitute,
     convocatoriaExcluded: r.convocatoria_excluded || {},
     setlistHighlights: r.setlist_highlights || {},

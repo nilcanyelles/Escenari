@@ -24,12 +24,24 @@ export default async function ArtistConcertsPage() {
   const links = (await db().query(
     "select band_id, member_name from band_members where clerk_user_id=$1", [profile.clerkUserId]
   )).rows;
-  const canCreate = bands.some((b) => {
-    if (bandId && b.id !== bandId) return false;
+  // Músic o crew — els permisos es guarden a totes dues llistes.
+  function permsFor(b: (typeof bands)[number]) {
     const link = links.find((l) => l.band_id === b.id);
-    const me = link ? (b.members || []).find((m) => normalize(m.name) === normalize(link.member_name)) : null;
-    return memberPerms(me).events;
-  });
+    if (!link) return memberPerms(null);
+    const me = (b.members || []).find((m) => normalize(m.name) === normalize(link.member_name)) ||
+      (b.crew || []).find((m) => normalize(m.name) === normalize(link.member_name)) || null;
+    return memberPerms(me);
+  }
+  const eligible = bandId ? bands.filter((b) => b.id === bandId) : bands;
+  const canCreate = eligible.some((b) => permsFor(b).events);
+  // "Bolo" (fitxa completa, amb caixet/factura): només a qui sigui Admin
+  // d'aquell grup — la resta d'esdeveniments (assaig/reunió/altre) ja els
+  // deixa crear el permís "Esdeveniments".
+  const allowBolo = eligible.some((b) => permsFor(b).admin);
+  // El teu nom a cada grup (per marcar la teva pròpia assistència a la
+  // columna "Assistència" — només quan hi ets convocat, vegeu ConcertsView).
+  const myNames: Record<string, string> = {};
+  links.forEach((l) => { myNames[l.band_id] = l.member_name; });
 
   return (
     <ConcertsView
@@ -38,7 +50,9 @@ export default async function ArtistConcertsPage() {
       selectedBandId={bandId}
       viewer="artist"
       canCreate={canCreate}
+      allowBolo={allowBolo}
       detailBase="/artista/concerts"
+      myNames={myNames}
       today={today()}
     />
   );

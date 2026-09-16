@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { requireManagerAction } from "@/lib/current-user";
+import { requireConcertAccess } from "@/lib/band-access";
 import { normalize } from "@/lib/text";
 import { today } from "@/lib/format";
 import { resolveAttendanceLink, type ResolvedAttendanceLink } from "@/lib/attendance-link";
@@ -24,7 +24,7 @@ export type AttendanceLinkConcert = {
 // concert — perquè el gestor triï quins entren a l'enllaç de confirmació.
 // Inclou sempre el propi concert.
 export async function listAttendanceLinkConcertsAction(concertId: string): Promise<AttendanceLinkConcert[]> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   const pool = db();
   const c = (await pool.query("select band_id from concerts where id=$1 and workspace_id=$2", [concertId, workspaceId])).rows[0];
   if (!c) throw new Error("Concert no trobat");
@@ -52,7 +52,7 @@ export type CreateAttendanceLinkOptions = {
 
 // El gestor genera (o recupera) l'enllaç públic de confirmació d'assistència.
 export async function createAttendanceLinkAction(concertId: string, opts?: CreateAttendanceLinkOptions): Promise<{ token: string }> {
-  const { workspaceId } = await requireManagerAction();
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
   const pool = db();
   const row = (await pool.query("select att_token, band_id from concerts where id=$1 and workspace_id=$2", [concertId, workspaceId])).rows[0];
   if (!row) throw new Error("Concert no trobat");
@@ -100,9 +100,9 @@ export async function respondConfAction(
   token: string,
   concertId: string,
   memberName: string,
-  answer: "yes" | "no"
+  answer: "yes" | "no" | null
 ): Promise<{ ok: boolean; error?: string }> {
-  if (answer !== "yes" && answer !== "no") return { ok: false, error: "Resposta no vàlida" };
+  if (answer !== "yes" && answer !== "no" && answer !== null) return { ok: false, error: "Resposta no vàlida" };
   const { userId } = await auth();
   if (!userId) return { ok: false, error: "Cal entrar amb el teu compte per confirmar." };
 
@@ -172,9 +172,16 @@ export async function respondConfAction(
        where id = $2 and band_id = $3`,
       [member.name, concertId, band.id]
     );
-  } else {
+  } else if (answer === "no") {
     await pool.query(
       `update concerts set attendance = attendance || jsonb_build_object($1::text, 'no') where id = $2 and band_id = $3`,
+      [member.name, concertId, band.id]
+    );
+  } else {
+    // Clicar la mateixa resposta que ja tenies marcada la dessel·lecciona
+    // (torna a "pendent").
+    await pool.query(
+      `update concerts set attendance = attendance - $1 where id = $2 and band_id = $3`,
       [member.name, concertId, band.id]
     );
   }
@@ -235,6 +242,57 @@ async function getOrCreateOpenRequest(link: ResolvedAttendanceLink, concertId: s
     [id, link.workspaceId, link.bandId, concertId, member.name, JSON.stringify(isCrew ? [] : instrumentsFor(member)), isCrew ? member.role || "" : "", member.name]
   );
   return { id, token: null };
+}
+
+// Darrers 9 dígits d'un telèfon (mòbil espanyol), per comparar-los sense
+// que el prefix de país (o la manca d'un) faci fallar la coincidència.
+function phoneKey(phone: string): string {
+  const digits = (phone || "").replace(/\D/g, "");
+  return digits.length >= 9 ? digits.slice(-9) : "";
+}
+
+// Suplents de confiança del grup (band.backups), amb qui té compte
+// d'Escenari vinculat (per correu o telèfon) i qui no — per proposar-los
+// tots dos igual, sense haver de preguntar-ho abans. Primer els que toquen
+// algun dels mateixos instruments que qui proposa.
+export async function listBackupCandidatesAction(token: string, concertId: string, memberName: string): Promise<
+  { name: string; instruments: string[]; phone: string; email: string; clerkUserId: string }[]
+> {
+  const ctx = await requireConfMember(token, concertId, memberName);
+  if ("error" in ctx) return [];
+  const pool = db();
+  const band = (await pool.query("select backups from bands where id=$1", [ctx.link.bandId])).rows[0];
+  const backups: { name: string; instruments?: string[]; phone?: string; email?: string }[] = band?.backups || [];
+  if (backups.length === 0) return [];
+
+  const emails = Array.from(new Set(backups.map((b) => (b.email || "").trim().toLowerCase()).filter(Boolean)));
+  const phoneKeys = Array.from(new Set(backups.map((b) => phoneKey(b.phone || "")).filter(Boolean)));
+  const accounts = emails.length || phoneKeys.length
+    ? (await pool.query("select clerk_user_id, lower(email) as email, phone from profiles").then((r) => r.rows))
+    : [];
+  const byEmail: Record<string, string> = {};
+  const byPhone: Record<string, string> = {};
+  accounts.forEach((a) => {
+    if (a.email) byEmail[a.email] = a.clerk_user_id;
+    const pk = phoneKey(a.phone || "");
+    if (pk) byPhone[pk] = a.clerk_user_id;
+  });
+
+  const myInstruments = new Set((instrumentsFor(ctx.member) || []).map((s) => s.toLowerCase()));
+  return backups
+    .map((b) => {
+      const email = (b.email || "").trim().toLowerCase();
+      const pk = phoneKey(b.phone || "");
+      return {
+        name: b.name, instruments: b.instruments || [], phone: b.phone || "", email: b.email || "",
+        clerkUserId: (email && byEmail[email]) || (pk && byPhone[pk]) || "",
+      };
+    })
+    .sort((a, b) => {
+      const aMatch = a.instruments.some((i) => myInstruments.has(i.toLowerCase())) ? 0 : 1;
+      const bMatch = b.instruments.some((i) => myInstruments.has(i.toLowerCase())) ? 0 : 1;
+      return aMatch - bMatch || a.name.localeCompare(b.name);
+    });
 }
 
 // Comptes d'Escenari que coincideixen pel nom (mínim 2 lletres) — només

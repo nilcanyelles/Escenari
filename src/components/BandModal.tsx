@@ -71,17 +71,25 @@ export default function BandModal({
   const [codeBusy, setCodeBusy] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
+  // El codi es mostra amb el que retorna l'action, sense esperar un
+  // router.refresh() — així mai depèn d'un recarregat de la pàgina i et
+  // quedes exactament on eres (i el modal no parpelleja tancant-se).
+  const [localJoinCode, setLocalJoinCode] = useState<string | null>(null);
+  const [localJoinActive, setLocalJoinActive] = useState<boolean | null>(null);
+  const effectiveJoinCode = localJoinCode ?? band.joinCode;
+  const effectiveJoinActive = localJoinActive ?? band.joinCodeActive;
+
   async function handleGenerateCode() {
     setCodeBusy(true);
-    await generateJoinCodeAction(band.id);
-    router.refresh();
+    const code = await generateJoinCodeAction(band.id);
+    if (code) { setLocalJoinCode(code); setLocalJoinActive(true); }
     setCodeBusy(false);
   }
 
   async function handleRevokeCode() {
     setCodeBusy(true);
     await revokeJoinCodeAction(band.id);
-    router.refresh();
+    setLocalJoinActive(false);
     setCodeBusy(false);
   }
 
@@ -331,11 +339,11 @@ export default function BandModal({
                     <>
                       <div className="year-picker-overlay" onClick={() => setShareOpen(false)}></div>
                       <div className="year-dropdown share-code-dropdown" onClick={(e) => e.stopPropagation()}>
-                        {band.joinCodeActive && band.joinCode ? (
+                        {effectiveJoinActive && effectiveJoinCode ? (
                           <>
                             <div className="share-code-label">Codi d&apos;invitació</div>
-                            <button type="button" className="share-code-value" title="Copia el codi" onClick={() => copyCode(band.joinCode as string)}>
-                              {band.joinCode}
+                            <button type="button" className="share-code-value" title="Copia el codi" onClick={() => copyCode(effectiveJoinCode as string)}>
+                              {effectiveJoinCode}
                               {copiedCode ? (
                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
                               ) : (

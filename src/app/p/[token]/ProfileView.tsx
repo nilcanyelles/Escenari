@@ -13,6 +13,9 @@ import VerifiedTick from "@/components/VerifiedTick";
 import BackLink from "@/components/BackLink";
 import ProfileShareModal from "./ProfileShareModal";
 import InstrumentPicker from "@/components/InstrumentPicker";
+import NavAppBadge from "@/components/NavAppBadge";
+import { NAV_APP_OPTIONS, type NavApp } from "@/lib/nav-app";
+import { updateStandaloneProfileAction } from "@/app/(artist)/artista/perfil/standalone-actions";
 
 // Permisos del membre en un grup, editables pel gestor des del perfil.
 function BandPermsRow({ bandId, memberName, initial }: { bandId: string; memberName: string; initial: Partial<MemberPerms> }) {
@@ -103,13 +106,22 @@ function AttendanceCalendar({ concerts, today }: { concerts: PersonProfileData["
   );
 }
 
-export default function ProfileView({ data, isOwner, isManager, today }: {
+export default function ProfileView({ data, isOwner, isManager, today, navApp = "google" }: {
   data: PersonProfileData;
   isOwner: boolean;
   isManager: boolean;
   today: string;
+  navApp?: NavApp;
 }) {
   const router = useRouter();
+  const [myNavApp, setMyNavApp] = useState(navApp);
+  const [navSaving, setNavSaving] = useState(false);
+  async function handleNavApp(next: NavApp) {
+    setMyNavApp(next);
+    setNavSaving(true);
+    await updateStandaloneProfileAction({ navApp: next });
+    setNavSaving(false);
+  }
   const canEditAll = isOwner || (isManager && !data.clerkUserId);
   const [editOpen, setEditOpen] = useState(false);
   const [form, setForm] = useState({
@@ -389,7 +401,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
       {/* Editor */}
       {editOpen && (
         <div className="modal-overlay" onClick={() => setEditOpen(false)}>
-          <div className="modal narrow" onClick={(e) => e.stopPropagation()}>
+          <div className="modal edit-profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <div className="modal-title">Edita el perfil</div>
               <button className="cf-head-close" onClick={() => setEditOpen(false)}>✕</button>
@@ -419,6 +431,20 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
                     <textarea className="field-input rider-textarea" rows={3} placeholder="Presenta't en dues frases…" value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} /></div>
                   <div><label className="form-label">Instagram</label>
                     <input className="field-input form-field" placeholder="@elteuusuari" value={form.igHandle} onChange={(e) => setForm({ ...form, igHandle: e.target.value })} /></div>
+                  {isOwner && (
+                    <div>
+                      <label className="form-label">App de navegació preferida</label>
+                      <div className="t-dim" style={{ fontSize: 11.5, marginBottom: 6 }}>Amb quina app s&apos;obren les ubicacions del full de ruta.</div>
+                      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        {NAV_APP_OPTIONS.map((o) => (
+                          <button key={o.value} type="button" className={"access-chip navapp-chip" + (myNavApp === o.value ? " active" : "")}
+                            disabled={navSaving} onClick={() => handleNavApp(o.value)}>
+                            <NavAppBadge app={o.value} size={15} />{o.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   <div>
                     <label className="form-label">Grups visibles al perfil públic</label>
                     <div className="access-box-list" style={{ marginTop: 6 }}>
@@ -477,7 +503,7 @@ export default function ProfileView({ data, isOwner, isManager, today }: {
 
       {shareOpen && <ProfileShareModal data={data} photoUrl={photoUrl} onClose={() => setShareOpen(false)} />}
 
-      <div className="pf-footer" style={{ paddingBottom: 28 }}>Perfil de músic generat amb Escenari</div>
+      <div className="pf-footer" style={{ paddingBottom: 28 }}>Perfil personal generat amb Escenari</div>
     </div>
   );
 }
