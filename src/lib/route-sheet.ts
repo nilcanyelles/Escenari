@@ -247,9 +247,10 @@ function rsTecnicComplete(items: TecnicItem[] | undefined): boolean {
 // Percentatge de camps emplenats del full de ruta (0-100). Només compta els
 // camps que l'usuari ha d'omplir de debò — l'etiqueta/fase ja ve preomplerta
 // per defecte (Recinte, Arribada, Dietes...), així que no compta com a
-// progrés; sí que compten el valor de cada camp de lloc/hospitalitat/tècnic,
-// les hores d'inici i fi de cada fase de l'horari, i els contactes (que no
-// tenen cap valor per defecte).
+// progrés; sí que compten el valor de cada camp de lloc/hospitalitat/tècnic
+// i els contactes (que no tenen cap valor per defecte). A l'horari, l'hora
+// d'inici de cada fase ja és una resposta completa per si sola — la de fi
+// és un detall opcional que no cal perquè la fase compti com a feta.
 export function rsCompletionPercent(c: Concert): number {
   const rs = c.routeSheet as RouteSheet | null | undefined;
   if (!rs) return 0;
@@ -258,7 +259,7 @@ export function rsCompletionPercent(c: Concert): number {
 
   withLiveAddress(rs.lloc, c.address).forEach((it) => { check(it.value); });
   (rs.contacts || []).forEach((it) => { check(it.role); check(it.name); check(it.phone); check(it.company); });
-  withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => { check(it.start); check(it.end); });
+  withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => { check(it.start); });
   // Un "sí" o un "no" ja és una resposta completa per si sola — no cal
   // haver escrit també algun detall perquè el camp compti com a fet.
   (rs.hospitalitat || []).forEach((it) => {
@@ -286,7 +287,7 @@ export function rsIsComplete(c: Concert): boolean {
   const hasContacts = rsAllFilled(rs.contacts, ["role", "name", "phone", "company"]);
   const hasHospitalitat = rsHospitalitatComplete(rs.hospitalitat);
   const hasTecnic = rsTecnicComplete(rs.tecnic);
-  const hasFullSchedule = !!(rs.schedule && rs.schedule.length && withLiveConcertStart(rs.schedule, c.exactTime).every((ph) => ph.phase && ph.start && ph.end));
+  const hasFullSchedule = !!(rs.schedule && rs.schedule.length && withLiveConcertStart(rs.schedule, c.exactTime).every((ph) => ph.phase && ph.start));
   return hasLloc && hasContacts && hasHospitalitat && hasTecnic && hasFullSchedule;
 }
 

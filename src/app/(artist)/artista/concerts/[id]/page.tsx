@@ -3,7 +3,7 @@ import ArtistConcertDetail from "@/components/ArtistConcertDetail";
 import ConcertDetailView from "@/components/ConcertDetailView";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
-import { getBands, getConcerts, getInvoices, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
+import { getBands, getConcertById, getConcertsOnDate, getVenueHistory, getInvoiceForConcert, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
 import { getSetlists, getRiders, getRiderApprovals } from "@/lib/material-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
@@ -61,18 +61,21 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
     // workspace d'aquest grup (que l'admin no té al seu propi perfil —
     // ell continua sent artista) en comptes del del gestor.
     await ensureShareLinkForConcert(id, workspaceId);
-    const [fullBands, fullConcerts, invoices, companyInfo, clientDetails, contacts, billing, activeLinks,
-      linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, transactions, photoRows] = await Promise.all([
-      getBands(workspaceId), getConcerts(workspaceId), getInvoices(workspaceId), getCompanyInfo(workspaceId),
+    // Un sol concert per id (i factures/coincidències acotades), no tot
+    // l'historial del workspace — vegeu getConcertById/getConcertsOnDate/
+    // getVenueHistory/getInvoiceForConcert a data.ts.
+    const [fullBands, fullConcert, companyInfo, clientDetails, contacts, billing, activeLinks,
+      linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, transactions, invoice, photoRows] = await Promise.all([
+      getBands(workspaceId), getConcertById(workspaceId, id), getCompanyInfo(workspaceId),
       getClientDetails(workspaceId), getContacts(workspaceId), getWorkspaceBilling(workspaceId), activeLinksForConcert(workspaceId, id),
       getLinkedMembers(band.id), getShareLinks(workspaceId, id), getBackupRequests(workspaceId, { concertId: id }),
       getRiders(band.id), getSetlists(band.id), getRiderApprovals(workspaceId, id), getTransactions(workspaceId),
+      getInvoiceForConcert(workspaceId, id),
       db().query(
         "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
         [workspaceId]
       ).then((r) => r.rows as { person_name: string; photo_file_id: string }[]),
     ]);
-    const fullConcert = fullConcerts.find((c) => c.id === id);
     if (!fullConcert) notFound();
     const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
     const photosByName: Record<string, string> = {};
@@ -88,33 +91,30 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
     // admins de l'agència no es comproven aquí (no en veiem la formació).
     const clashes: string[] = [];
     if (fullConcert.status !== "cancel·lat") {
-      fullConcerts.forEach((o) => {
-        if (o.id === id || o.bandId !== fullConcert.bandId || o.date !== fullConcert.date || o.time !== fullConcert.time || o.status === "cancel·lat") return;
+      const sameDay = await getConcertsOnDate(workspaceId, fullConcert.date, id);
+      sameDay.forEach((o) => {
+        if (o.bandId !== fullConcert.bandId || o.time !== fullConcert.time) return;
         clashes.push(`${fullConcert.bandName} ja té un altre esdeveniment el mateix dia i hora: ${o.city || o.venue || o.id} (${o.status}).`);
       });
     }
 
-    const venueKey = normalize(fullConcert.venue);
-    const venueHistory = venueKey
-      ? fullConcerts
-          .filter((c) => c.id !== id && c.bandId === fullConcert.bandId && normalize(c.venue) === venueKey && c.status !== "cancel·lat")
-          .sort((a, b) => b.date.localeCompare(a.date))
-          .slice(0, 8)
-          .map((c) => {
-            const inv = invoices.find((i) => i.concertId === c.id) || null;
-            return {
-              date: c.date, amount: c.amount, invoiceState: inv?.state || null,
-              daysToPay: inv && inv.state === "pagada" ? Math.max(0, daysBetween(inv.issueDate, inv.dueDate)) : null,
-            };
-          })
-      : [];
+    const venueHistoryConcerts = await getVenueHistory(workspaceId, fullConcert.venue, id, { bandId: fullConcert.bandId });
+    const venueHistory = await Promise.all(
+      venueHistoryConcerts.map(async (c) => {
+        const inv = await getInvoiceForConcert(workspaceId, c.id);
+        return {
+          date: c.date, amount: c.amount, invoiceState: inv?.state || null,
+          daysToPay: inv && inv.state === "pagada" ? Math.max(0, daysBetween(inv.issueDate, inv.dueDate)) : null,
+        };
+      })
+    );
 
     return (
       <ConcertDetailView
         concert={fullConcert}
         band={band}
         bands={[band]}
-        invoice={invoices.find((i) => i.concertId === id) || null}
+        invoice={invoice}
         companyInfo={companyInfo}
         clientDetails={clientDetails}
         contacts={contacts}

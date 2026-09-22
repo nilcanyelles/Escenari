@@ -21,8 +21,11 @@ export default async function GrupPage() {
   const { workspaceId } = profile;
   // El gestor apareix sempre com a mànager a l'equip tècnic de tots els grups.
   await ensureManagerCrew(workspaceId, { clerkUserId: profile.clerkUserId, name: profile.name, email: profile.email });
+  // Els propers sempre hi entren igualment; l'historial que compten
+  // "concerts en total"/fets per persona queda a l'últim any (vegeu el
+  // mateix canvi a /concerts i /agencia).
   const [bands, concerts, selectedRaw] = await Promise.all([
-    getBands(workspaceId), getConcerts(workspaceId), getSelectedBandId(),
+    getBands(workspaceId), getConcerts(workspaceId, { monthsBack: 12 }), getSelectedBandId(),
   ]);
   const bandId = resolveBandScope(bands, selectedRaw);
 
