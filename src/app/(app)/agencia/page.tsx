@@ -41,7 +41,9 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
     groupCap(profile.workspaceId),
     getContacts(profile.workspaceId),
     getBands(profile.workspaceId),
-    getConcerts(profile.workspaceId),
+    // Només fa falta per comptar assistències recents — no tot l'historial
+    // (vegeu el mateix canvi a /concerts i /grup).
+    getConcerts(profile.workspaceId, { monthsBack: 12 }),
     getContactInteractions(profile.workspaceId),
   ]);
   const concertCountByPerson: Record<string, number> = {};

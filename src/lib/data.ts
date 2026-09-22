@@ -51,23 +51,9 @@ export async function getBands(workspaceId: string): Promise<Band[]> {
   }));
 }
 
-// "monthsBack": si es dona, només carrega concerts des d'aquests mesos
-// enrere ençà (els futurs sempre hi entren, siguin quan siguin) — la
-// pestanya "Concerts" ho fa servir per no haver de transmetre tot
-// l'historial (que pot pesar molts MB en un workspace amb anys d'ús) cada
-// vegada que s'hi entra; un botó "Carrega tot l'historial" hi demana la
-// llista sencera quan de veres cal buscar-hi enrere.
-export async function getConcerts(workspaceId: string, opts?: { monthsBack?: number }): Promise<Concert[]> {
-  const sql = opts?.monthsBack
-    ? "select * from concerts where workspace_id=$1 and date >= (current_date - ($2 || ' months')::interval) order by date desc"
-    : "select * from concerts where workspace_id=$1 order by date desc";
-  const params = opts?.monthsBack ? [workspaceId, opts.monthsBack] : [workspaceId];
-  const [{ rows: allRows }, scope] = await Promise.all([
-    db().query(sql, params),
-    visibleBandIds(),
-  ]);
-  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
-  return rows.map((r) => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapConcertRow(r: any): Concert {
+  return {
     id: r.id,
     date: toDateStr(r.date),
     time: r.time,
@@ -103,7 +89,66 @@ export async function getConcerts(workspaceId: string, opts?: { monthsBack?: num
     attToken: r.att_token || "",
     contract: r.contract || null,
     contractToken: r.contract_token || "",
-  }));
+  };
+}
+
+// "monthsBack": si es dona, només carrega concerts des d'aquests mesos
+// enrere ençà (els futurs sempre hi entren, siguin quan siguin) — la
+// pestanya "Concerts" ho fa servir per no haver de transmetre tot
+// l'historial (que pot pesar molts MB en un workspace amb anys d'ús) cada
+// vegada que s'hi entra; un botó "Carrega tot l'historial" hi demana la
+// llista sencera quan de veres cal buscar-hi enrere.
+export async function getConcerts(workspaceId: string, opts?: { monthsBack?: number }): Promise<Concert[]> {
+  const sql = opts?.monthsBack
+    ? "select * from concerts where workspace_id=$1 and date >= (current_date - ($2 || ' months')::interval) order by date desc"
+    : "select * from concerts where workspace_id=$1 order by date desc";
+  const params = opts?.monthsBack ? [workspaceId, opts.monthsBack] : [workspaceId];
+  const [{ rows: allRows }, scope] = await Promise.all([
+    db().query(sql, params),
+    visibleBandIds(),
+  ]);
+  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
+  return rows.map(mapConcertRow);
+}
+
+// Un sol concert per id — la fitxa el fa servir en comptes de demanar tot
+// l'historial del workspace només per fer-hi un .find() (vegeu getConcerts).
+export async function getConcertById(workspaceId: string, id: string): Promise<Concert | null> {
+  const [{ rows }, scope] = await Promise.all([
+    db().query("select * from concerts where id=$1 and workspace_id=$2", [id, workspaceId]),
+    visibleBandIds(),
+  ]);
+  const r = rows[0];
+  if (!r) return null;
+  if (scope && !scope.has(r.band_id)) return null;
+  return mapConcertRow(r);
+}
+
+// Altres esdeveniments del mateix dia i hora (per detectar coincidències de
+// convocatòria) — consulta acotada a aquella data, no tot l'historial.
+export async function getConcertsOnDate(workspaceId: string, date: string, excludeId: string): Promise<Concert[]> {
+  const [{ rows: allRows }, scope] = await Promise.all([
+    db().query("select * from concerts where workspace_id=$1 and date=$2 and id<>$3 and status<>'cancel·lat'", [workspaceId, date, excludeId]),
+    visibleBandIds(),
+  ]);
+  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
+  return rows.map(mapConcertRow);
+}
+
+// Historial d'un recinte concret (per a la fitxa del concert) — acotat pel
+// nom del recinte, no tot l'historial del workspace.
+export async function getVenueHistory(workspaceId: string, venue: string, excludeId: string, opts?: { bandId?: string; limit?: number }): Promise<Concert[]> {
+  const venueKey = venue.trim();
+  if (!venueKey) return [];
+  const limit = opts?.limit ?? 8;
+  const sql = opts?.bandId
+    ? `select * from concerts where workspace_id=$1 and lower(venue)=lower($2) and id<>$3 and status<>'cancel·lat' and band_id=$5
+       order by date desc limit $4`
+    : `select * from concerts where workspace_id=$1 and lower(venue)=lower($2) and id<>$3 and status<>'cancel·lat'
+       order by date desc limit $4`;
+  const params = opts?.bandId ? [workspaceId, venueKey, excludeId, limit, opts.bandId] : [workspaceId, venueKey, excludeId, limit];
+  const { rows } = await db().query(sql, params);
+  return rows.map(mapConcertRow);
 }
 
 export async function getClientDetails(workspaceId: string): Promise<Record<string, ClientDetails>> {
@@ -143,17 +188,9 @@ export async function getContacts(workspaceId: string): Promise<Contact[]> {
   }));
 }
 
-export async function getInvoices(workspaceId: string): Promise<Invoice[]> {
-  const [{ rows: allRows }, scope] = await Promise.all([
-    db().query(
-      `select i.*, c.band_id from invoices i left join concerts c on c.id = i.concert_id
-       where i.workspace_id=$1 order by i.issue_date desc`,
-      [workspaceId]
-    ),
-    visibleBandIds(),
-  ]);
-  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
-  return rows.map((r) => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapInvoiceRow(r: any): Invoice {
+  return {
     id: r.id,
     concertId: r.concert_id,
     client: r.client,
@@ -168,5 +205,25 @@ export async function getInvoices(workspaceId: string): Promise<Invoice[]> {
     depositAmount: r.deposit_amount || 0,
     depositPaid: !!r.deposit_paid,
     hash: r.hash || "",
-  }));
+  };
+}
+
+// La factura d'UN concert (com a molt n'hi ha una, concert_id és únic) —
+// evita demanar totes les factures del workspace per trobar-ne una.
+export async function getInvoiceForConcert(workspaceId: string, concertId: string): Promise<Invoice | null> {
+  const { rows } = await db().query("select * from invoices where workspace_id=$1 and concert_id=$2", [workspaceId, concertId]);
+  return rows[0] ? mapInvoiceRow(rows[0]) : null;
+}
+
+export async function getInvoices(workspaceId: string): Promise<Invoice[]> {
+  const [{ rows: allRows }, scope] = await Promise.all([
+    db().query(
+      `select i.*, c.band_id from invoices i left join concerts c on c.id = i.concert_id
+       where i.workspace_id=$1 order by i.issue_date desc`,
+      [workspaceId]
+    ),
+    visibleBandIds(),
+  ]);
+  const rows = scope ? allRows.filter((r) => scope.has(r.band_id)) : allRows;
+  return rows.map(mapInvoiceRow);
 }

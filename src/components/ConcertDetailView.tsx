@@ -304,7 +304,7 @@ function rsSectionTracking(c: Concert, section: RsSection): { filled: string[]; 
   } else if (section === "schedule") {
     withLiveConcertStart(rs.schedule, c.exactTime).forEach((it) => {
       if (!it.phase) return;
-      (it.start && it.end ? filled : missing).push("Horari: " + it.phase);
+      (it.start ? filled : missing).push("Horari: " + it.phase);
     });
   } else if (section === "hospitalitat") {
     // Un "sí"/"no" ja marcat, o un contrarider "aprovat", ja compten com a
