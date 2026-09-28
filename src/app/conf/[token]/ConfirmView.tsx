@@ -111,6 +111,11 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
   const [selected, setSelected] = useState<string>(() =>
     members.some((m) => m.name === preselect) ? preselect : members.find((m) => m.isMe)?.name || ""
   );
+  // Primer de tot es veu només la informació del dia (pòster + horaris) i
+  // l'assistència de tothom, en lectura — el formulari de "qui ets/marca la
+  // teva assistència" queda amagat rere aquest botó, tret que vinguis d'un
+  // redirect de sign-in/sign-up (preselect), on cal deixar-lo obert.
+  const [showConfirm, setShowConfirm] = useState<boolean>(() => !!preselect);
   // Respostes per concert i membre — còpia local per pintar-les a l'instant.
   const [answers, setAnswers] = useState<Record<string, Record<string, "yes" | "no" | "potser">>>(() => {
     const out: Record<string, Record<string, "yes" | "no" | "potser">> = {};
@@ -413,14 +418,17 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
   }
 
   // Assistència del dia en format llista (nom, foto, instruments, si ve o
-  // no, i el suplent si n'hi ha) — primer bloc dels "Detalls del dia",
-  // abans de la resta d'informació (horaris, contactes...) de DiaBody.
+  // no, i el suplent si n'hi ha) — va després de DiaBody: el primer que es
+  // veu de l'enllaç ha de ser la informació del dia (horaris, lloc,
+  // contactes...), no la llista d'assistència.
   function renderAttendanceList(c: Concert) {
+    const attExcluded = c.convocatoriaExcluded || {};
+    const convokedMembers = members.filter((m) => !attExcluded[m.name]);
     return (
       <div className="dia-card">
         <div className="dia-card-title">Assistència</div>
         <div className="cfm-att-list">
-          {members.map((m) => {
+          {convokedMembers.map((m) => {
             const a = (c.attendance || {})[m.name];
             const subName = a === "no" ? (c.substitutes || {})[m.name] : "";
             return (
@@ -441,7 +449,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
               </div>
             );
           })}
-          {members.length === 0 && <span className="t-dim" style={{ fontSize: 13 }}>Sense formació assignada.</span>}
+          {convokedMembers.length === 0 && <span className="t-dim" style={{ fontSize: 13 }}>Sense formació assignada.</span>}
         </div>
       </div>
     );
@@ -468,12 +476,14 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
 
         {one && (
           <div className="dia" style={{ padding: 0, margin: 0, maxWidth: "none" }}>
-            {renderAttendanceList(one)}
             <DiaBody concert={one} band={diaBand} linkedNames={linkedNames} hideQuiVe />
+            {renderAttendanceList(one)}
           </div>
         )}
 
-        {!sel ? (
+        {!showConfirm ? (
+          <button type="button" className="btn-outline cfm-change-att-btn" onClick={() => setShowConfirm(true)}>Canvia la teva assistència</button>
+        ) : !sel ? (
           <>
             <div className="cfm-question">Qui ets? Marca&apos;t per confirmar la teva assistència.</div>
             <div className="cfm-members">

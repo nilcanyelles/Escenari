@@ -29,7 +29,8 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
   const [saving, setSaving] = useState(false);
   const saveTimer = useRef<number | null>(null);
 
-  const people = [...(band?.members || []), ...(band?.crew || [])];
+  const attExcluded = concert.convocatoriaExcluded || {};
+  const people = [...(band?.members || []), ...(band?.crew || [])].filter((p) => !attExcluded[p.name]);
   const backups = band?.backups || [];
 
   function persist(att: Record<string, string>, subs: Record<string, string>, debounce: boolean, subConfirmed: Record<string, boolean> = substituteConfirmed) {

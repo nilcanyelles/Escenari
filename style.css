@@ -5983,6 +5983,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cfm-card > .cd-poster { margin-bottom: 0; }
 .cfm-poster-logo { width: 44px; height: 44px; border-radius: 12px; object-fit: cover; margin: 0 auto 12px; display: block; }
 .cfm-question { font-size: 14px; font-weight: 600; text-align: center; }
+.cfm-change-att-btn { width: 100%; text-align: center; }
 .cfm-members { display: flex; flex-direction: column; gap: 8px; }
 .cfm-member {
   display: flex; align-items: center; gap: 12px;

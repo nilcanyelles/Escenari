@@ -54,7 +54,8 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
   const selectedSetlist = setlists.find((s) => s.id === setlistId) || null;
   const accent = band?.color1 || "#8b7bff";
   const sc = statusColors(concert.status);
-  const members = band?.members || [];
+  const attExcluded = concert.convocatoriaExcluded || {};
+  const members = (band?.members || []).filter((m) => !attExcluded[m.name]);
   const attendance = concert.attendance || {};
   const rsPct = rsCompletionPercent(concert);
   const isFuture = concert.date >= today;
