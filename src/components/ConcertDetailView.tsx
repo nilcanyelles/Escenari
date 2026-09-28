@@ -609,6 +609,7 @@ export default function ConcertDetailView({
   const agencyAssumesExpenses = concert.agencyAssumesExpenses !== false; // criteri antic per a les despeses sense "paidBy"
   const [expenseForm, setExpenseForm] = useState<{ title: string; amount: string; payer: ExpensePayer }>({ title: "", amount: "", payer: "ambdos" });
   const [expenseSaving, setExpenseSaving] = useState(false);
+  const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const expenseSplit = splitExpenses(expenseList, agencyAssumesExpenses);
   // Cost real del bolo: tot menys el que paga algú altre.
   const totalExpenses = expenseSplit.agencia + expenseSplit.grup + expenseSplit.ambdos;
@@ -937,18 +938,37 @@ export default function ConcertDetailView({
   }
 
   // ---- Repartiment ----
-  const attendingNames = useMemo(() => {
-    const names: string[] = [];
-    members.forEach((m) => {
-      if (attendance[m.name] === "no") {
-        const sub = substitutes[m.name];
-        if (sub) names.push(sub);
-      } else {
-        names.push(m.name);
-      }
-    });
-    return names;
-  }, [members, attendance, substitutes]);
+  // Només hi entren els convocats a aquest bolo (ni els exclosos de la
+  // convocatòria ni els qui han dit que no sense tenir suplent). Si algú fa
+  // doble paper (músic i crew alhora), hi surt un sol cop amb tots els seus
+  // rols junts en comptes de repetit; si el substitueix un suplent, el
+  // suplent hi entra amb l'instrument/càrrec de qui substitueix.
+  const bandPersonInfo = useMemo(() => {
+    const order: string[] = [];
+    const roleLabelsByName: Record<string, string[]> = {};
+    const addEntry = (name: string, roleLabel: string) => {
+      if (!roleLabelsByName[name]) { roleLabelsByName[name] = []; order.push(name); }
+      if (roleLabel && !roleLabelsByName[name].includes(roleLabel)) roleLabelsByName[name].push(roleLabel);
+    };
+    const process = (list: { name: string; role: string; instruments?: string[] }[]) => {
+      list.forEach((m) => {
+        if (convocatoriaExcluded[m.name]) return;
+        const roleLabel = m.instruments?.length ? m.instruments.join(", ") : m.role || "";
+        if (attendance[m.name] === "no") {
+          const sub = substitutes[m.name];
+          if (sub) {
+            addEntry(sub, roleLabel);
+            addEntry(sub, `substitut de ${m.name}`);
+          }
+        } else {
+          addEntry(m.name, roleLabel);
+        }
+      });
+    };
+    process(members);
+    process(crew);
+    return { order, roleLabelsByName };
+  }, [members, crew, attendance, substitutes, convocatoriaExcluded]);
 
   const amountNum = parseInt(cf.amount, 10) || 0;
   // Base de la comissió de l'agència: el caixet menys les despeses
@@ -983,14 +1003,9 @@ export default function ConcertDetailView({
   // quedi (bandPool) és el 100% que es reparteixen entre ells — els seus %
   // sempre sumen 100% entre ells mateixos, no es dilueixen amb el de
   // l'agència.
-  const bandNames = [...attendingNames, ...crew.map((m) => m.name)];
+  const bandNames = bandPersonInfo.order;
   const bandPool = Math.max(0, sharedNet - agencyAmt - expenseSplit.grup);
   const bandTotal = bandNames.reduce((s, n) => s + (payouts[n] || 0), 0);
-  // Instrument/càrrec de cadascú, al costat del nom (els substituts, que no
-  // són cap Person registrat del grup, senzillament no en mostren cap).
-  const payoutPersonByName: Record<string, { role: string; instruments?: string[] }> = {};
-  members.forEach((m) => { payoutPersonByName[m.name] = m; });
-  crew.forEach((m) => { payoutPersonByName[m.name] = m; });
 
   // Editar l'import a mà de l'agència en realitat fixa un nou % (el que
   // representi aquell import sobre la base vigent) — mai queda com un
@@ -2032,12 +2047,12 @@ export default function ConcertDetailView({
                   >
                     {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>{EXPENSE_PAYER_LABELS[k]}</option>)}
                   </select>
-                  <span style={{ fontSize: 13 }} className={payer === "altre" ? "t-dim" : ""}>{formatCurrency(t.amount)}</span>
+                  <span className={"cd-expense-amount" + (payer === "altre" ? " t-dim" : "")}>{formatCurrency(t.amount)}</span>
                   <button type="button" className="row-delete-btn" title="Elimina la despesa" onClick={() => removeExpense(t.id)}>✕</button>
                 </div>
               );
             })}
-            <div className="cd-payout-total">
+            <div className="cd-payout-total cd-expense-total">
               <span>Total despeses del bolo</span>
               <span>{formatCurrency(totalExpenses)}</span>
             </div>
@@ -2046,27 +2061,32 @@ export default function ConcertDetailView({
             )}
           </div>
         )}
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-          <input
-            type="text" className="field-input compact-field" style={{ width: 180 }}
-            placeholder="Benzina, dietes…"
-            value={expenseForm.title}
-            onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
-          />
-          <input
-            type="number" min={0} className="field-input compact-field cd-payout-input" style={{ width: 100 }}
-            placeholder="import €"
-            value={expenseForm.amount}
-            onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-          />
-          <select
-            className="field-input compact-field cd-expense-payer" value={expenseForm.payer} title="Qui es fa càrrec d'aquesta despesa"
-            onChange={(e) => setExpenseForm({ ...expenseForm, payer: e.target.value as ExpensePayer })}
-          >
-            {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>A càrrec de: {EXPENSE_PAYER_LABELS[k]}</option>)}
-          </select>
-          <button type="button" className="btn-outline" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>+ Afegeix despesa</button>
-        </div>
+        {expenseFormOpen ? (
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input
+              type="text" className="field-input compact-field" style={{ width: 180 }}
+              placeholder="Benzina, dietes…" autoFocus
+              value={expenseForm.title}
+              onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
+            />
+            <input
+              type="number" min={0} className="field-input compact-field cd-payout-input" style={{ width: 100 }}
+              placeholder="import €"
+              value={expenseForm.amount}
+              onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+            />
+            <select
+              className="field-input compact-field cd-expense-payer" value={expenseForm.payer} title="Qui es fa càrrec d'aquesta despesa"
+              onChange={(e) => setExpenseForm({ ...expenseForm, payer: e.target.value as ExpensePayer })}
+            >
+              {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>A càrrec de: {EXPENSE_PAYER_LABELS[k]}</option>)}
+            </select>
+            <button type="button" className="btn-outline" onClick={() => setExpenseFormOpen(false)}>Cancel·la</button>
+            <button type="button" className="btn-save" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>Afegeix</button>
+          </div>
+        ) : (
+          <button type="button" className="btn-outline" onClick={() => setExpenseFormOpen(true)}>+ Afegeix despesa</button>
+        )}
         <div className="t-dim" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
           <strong>Agència</strong>: es descompta de la seva comissió · <strong>Grup</strong>: del repartiment de músics i crew ·{" "}
           <strong>Agència i grup</strong>: del caixet, abans de calcular res · <strong>Altres</strong>: la paga algú altre (promotor, sala…) i no compta.
@@ -2168,8 +2188,7 @@ export default function ConcertDetailView({
               />
               <div className="cd-payout-list" style={{ flex: 1, minWidth: 260 }}>
                 {bandNames.map((n, i) => {
-                  const person = payoutPersonByName[n];
-                  const roleLabel = person?.instruments?.length ? person.instruments.join(", ") : person?.role || "";
+                  const roleLabel = (bandPersonInfo.roleLabelsByName[n] || []).join(" · ");
                   const color = `oklch(0.68 0.16 ${(i * 47 + 250) % 360})`;
                   return (
                     <div key={n} className="cd-payout-row">
