@@ -5239,7 +5239,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .sp-title-wrap { display: flex; flex-direction: column; min-width: 0; justify-content: center; }
 .sp-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
-.sp-title { flex: 0 1 auto; min-width: 0; max-width: 100%; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Amplada fixa (no s'ajusta a la llargada del títol) perquè les etiquetes
+   de totes les files comencin sempre al mateix punt, alineades en columna. */
+.sp-title { flex: 0 1 200px; min-width: 100px; max-width: 200px; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-row.playing .sp-title { color: var(--accent-text); }
 .sp-artist { font-size: 11.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-file-count { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; }
