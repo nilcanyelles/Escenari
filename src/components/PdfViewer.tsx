@@ -8,7 +8,7 @@
 // quan la partitura és vertical i té més d'una pàgina.
 
 import { useEffect, useRef, useState } from "react";
-import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist";
+import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const ZOOM_STEP = 1.15;
 // Ritmes d'autoscroll, en píxels per segon.
@@ -123,7 +123,11 @@ export default function PdfViewer({ url, dark, onEdge }: {
     const taskRef: { current: { destroy: () => Promise<void> } | null } = { current: null };
     (async () => {
       try {
-        const pdfjsLib = await import("pdfjs-dist");
+        // Compilació "legacy" (no la moderna, ESM pur): el worker modern
+        // s'arrenca com a mòdul ES i en tauletes/Safaris més vells això
+        // falla en silenci — la partitura es queda sense carregar mai.
+        // La legacy porta els pedaços de compatibilitat necessaris.
+        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
         // Fitxer estàtic servit tal qual des de /public — més fiable que fer
         // que el bundler resolgui l'URL del worker (amb next/webpack de
         // vegades no l'acaba servint bé i el PDF no arriba a carregar mai).
