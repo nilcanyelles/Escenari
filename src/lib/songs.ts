@@ -59,7 +59,7 @@ function mapSongRow(r: Record<string, unknown>): Song {
 }
 
 export async function getSongs(bandId: string): Promise<Song[]> {
-  const { rows } = await db().query(`${SONG_SELECT} where s.band_id=$1 group by s.id order by lower(s.title)`, [bandId]);
+  const { rows } = await db().query(`${SONG_SELECT} where s.band_id=$1 group by s.id order by s.sort_order, lower(s.title)`, [bandId]);
   return rows.map(mapSongRow);
 }
 

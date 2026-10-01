@@ -79,6 +79,7 @@ export type SaveSongInput = {
   lyrics: string;
   coverUrl?: string;
   instruments?: string[];
+  tags?: string[];
 };
 
 export async function saveSongAction(input: SaveSongInput): Promise<{ id: string }> {
@@ -88,25 +89,41 @@ export async function saveSongAction(input: SaveSongInput): Promise<{ id: string
   const values = [
     (input.title || "Sense títol").trim(), input.artist || "", input.tempo || 0, input.songKey || "",
     input.duration || "", input.notes || "", input.lyrics || "", input.coverUrl || "",
-    JSON.stringify(input.instruments || []),
+    JSON.stringify(input.instruments || []), JSON.stringify((input.tags || []).map((t) => t.trim()).filter(Boolean)),
   ];
   if (input.id) {
     await pool.query(
-      `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7, cover_url=$8, instruments=$9
-       where id=$10 and ($11::text is null or band_id=$11::text)`,
+      `update songs set title=$1, artist=$2, tempo=$3, song_key=$4, duration=$5, notes=$6, lyrics=$7, cover_url=$8, instruments=$9, tags=$10
+       where id=$11 and ($12::text is null or band_id=$12::text)`,
       [...values, input.id, bandId]
     );
     revalidateSongs(bandId);
     return { id: input.id };
   }
   const id = "sg" + Date.now() + Math.floor(Math.random() * 1000);
+  // Les cançons noves de grup van al final del repertori (les de biblioteca
+  // personal no tenen ordre manual: sempre a 0, ordenades per títol).
+  const nextOrder = bandId
+    ? (await pool.query("select coalesce(max(sort_order),-1)+1 as next from songs where band_id=$1", [bandId])).rows[0].next
+    : 0;
   await pool.query(
-    `insert into songs (id, workspace_id, band_id, owner_clerk_user_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url, instruments)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [id, workspaceId, bandId, bandId ? null : ownerId, ...values]
+    `insert into songs (id, workspace_id, band_id, owner_clerk_user_id, title, artist, tempo, song_key, duration, notes, lyrics, cover_url, instruments, tags, sort_order)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+    [id, workspaceId, bandId, bandId ? null : ownerId, ...values, nextOrder]
   );
   revalidateSongs(bandId);
   return { id };
+}
+
+// Reordenar el repertori (arrossegar i deixar anar): l'ordre nou és la
+// llista completa d'ids del grup, ja en l'ordre desitjat.
+export async function reorderSongsAction(bandId: string, orderedIds: string[]): Promise<void> {
+  await requireBandAccess(bandId);
+  const pool = db();
+  await Promise.all(orderedIds.map((id, i) =>
+    pool.query("update songs set sort_order=$1 where id=$2 and band_id=$3", [i, id, bandId])
+  ));
+  revalidateSongs(bandId);
 }
 
 // ---------- Autocompletat amb APIs obertes ----------

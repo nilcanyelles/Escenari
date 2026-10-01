@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackLink from "@/components/BackLink";
-import type { Song } from "@/lib/songs";
+import type { Song, SongFile } from "@/lib/songs";
 import { convertChordLyrics } from "@/lib/chords-detect";
-import { instrumentIconFor } from "@/lib/tags";
+import { instrumentIconFor, tagColors, instrumentBaseName, sortInstrumentInstances } from "@/lib/tags";
 import { INSTRUMENT_CATEGORIES } from "@/lib/instruments";
 import { InstrumentIcon } from "@/components/InstrumentPicker";
 import { normalize } from "@/lib/text";
@@ -50,18 +50,14 @@ const ALL_VOICES_INS = "Totes les veus";
 const BACKING_TRACK_INS = "Backing track";
 const BACKING_TRACK_LABEL = "Àudios";
 
-// "Saxofon tenor 2" -> "Saxofon tenor" (per agrupar instàncies del mateix instrument).
-function instrumentBaseName(s: string): string {
-  return s.replace(/\s+\d+$/, "").trim();
-}
-
-export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor, bandInstruments, backHref }: {
+export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor, bandInstruments, existingTags, backHref }: {
   song: Song;
   bandId: string;
   bandName: string;
   bandLogo: string;
   bandColor: string;
   bandInstruments: string[];
+  existingTags: string[];
   backHref: string;
 }) {
   const router = useRouter();
@@ -75,9 +71,32 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
     lyrics: song.lyrics,
     coverUrl: song.coverUrl,
   });
+  const [tags, setTags] = useState<string[]>(song.tags || []);
+  const [tagInput, setTagInput] = useState("");
+  function addTag() {
+    const t = tagInput.trim();
+    if (!t) return;
+    setTags((prev) => (prev.some((x) => x.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t]));
+    setTagInput("");
+  }
+  function removeTag(t: string) {
+    setTags((prev) => prev.filter((x) => x !== t));
+  }
+  function pickTagSuggestion(t: string) {
+    setTags((prev) => (prev.some((x) => x.toLowerCase() === t.toLowerCase()) ? prev : [...prev, t]));
+    setTagInput("");
+  }
+  const tagSuggestions = existingTags
+    .filter((t) => !tags.some((x) => x.toLowerCase() === t.toLowerCase()))
+    .filter((t) => !tagInput.trim() || normalize(t).includes(normalize(tagInput.trim())))
+    .slice(0, 6);
   // Els instruments propis del grup surten preseleccionats de bon
   // començament (només quan la cançó encara no en té cap de desat).
-  const [instruments, setInstruments] = useState<string[]>(song.instruments && song.instruments.length ? song.instruments : bandInstruments);
+  // Sempre agrupats (Clarinet 1 i Clarinet 2 un darrere l'altre) — així es
+  // manté així a tot arreu on es llegeixi song.instruments.
+  const [instruments, setInstruments] = useState<string[]>(
+    sortInstrumentInstances(song.instruments && song.instruments.length ? song.instruments : bandInstruments, (x) => x)
+  );
   // La caixa de lletra i acords només té sentit si algú hi canta.
   const hasVoice = instruments.some((x) => {
     const base = instrumentBaseName(x).toLowerCase();
@@ -111,14 +130,14 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
       await saveSongAction({
         id: song.id, bandId, title: form.title, artist: form.artist,
         tempo: parseInt(form.tempo, 10) || 0, songKey: form.songKey, duration: form.duration,
-        notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments,
+        notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments, tags,
       });
       router.refresh();
       setSaving(false);
     }, 700);
     return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form, instruments]);
+  }, [form, instruments, tags]);
 
   async function handleSaveAndExit() {
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
@@ -126,7 +145,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
     await saveSongAction({
       id: song.id, bandId, title: form.title, artist: form.artist,
       tempo: parseInt(form.tempo, 10) || 0, songKey: form.songKey, duration: form.duration,
-      notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments,
+      notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments, tags,
     });
     setSaving(false);
     router.push(backHref);
@@ -240,20 +259,25 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
     if (!base) return;
     setInstruments((prev) => {
       const matches = prev.filter((x) => instrumentBaseName(x).toLowerCase() === base.toLowerCase());
-      if (matches.length === 0) return prev.concat([base]);
-      if (matches.length === 1 && matches[0].toLowerCase() === base.toLowerCase()) {
+      let next: string[];
+      if (matches.length === 0) {
+        next = prev.concat([base]);
+      } else if (matches.length === 1 && matches[0].toLowerCase() === base.toLowerCase()) {
         const idx = prev.indexOf(matches[0]);
-        const next = prev.slice();
+        next = prev.slice();
         next[idx] = base + " 1";
         next.push(base + " 2");
-        return next;
+      } else {
+        let maxN = 0;
+        matches.forEach((m) => {
+          const mm = /\s+(\d+)$/.exec(m);
+          if (mm) maxN = Math.max(maxN, parseInt(mm[1], 10));
+        });
+        next = prev.concat([base + " " + (maxN + 1)]);
       }
-      let maxN = 0;
-      matches.forEach((m) => {
-        const mm = /\s+(\d+)$/.exec(m);
-        if (mm) maxN = Math.max(maxN, parseInt(mm[1], 10));
-      });
-      return prev.concat([base + " " + (maxN + 1)]);
+      // Torna a agrupar sempre: afegir una instància nova no ha de separar
+      // les que ja hi eren d'aquell mateix instrument.
+      return sortInstrumentInstances(next, (x) => x);
     });
   }
 
@@ -269,12 +293,50 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
       if (remaining.length === 1 && /\s+\d+$/.test(remaining[0])) {
         next[next.indexOf(remaining[0])] = base;
       }
-      return next;
+      return sortInstrumentInstances(next, (x) => x);
     });
   }
 
   const scoresByInstrument = (ins: string) => song.files.filter((f) => f.instrument.toLowerCase() === ins.toLowerCase());
   const backingFiles = scoresByInstrument(BACKING_TRACK_INS);
+
+  function fileRow(f: SongFile) {
+    return (
+      <div key={f.id} className="file-row">
+        <span className="file-icon">{f.mime.startsWith("audio") ? "🎧" : "📄"}</span>
+        <div className="file-row-main">
+          <a href={`/api/file/${f.id}`} target="_blank" rel="noreferrer" className="file-name">{f.name}</a>
+          {f.mime.startsWith("audio") && <audio controls preload="none" src={`/api/file/${f.id}`} className="file-audio" />}
+        </div>
+        <span className="t-dim" style={{ fontSize: 11 }}>{fmtSize(f.size)}</span>
+        <button type="button" className="row-delete-btn" onClick={async () => { await deleteFileAction(bandId, f.id); router.refresh(); }}>✕</button>
+      </div>
+    );
+  }
+
+  // Els documents d'una veu (o de "Totes les veus") no surten tots junts:
+  // es desclouen en dos blocs separats, partitures i àudios, encara que es
+  // pugin des del mateix botó.
+  function renderFileGroup(files: SongFile[]) {
+    const scoreFiles = files.filter((f) => !f.mime.startsWith("audio"));
+    const audioFiles = files.filter((f) => f.mime.startsWith("audio"));
+    return (
+      <>
+        {scoreFiles.length > 0 && (
+          <div className="ss-file-subgroup">
+            <div className="ss-file-subgroup-label">Partitures</div>
+            {scoreFiles.map(fileRow)}
+          </div>
+        )}
+        {audioFiles.length > 0 && (
+          <div className="ss-file-subgroup">
+            <div className="ss-file-subgroup-label">Àudios</div>
+            {audioFiles.map(fileRow)}
+          </div>
+        )}
+      </>
+    );
+  }
 
   // Cerca en viu dins del mateix menú de bombolles, en lloc d'un desplegable
   // natiu a part.
@@ -330,6 +392,40 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
           <label className="song-meta">Notes
             <textarea className="field-input rider-textarea" rows={2} value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
           </label>
+          <div className="song-meta">
+            Etiquetes
+            <div className="access-box-list" style={{ marginTop: 4 }}>
+              {tags.map((t) => {
+                const tc = tagColors(t);
+                return (
+                  <button key={t} type="button" className="access-chip active" style={{ background: tc.bg, color: tc.color, borderColor: "transparent" }} onClick={() => removeTag(t)} title="Elimina">
+                    {t} ✕
+                  </button>
+                );
+              })}
+              <span className="sp-tag-suggest-wrap">
+                <input
+                  className="field-input compact-field" style={{ width: 140 }}
+                  placeholder="+ Etiqueta…" value={tagInput}
+                  onChange={(e) => setTagInput(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addTag(); } }}
+                />
+                {tagInput.trim().length > 0 && tagSuggestions.length > 0 && (
+                  <div className="sp-tag-suggest-menu">
+                    {tagSuggestions.map((t) => {
+                      const tc = tagColors(t);
+                      return (
+                        <button key={t} type="button" className="sp-tag-suggest-item" onClick={() => pickTagSuggestion(t)}>
+                          <span className="sp-tag-suggest-dot" style={{ background: tc.color }} />
+                          {t}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Instruments d'aquesta cançó */}
@@ -449,17 +545,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
                   {uploading === ALL_VOICES_INS ? "Pujant…" : "+ Partitura"}
                 </button>
               </div>
-              {scoresByInstrument(ALL_VOICES_INS).map((f) => (
-                <div key={f.id} className="file-row">
-                  <span className="file-icon">{f.mime.startsWith("audio") ? "🎧" : "📄"}</span>
-                  <div className="file-row-main">
-                    <a href={`/api/file/${f.id}`} target="_blank" rel="noreferrer" className="file-name">{f.name}</a>
-                    {f.mime.startsWith("audio") && <audio controls preload="none" src={`/api/file/${f.id}`} className="file-audio" />}
-                  </div>
-                  <span className="t-dim" style={{ fontSize: 11 }}>{fmtSize(f.size)}</span>
-                  <button type="button" className="row-delete-btn" onClick={async () => { await deleteFileAction(bandId, f.id); router.refresh(); }}>✕</button>
-                </div>
-              ))}
+              {renderFileGroup(scoresByInstrument(ALL_VOICES_INS))}
             </div>
 
             {instruments.length === 0 ? (
@@ -477,17 +563,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
                         {uploading === ins ? "Pujant…" : "+ Partitura"}
                       </button>
                     </div>
-                    {scores.map((f) => (
-                      <div key={f.id} className="file-row">
-                        <span className="file-icon">{f.mime.startsWith("audio") ? "🎧" : "📄"}</span>
-                        <div className="file-row-main">
-                          <a href={`/api/file/${f.id}`} target="_blank" rel="noreferrer" className="file-name">{f.name}</a>
-                          {f.mime.startsWith("audio") && <audio controls preload="none" src={`/api/file/${f.id}`} className="file-audio" />}
-                        </div>
-                        <span className="t-dim" style={{ fontSize: 11 }}>{fmtSize(f.size)}</span>
-                        <button type="button" className="row-delete-btn" onClick={async () => { await deleteFileAction(bandId, f.id); router.refresh(); }}>✕</button>
-                      </div>
-                    ))}
+                    {renderFileGroup(scores)}
                   </div>
                 );
               })

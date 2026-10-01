@@ -2,9 +2,10 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import BackLink from "@/components/BackLink";
 import { LyricsView } from "@/components/SongsPanel";
-import { instrumentIconFor } from "@/lib/tags";
+import { instrumentIconFor, sortInstrumentInstances } from "@/lib/tags";
 import PdfViewer from "@/components/PdfViewer";
 import { setSetlistHighlightsAction } from "@/app/(app)/concerts/actions";
 // @ts-expect-error soundtouchjs no porta tipus TS
@@ -37,15 +38,40 @@ function StarIcon({ filled }: { filled: boolean }) {
   );
 }
 
+function FullscreenIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      {active ? (
+        <>
+          <path d="M8 3v3a2 2 0 0 1-2 2H3"></path>
+          <path d="M21 8h-3a2 2 0 0 1-2-2V3"></path>
+          <path d="M3 16h3a2 2 0 0 1 2 2v3"></path>
+          <path d="M16 21v-3a2 2 0 0 1 2-2h3"></path>
+        </>
+      ) : (
+        <>
+          <path d="M8 3H5a2 2 0 0 0-2 2v3"></path>
+          <path d="M21 8V5a2 2 0 0 0-2-2h-3"></path>
+          <path d="M3 16v3a2 2 0 0 0 2 2h3"></path>
+          <path d="M16 21h3a2 2 0 0 0 2-2v-3"></path>
+        </>
+      )}
+    </svg>
+  );
+}
+
 // Fila de la llista de cançons (menú inicial i barra lateral): igual a
 // totes dues, amb l'estrella de destacar a mà dreta del títol quan hi ha
 // un concert d'origen (Concert.setlistHighlights) i permís per tocar-la.
 // L'animació de "puja a dalt" la porta el pare (perform-list ref + FLIP),
 // per això registra la seva pròpia fila amb `rowRef`.
-function SongListRow({ song, originalIndex, active, disabled, disabledTitle, highlighted, canHighlight, onToggleStar, onClick, rowRef }: {
+function SongListRow({ song, originalIndex, active, disabled, disabledTitle, highlighted, canHighlight, onToggleStar, onClick, rowRef, warn }: {
   song: PerformSong; originalIndex: number; active?: boolean; disabled?: boolean; disabledTitle?: string; highlighted: boolean;
   canHighlight: boolean; onToggleStar: (title: string) => void; onClick: () => void;
   rowRef: (el: HTMLDivElement | null) => void;
+  // Avís de "cap partitura assignada" — surt penjat d'aquesta fila mateixa,
+  // no com un avís flotant genèric, perquè quedi clar de quina cançó és.
+  warn?: boolean;
 }) {
   return (
     <div ref={rowRef} className="perform-list-row">
@@ -63,6 +89,7 @@ function SongListRow({ song, originalIndex, active, disabled, disabledTitle, hig
           <StarIcon filled={highlighted} />
         </button>
       )}
+      {warn && <div className="perform-list-warn">Cap partitura assignada</div>}
     </div>
   );
 }
@@ -101,15 +128,47 @@ function fmtTime(secs: number): string {
 }
 
 export default function PerformView({
-  name, bandName, songs, backHref, skipIntro = false, concertId = null, initialHighlights = {}, canHighlight = false,
+  name, bandName, songs, backHref, skipIntro = false, initialIndex = 0, concertId = null, initialHighlights = {}, canHighlight = false,
 }: {
-  name: string; bandName: string; songs: PerformSong[]; backHref: string; skipIntro?: boolean;
+  name: string; bandName: string; songs: PerformSong[]; backHref: string; skipIntro?: boolean; initialIndex?: number;
   concertId?: string | null; initialHighlights?: Record<string, boolean>; canHighlight?: boolean;
 }) {
+  const router = useRouter();
   // Menú inicial: nom de la setlist, bombolles per triar la veu que
   // seguiràs, i la llista de cançons — clicar-ne una hi entra directament
-  // amb aquella veu ja preseleccionada (si hi és disponible). Amb una sola
-  // cançó (des de la biblioteca) s'entra directament a la cançó.
+  // amb aquella veu ja preseleccionada (si hi és disponible). En obrir una
+  // sola cançó (des del repertori o la biblioteca) s'entra directament a
+  // la cançó (initialIndex), amb la resta del repertori disponible al
+  // menú lateral per si es vol continuar amb una altra.
+  // Pantalla completa (API nativa del navegador) — sobretot útil per llegir
+  // la partitura o la lletra sense les barres del navegador ni del mòbil.
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+  function toggleFullscreen() {
+    if (document.fullscreenElement) document.exitFullscreen();
+    else document.documentElement.requestFullscreen().catch(() => { /* no disponible (p. ex. dins un iframe) */ });
+  }
+
+  // En triar una cançó sense cap partitura (des del menú inicial o de la
+  // llista lateral) no s'hi entra — es queda on érem i l'avís surt penjat
+  // de la fila mateixa que s'ha clicat, en comptes d'obrir una vista
+  // d'escenari buida. Per posició (originalIndex), no pel títol — diverses
+  // cançons noves poden compartir el mateix títol per defecte ("Nova
+  // cançó"), i per títol sortirien totes marcades alhora.
+  const [noScoreWarnIdx, setNoScoreWarnIdx] = useState<number | null>(null);
+  const noScoreTimerRef = useRef<number | null>(null);
+  function blockIfNoScore(s: PerformSong, songIdx: number): boolean {
+    if (s.scores.length > 0) return false;
+    setNoScoreWarnIdx(songIdx);
+    if (noScoreTimerRef.current) window.clearTimeout(noScoreTimerRef.current);
+    noScoreTimerRef.current = window.setTimeout(() => setNoScoreWarnIdx(null), 2200);
+    return true;
+  }
+
   const [showIntro, setShowIntro] = useState(!skipIntro);
   const [pickedInstrument, setPickedInstrument] = useState<string | null>(null);
   // Cada veu numerada (Clarinet 1, Clarinet 2…) surt com una opció separada
@@ -173,7 +232,7 @@ export default function PerformView({
     prevRectsRef.current = new Map();
   }, [orderedSongs]);
 
-  const [idx, setIdx] = useState(0);
+  const [idx, setIdx] = useState(() => Math.min(Math.max(0, initialIndex), Math.max(0, songs.length - 1)));
   const [semitones, setSemitones] = useState(0);
   const [autoScroll, setAutoScroll] = useState(false);
   const [speedIdx, setSpeedIdx] = useState(2);
@@ -224,9 +283,16 @@ export default function PerformView({
   const shiftPosRef = useRef(0);
   const [tracksOpen, setTracksOpen] = useState(false);
 
+  // Sempre agrupades per instrument (Clarinet 1 i Clarinet 2 juntes), a la
+  // tria de veu, a les bombolles compactes del visor i a l'índex que fa
+  // servir resolveScoreForSong — totes tres lligen d'aquesta mateixa font.
+  function scoresFor(s: PerformSong | null): PerformScore[] {
+    return sortInstrumentInstances(s?.scores || [], (sc) => sc.instrument);
+  }
+
   const song = songs[idx] || null;
   const tracks = song?.tracks || [];
-  const scores = song?.scores || [];
+  const scores = scoresFor(song);
   const [scoreIdx, setScoreIdx] = useState(0);
   const [scoreOpen, setScoreOpen] = useState(false);
   const [scoreDark, setScoreDark] = useState(false);
@@ -247,10 +313,12 @@ export default function PerformView({
   }
 
   // Tria quina partitura obrir per a una cançó donada: si es demana un
-  // instrument concret i hi és, l'obre directament; si no, torna al menú
-  // de tria de veu, preseleccionant "Totes les veus" si n'hi ha.
+  // instrument concret i hi és, l'obre directament; si no, obre de seguida
+  // "Totes les veus" (o, si la cançó no en té, la primera partitura que
+  // hi hagi) — només es torna al menú de tria si la cançó no té cap
+  // partitura.
   function resolveScoreForSong(songIdx: number, wanted: string | null) {
-    const sc = songs[songIdx]?.scores || [];
+    const sc = scoresFor(songs[songIdx] || null);
     if (wanted) {
       const matchIdx = findScoreMatch(sc, wanted);
       if (matchIdx >= 0) {
@@ -261,12 +329,13 @@ export default function PerformView({
     }
     const allIdx = sc.findIndex((x) => x.instrument === "Totes les veus");
     setScoreIdx(allIdx >= 0 ? allIdx : 0);
-    setScoreOpen(false);
+    setScoreOpen(sc.length > 0);
   }
 
-  // En canviar de cançó, torna a mostrar el menú de tria de veu (mai obre
-  // directament la partitura d'abans), tret que hi hagi un instrument
-  // pendent de continuar (arrossegant al límit, o triat al menú inicial).
+  // En canviar de cançó, obre de seguida la partitura per defecte (mai el
+  // menú de tria), tret que hi hagi un instrument pendent de continuar
+  // (arrossegant al límit, o triat al menú inicial) — llavors s'obre
+  // directament aquella veu si la cançó la té.
   useEffect(() => {
     const wanted = pendingInstrumentRef.current;
     pendingInstrumentRef.current = null;
@@ -678,8 +747,9 @@ export default function PerformView({
                     key={s.title} song={s} originalIndex={i} disabled={missing}
                     disabledTitle={missing ? `Aquesta cançó no té partitura de ${pickedInstrument}` : undefined}
                     highlighted={!!highlights[s.title]} canHighlight={canHighlight}
-                    onToggleStar={toggleHighlight} rowRef={registerRow(s.title)}
+                    onToggleStar={toggleHighlight} rowRef={registerRow(s.title)} warn={noScoreWarnIdx === i}
                     onClick={() => {
+                      if (blockIfNoScore(s, i)) return;
                       // Si ja hi érem (la cançó per defecte, idx 0), canviar
                       // l'índex al mateix valor no torna a disparar l'efecte
                       // que aplica l'instrument triat — cal fer-ho ara mateix.
@@ -756,7 +826,12 @@ export default function PerformView({
   // (també del visor de partitura).
   const mixerTab = tracks.length > 0 && (
     <button type="button" className={"perform-mixer-tab" + (mixerOpen ? " open" : "")} title="Mescla" onClick={() => setMixerOpen((v) => !v)}>
-      ‹
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <line x1="4" y1="21" x2="4" y2="14"></line><line x1="4" y1="10" x2="4" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="12"></line><line x1="12" y1="8" x2="12" y2="3"></line>
+        <line x1="20" y1="21" x2="20" y2="16"></line><line x1="20" y1="12" x2="20" y2="3"></line>
+        <line x1="1" y1="14" x2="7" y2="14"></line><line x1="9" y1="8" x2="15" y2="8"></line><line x1="17" y1="16" x2="23" y2="16"></line>
+      </svg>
     </button>
   );
 
@@ -768,6 +843,9 @@ export default function PerformView({
           {name} · {idx + 1}/{songs.length} ▾
         </button>
         <div className="perform-controls">
+          <button type="button" className="perform-ctl" title={isFullscreen ? "Surt de pantalla completa" : "Pantalla completa"} onClick={toggleFullscreen}>
+            <FullscreenIcon active={isFullscreen} />
+          </button>
           {!!song?.lyrics.trim() && (
             <div className={"perform-ctl perform-transpose perform-scroll-ctl" + (autoScroll ? " active" : "")}>
               <button type="button" title={speedIdx === 0 ? "Atura l'autoscroll" : "Redueix el ritme"}
@@ -843,8 +921,13 @@ export default function PerformView({
                 <SongListRow
                   key={s.title} song={s} originalIndex={i} active={i === idx}
                   highlighted={!!highlights[s.title]} canHighlight={canHighlight}
-                  onToggleStar={toggleHighlight} rowRef={registerRow(s.title)}
-                  onClick={() => { if (scoreOpen && curScore) pendingInstrumentRef.current = curScore.instrument; setIdx(i); setListOpen(false); setAutoScroll(false); if (scrollRef.current) scrollRef.current.scrollTop = 0; }}
+                  onToggleStar={toggleHighlight} rowRef={registerRow(s.title)} warn={noScoreWarnIdx === i}
+                  onClick={() => {
+                    if (blockIfNoScore(s, i)) return;
+                    if (scoreOpen && curScore) pendingInstrumentRef.current = curScore.instrument;
+                    setIdx(i); setListOpen(false); setAutoScroll(false);
+                    if (scrollRef.current) scrollRef.current.scrollTop = 0;
+                  }}
                 />
               ))}
             </div>
@@ -854,8 +937,7 @@ export default function PerformView({
       )}
 
       {mixerOpen && (
-        <div className="perform-mixer-overlay" onClick={() => setMixerOpen(false)}>
-          <div className="perform-mixer-panel" onClick={(e) => e.stopPropagation()}>
+          <div className="perform-mixer-panel">
             <div className="perform-mixer-head">
               <div className="perform-mixer-title">Mescla — {song?.title}</div>
               <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={() => setMixerOpen(false)}>✕</button>
@@ -956,7 +1038,6 @@ export default function PerformView({
             </div>
             )}
           </div>
-        </div>
       )}
 
       {scoreOpen && curScore && createPortal(
@@ -965,7 +1046,10 @@ export default function PerformView({
             <button type="button" className={"row-rs-btn" + (listOpen ? " active" : "")} title="Cançons de la setlist" aria-label="Cançons de la setlist" onClick={() => setListOpen((v) => !v)}>
               <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="14" y2="18"></line></svg>
             </button>
-            <button type="button" className="row-rs-btn" title="Torna a triar la veu" aria-label="Torna a triar la veu" onClick={() => setScoreOpen(false)}>✕</button>
+            <button type="button" className="row-rs-btn" title="Surt del mode escenari" aria-label="Surt del mode escenari" onClick={() => router.push(backHref)}>✕</button>
+            <button type="button" className="row-rs-btn" title={isFullscreen ? "Surt de pantalla completa" : "Pantalla completa"} aria-label={isFullscreen ? "Surt de pantalla completa" : "Pantalla completa"} onClick={toggleFullscreen}>
+              <FullscreenIcon active={isFullscreen} />
+            </button>
             <div className="perform-score-fs-spacer" />
             {scores.length > 1 && (
               <div className="perform-score-chips perform-score-chips-compact">

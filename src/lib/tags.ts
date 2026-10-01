@@ -24,6 +24,28 @@ export function instrumentsFor(p: { role: string; instruments?: string[] }): str
   return p.instruments && p.instruments.length ? p.instruments : splitInstruments(p.role);
 }
 
+// "Saxofon tenor 2" -> "Saxofon tenor" (per agrupar instàncies numerades
+// del mateix instrument arreu — cançons, partitures, tria de veu...).
+export function instrumentBaseName(name: string): string {
+  return name.replace(/\s+\d+$/, "").trim();
+}
+
+// Reordena una llista perquè les instàncies d'un mateix instrument
+// (p. ex. "Clarinet 1" i "Clarinet 2") quedin sempre una darrere l'altra,
+// sense canviar l'ordre relatiu entre instruments diferents (es conserva
+// la posició on apareix cada instrument per primer cop).
+export function sortInstrumentInstances<T>(list: T[], nameOf: (item: T) => string): T[] {
+  const order: string[] = [];
+  const groups: Record<string, T[]> = {};
+  list.forEach((item) => {
+    const base = instrumentBaseName(nameOf(item));
+    if (!groups[base]) { groups[base] = []; order.push(base); }
+    groups[base].push(item);
+  });
+  const numSuffix = (s: string) => parseInt(/\s+(\d+)$/.exec(s)?.[1] || "0", 10);
+  return order.flatMap((base) => groups[base].slice().sort((a, b) => numSuffix(nameOf(a)) - numSuffix(nameOf(b))));
+}
+
 export const INSTRUMENT_PRESETS = [
   "Acordió cromàtic", "Acordió diatònic", "Arpa", "Baix elèctric", "Balalaica", "Bandúrria", "Banjo", "Bateria",
   "Bombardó", "Bombo", "Bongos", "Caixa de percussió", "Caixa de ritmes", "Caixó", "Campanes tubulars", "Castanyoles",
@@ -183,8 +205,11 @@ export const TAG_HUE: Record<string, number> = {
   "Rock": 290, "Pop": 340, "Indie": 250, "Electrònica": 200, "Jazz": 170, "Flamenc/Rumba": 25, "Hip-hop": 60, "Folk/Tradicional": 110,
 };
 
+// Els gèneres predefinits (TAG_HUE) tenen un to triat a mà; qualsevol altra
+// etiqueta (lliure, com les de les cançons) en treu un de derivat del seu
+// nom — estable sempre i diferent per a cada nom diferent.
 export function tagColors(tag: string): { color: string; bg: string } {
-  const h = TAG_HUE.hasOwnProperty(tag) ? TAG_HUE[tag] : 290;
+  const h = TAG_HUE.hasOwnProperty(tag) ? TAG_HUE[tag] : hashStr(tag) % 360;
   return { color: `oklch(0.72 0.14 ${h})`, bg: `oklch(0.72 0.14 ${h} / 0.16)` };
 }
 

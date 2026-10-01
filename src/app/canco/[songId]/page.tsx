@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
-import { getSong } from "@/lib/songs";
+import { getSong, getSongs, getPersonalSongs } from "@/lib/songs";
+import { uniqueTags } from "@/lib/tags";
 import SongStudio from "./SongStudio";
 
 export const dynamic = "force-dynamic";
@@ -54,6 +55,12 @@ export default async function SongStudioPage({ params }: { params: Promise<{ son
   }
   if (!allowed) notFound();
 
+  // Etiquetes ja fetes servir a la resta del repertori (o de la biblioteca
+  // personal, si és una cançó pròpia), per recomanar-les aquí també.
+  const existingTags = song.bandId
+    ? uniqueTags(await getSongs(song.bandId))
+    : uniqueTags(await getPersonalSongs(profile.clerkUserId));
+
   return (
     <SongStudio
       song={song}
@@ -62,6 +69,7 @@ export default async function SongStudioPage({ params }: { params: Promise<{ son
       bandLogo={bandLogo}
       bandColor={bandColor}
       bandInstruments={bandInstruments}
+      existingTags={existingTags}
       backHref={backHref}
     />
   );

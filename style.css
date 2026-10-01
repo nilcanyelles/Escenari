@@ -2760,7 +2760,10 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* Editor de rider */
 .rider-editor { max-width: 880px; width: min(880px, 96vw); max-height: 92vh; display: flex; flex-direction: column; }
-.setlist-editor { max-width: 1600px; width: 96vw; height: 96vh; max-height: 96vh; display: flex; flex-direction: column; }
+/* Dues classes (com ".modal.wide") perquè li guanyi en especificitat —
+   si no, el "width: 440px" de ".modal.wide" li seguia guanyant encara
+   que aquesta regla vingui després al full d'estils. */
+.modal.setlist-editor { width: 75vw; height: 96vh; max-height: 96vh; overflow: hidden; display: flex; flex-direction: column; }
 .rider-editor-body, .setlist-editor-body {
   flex: 1;
   min-height: 0;
@@ -2770,6 +2773,10 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   gap: 22px;
   padding: 4px 2px 10px;
 }
+/* El modal aprofita tota l'amplada de la pantalla, però el contingut es
+   queda centrat a una amplada còmoda de llegir — més ample no vol dir
+   que cada fila s'hagi d'estirar fins a la vora. */
+.setlist-editor-content { max-width: 1240px; width: 100%; margin: 0 auto; display: flex; flex-direction: column; gap: 16px; }
 .rider-name-input {
   flex: 1;
   background: transparent;
@@ -2805,7 +2812,6 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .rider-contact-cols { grid-template-columns: 28px 1fr 1.2fr 1fr 1.4fr 28px; }
 .rider-contact-draft-cols { grid-template-columns: 1fr 1.2fr 1fr 1.4fr 28px 28px; margin-top: 12px; }
-.setlist-cols { grid-template-columns: 3fr 1.2fr 28px; }
 
 /* Stage plot */
 .sp-wrap { display: flex; flex-direction: column; gap: 10px; }
@@ -2912,16 +2918,27 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* Setlist editor */
 .setlist-summary { display: flex; gap: 22px; font-size: 13px; color: var(--text-muted); }
-/* El bloc mànec+número i la casella del títol van enganxats, sense el gap
-   normal de la graella, perquè el títol comenci just al costat del número. */
-.setlist-title-cell { display: flex; align-items: center; gap: 6px; min-width: 0; }
-.setlist-title-cell .field-input { flex: 1; min-width: 0; }
+/* Mànec+número d'arrossegar, compartit amb les files reordenables del
+   rider (RiderStudio). */
 .setlist-order { display: flex; align-items: center; gap: 4px; flex: none; }
 .setlist-num { font-size: 12px; color: var(--text-faint); width: 18px; text-align: right; }
-.setlist-num-head { display: inline-block; width: 18px; margin-right: 4px; }
 .setlist-drag-handle { color: var(--text-ghost); font-size: 14px; cursor: grab; line-height: 1; user-select: none; touch-action: none; }
 .setlist-drag-handle:hover { color: var(--text); }
 .setlist-drag-handle:active { cursor: grabbing; }
+.setlist-title-input {
+  all: unset; box-sizing: border-box; min-width: 60px; flex: 0 1 auto;
+  font-size: 14px; font-weight: 600; color: var(--text); cursor: text;
+  border-bottom: 1px solid transparent; padding-bottom: 1px;
+}
+.setlist-title-input:hover { border-bottom-color: var(--border-input); }
+.setlist-title-input:focus { border-bottom-color: var(--accent); }
+.setlist-title-input::placeholder { color: var(--text-fainter); font-weight: 400; }
+.setlist-comment-input { width: 100%; }
+/* Bombolles d'etiqueta (per filtrar "Del repertori"): sempre amb el seu
+   color propi, com arreu — diferents de les bombolles de cançó (access-chip,
+   neutres) perquè no es confonguin. */
+.setlist-tag-filter-chip { border: none; cursor: pointer; font-family: inherit; transition: box-shadow 0.12s, filter 0.12s; }
+.setlist-tag-filter-chip:hover { filter: brightness(1.2); }
 .setlist-row-dragging { opacity: 0.4; }
 .setlist-row-dragover { opacity: 0.35; box-shadow: inset 0 2px 0 var(--accent); transition: opacity .1s; }
 
@@ -3654,7 +3671,14 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .perform-list-num { color: var(--text-ghost); font-size: 12px; min-width: 20px; }
 /* Fila d'una cançó (menú inicial i barra lateral): el botó de sempre +
    l'estrella de destacar-la, a la dreta del tot. */
-.perform-list-row { display: flex; align-items: center; gap: 2px; }
+.perform-list-row { position: relative; display: flex; align-items: center; gap: 2px; }
+.perform-list-warn {
+  position: absolute; top: calc(100% + 2px); left: 8px; z-index: 30;
+  background: oklch(0.22 0.02 258); color: var(--text); border: 1px solid var(--border-input);
+  border-radius: 8px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35); pointer-events: none;
+  animation: copy-toast-in .12s ease-out;
+}
 .perform-list-row .perform-list-item { flex: 1; min-width: 0; }
 .perform-list-title-on { font-weight: 700; color: oklch(0.86 0.15 80); }
 .perform-star-btn {
@@ -3874,47 +3898,55 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* Fletxeta fixa al centre-dreta de la pantalla per obrir/tancar la mescla. */
 .perform-mixer-tab {
-  position: fixed; top: 50%; right: 0; transform: translateY(-50%);
+  position: fixed; top: 70px; right: 0;
   width: 26px; height: 54px; border-radius: 10px 0 0 10px;
   border: 1px solid oklch(1 0 0 / 0.16); border-right: none;
   background: #14111f; color: var(--text-dim); font-size: 15px; cursor: pointer;
   display: flex; align-items: center; justify-content: center;
   z-index: 330; transition: color 0.15s, border-color 0.15s;
 }
-.perform-mixer-tab.open { color: white; border-color: var(--accent); transform: translateY(-50%) rotate(180deg); }
+.perform-mixer-tab.open { color: white; border-color: var(--accent); }
 
 /* Botó dins del menú de mescla, sota Master/Tempo/Pitch, per desplegar la
    llista de canals (plegada per defecte). */
 .perform-mixer-tracks-toggle {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   width: 100%; padding: 11px 12px; border-radius: 12px;
-  border: 1px solid oklch(1 0 0 / 0.14); background: oklch(1 0 0 / 0.03); color: var(--text-dim);
+  border: 1px solid oklch(1 0 0 / 0.14); background: oklch(0.22 0.02 258 / 0.95); color: var(--text-dim);
   font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
   font-family: inherit; cursor: pointer; transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 .perform-mixer-tracks-toggle:hover { color: white; border-color: oklch(1 0 0 / 0.28); }
-.perform-mixer-tracks-toggle.open { color: white; background: oklch(1 0 0 / 0.06); }
+.perform-mixer-tracks-toggle.open { color: white; background: oklch(0.27 0.01 258 / 0.95); }
 .perform-mixer-tracks-toggle-label { display: inline-flex; align-items: center; gap: 9px; }
 .perform-mixer-tracks-toggle-label svg { flex: none; opacity: 0.9; }
 .perform-mixer-tracks-toggle .perform-mixer-caret { font-size: 11px; transition: transform 0.15s; }
 .perform-mixer-tracks-toggle.open .perform-mixer-caret { transform: rotate(180deg); }
 
-.perform-mixer-overlay {
-  position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 340;
-  display: flex; justify-content: flex-end;
-}
 /* Reproductor a sota del visor de partitura a pantalla completa. */
 .perform-score-fs-audio { flex: none; background: #08070e; }
+/* Targeta flotant, no un menú lateral ni un modal: es pot seguir
+   interactuant amb la resta (play, la línia de l'àudio...) mentre està
+   obert — per això no ocupa tota l'alçada ni hi ha cap overlay que
+   bloquegi darrere. */
 .perform-mixer-panel {
-  width: min(360px, 92vw); height: 100%; background: #0e0c17; border-left: 1px solid oklch(1 0 0 / 0.1);
+  position: fixed; top: 70px; right: 16px; z-index: 340;
+  width: min(360px, 92vw); max-height: calc(100vh - 160px);
+  background: oklch(0.145 0.02 258 / 0.78);
+  -webkit-backdrop-filter: blur(16px) saturate(140%); backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid oklch(1 0 0 / 0.14); border-radius: 16px;
   display: flex; flex-direction: column; padding: 18px; gap: 18px; overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
   animation: performMixerIn 0.18s ease-out;
 }
 @keyframes performMixerIn { from { transform: translateX(24px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 .perform-mixer-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .perform-mixer-master {
   display: flex; align-items: center; gap: 10px; padding: 12px; margin-bottom: 4px;
-  background: oklch(0.75 0.16 55 / 0.14); border: 1px solid oklch(0.75 0.16 55 / 0.4); border-radius: 12px;
+  /* Opac de veritat (no com el fons del panell) — és un paràmetre que es
+     modifica, no ha de quedar-se translúcid ni desdibuixat. Gris neutre,
+     sense tenyir-se del color d'accent de la barra. */
+  background: oklch(0.26 0.01 258 / 0.98); border: 1px solid oklch(0.75 0.16 55 / 0.4); border-radius: 12px;
 }
 .perform-mixer-master-label { flex: none; font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; color: oklch(0.8 0.15 55); text-transform: uppercase; }
 .perform-mixer-master input[type="range"] { flex: 1; accent-color: oklch(0.75 0.16 55); }
@@ -5146,6 +5178,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 /* ============ Llista de cançons estil Spotify ============ */
 .sp-list { display: flex; flex-direction: column; }
 .sp-row {
+  position: relative;
   display: grid;
   grid-template-columns: 34px 44px minmax(0, 1fr) 130px 52px;
   align-items: center;
@@ -5154,9 +5187,22 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   border-radius: 10px;
   transition: background 0.15s;
 }
-.sp-row:has(.sp-actions) { grid-template-columns: 34px 44px minmax(0, 1fr) 130px 52px 34px; }
+.sp-empty-toast {
+  position: absolute; top: calc(100% - 2px); left: 90px; z-index: 30;
+  background: oklch(0.22 0.02 258); color: var(--text); border: 1px solid var(--border-input);
+  border-radius: 8px; padding: 6px 12px; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.35); pointer-events: none;
+  animation: copy-toast-in .12s ease-out;
+}
+.sp-row:has(.sp-actions) { grid-template-columns: 34px 44px minmax(0, 1fr) 130px 52px 62px; }
+/* Setlist editor: mateixa estètica de fila que el Repertori, però amb un
+   comentari editable en lloc de la columna To·BPM — calen les dues
+   classes perquè guanyi en especificitat a la regla ":has()" d'aquí dalt. */
+.sp-row.setlist-sp-row { grid-template-columns: 34px 44px minmax(0, 1fr) minmax(160px, 280px) 60px 34px; }
 .sp-row:not(.sp-head):hover { background: oklch(1 0 0 / 0.06); }
 .sp-row.playing { background: oklch(0.68 0.19 290 / 0.12); }
+.sp-row-dragging { opacity: 0.4; }
+.sp-drag-handle { cursor: grab; }
 .sp-head {
   font-size: 10.5px;
   text-transform: uppercase;
@@ -5166,7 +5212,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   border-radius: 0;
   margin-bottom: 4px;
 }
-.sp-idx { display: flex; justify-content: center; }
+.sp-idx { display: flex; align-items: center; justify-content: center; }
 .sp-num { font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .sp-play {
   width: 28px; height: 28px;
@@ -5191,13 +5237,50 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-size: 15px;
   flex-shrink: 0;
 }
-.sp-title-wrap { display: flex; flex-direction: column; min-width: 0; }
-.sp-title { font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-title-wrap { display: flex; flex-direction: column; min-width: 0; justify-content: center; }
+.sp-title-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+.sp-title { flex: 0 1 auto; min-width: 0; max-width: 100%; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-row.playing .sp-title { color: var(--accent-text); }
 .sp-artist { font-size: 11.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sp-file-count { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; }
+.sp-file-count svg { flex: none; opacity: 0.8; }
+.sp-tag-add-btn {
+  all: unset; cursor: pointer; box-sizing: border-box; flex: none;
+  width: 18px; height: 18px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 13px; line-height: 1; color: var(--text-fainter);
+  border: 1px dashed var(--border-input);
+}
+.sp-tag-add-btn:hover { color: var(--accent-text); border-color: var(--accent-text); }
+.sp-tag-inline-input { width: 120px; padding: 2px 8px; font-size: 12px; }
+.sp-tag-suggest-wrap { position: relative; display: inline-flex; }
+.sp-tag-suggest-menu {
+  position: absolute; top: calc(100% + 6px); left: 0; z-index: 41; min-width: 160px;
+  background: var(--bg-card); border: 1px solid var(--border-input); border-radius: 10px;
+  padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  box-shadow: 0 16px 40px -10px rgba(0,0,0,0.5);
+}
+.sp-tag-suggest-item {
+  all: unset; cursor: pointer; box-sizing: border-box; display: flex; align-items: center; gap: 8px;
+  padding: 7px 9px; border-radius: 6px; font-size: 12.5px; color: var(--text-dim); white-space: nowrap;
+}
+.sp-tag-suggest-item:hover { background: oklch(1 0 0 / 0.06); color: var(--text); }
+.sp-tag-suggest-dot { width: 7px; height: 7px; border-radius: 50%; flex: none; }
+.sp-tag-done-btn {
+  all: unset; cursor: pointer; box-sizing: border-box; flex: none;
+  font-size: 13px; font-weight: 700; color: var(--accent-text); padding: 0 2px;
+}
+.sp-tag-done-btn:hover { opacity: 0.75; }
 .sp-band-col { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-dur { font-size: 12px; color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
-.sp-actions { display: flex; justify-content: center; }
+.sp-actions { display: flex; justify-content: center; gap: 2px; }
+.row-edit-btn {
+  all: unset; cursor: pointer; box-sizing: border-box;
+  display: flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 7px; flex: none;
+  color: var(--text-fainter);
+}
+.row-edit-btn:hover, .row-edit-btn.active { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); }
 @media (max-width: 640px) {
   .sp-row, .sp-row:has(.sp-actions) { grid-template-columns: 30px 38px minmax(0, 1fr) 46px; }
   .sp-band-col { display: none; }
@@ -5440,6 +5523,8 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .ss-score-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .ss-score-ins { display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; }
 .ss-score-ins img { width: 17px; height: 17px; object-fit: contain; }
+.ss-file-subgroup { display: flex; flex-direction: column; gap: 6px; }
+.ss-file-subgroup-label { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-ghost); }
 .ss-audios-toggle {
   display: inline-flex; align-items: center; gap: 7px; font-size: 13px; font-weight: 600; color: var(--text);
   background: none; border: none; padding: 0; cursor: pointer; font-family: inherit;
