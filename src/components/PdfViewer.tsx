@@ -8,6 +8,7 @@
 // quan la partitura és vertical i té més d'una pàgina.
 
 import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@clerk/nextjs";
 import type { PDFDocumentProxy, PDFPageProxy } from "pdfjs-dist/legacy/build/pdf.mjs";
 
 const ZOOM_STEP = 1.15;
@@ -86,6 +87,7 @@ export default function PdfViewer({ url, dark, onEdge }: {
   dark?: boolean;
   onEdge?: (dir: -1 | 1) => void;
 }) {
+  const { getToken } = useAuth();
   const pagesRef = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [twoPage, setTwoPage] = useState(false);
@@ -132,12 +134,21 @@ export default function PdfViewer({ url, dark, onEdge }: {
         // que el bundler resolgui l'URL del worker (amb next/webpack de
         // vegades no l'acaba servint bé i el PDF no arriba a carregar mai).
         pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+        // Token de sessió fresc en comptes de confiar només en la galeta:
+        // pdf.js fa la seva pròpia petició fetch, al marge del cicle normal
+        // de refresc de Clerk — si la pestanya ha estat en segon pla una
+        // estona (molt habitual en tauletes), la galeta pot haver caducat
+        // just en aquell moment i la petició tornaria "No autoritzat".
+        const token = await getToken().catch(() => null);
         // disableRange/disableStream: Safari (sobretot iPadOS) té un bug
         // conegut amb les peticions per trossos (Range) que fa servir
         // pdf.js per defecte — es queda sense carregar mai cap partitura.
         // Baixant-lo sencer d'un sol cop (partitures normalment petites)
         // s'evita del tot aquell camí de codi.
-        const task = pdfjsLib.getDocument({ url, disableRange: true, disableStream: true, disableAutoFetch: true });
+        const task = pdfjsLib.getDocument({
+          url, disableRange: true, disableStream: true, disableAutoFetch: true,
+          httpHeaders: token ? { Authorization: `Bearer ${token}` } : undefined,
+        });
         taskRef.current = task;
         const d = await task.promise;
         if (cancelled) { d.cleanup(); task.destroy(); return; }
