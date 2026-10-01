@@ -132,7 +132,12 @@ export default function PdfViewer({ url, dark, onEdge }: {
         // que el bundler resolgui l'URL del worker (amb next/webpack de
         // vegades no l'acaba servint bé i el PDF no arriba a carregar mai).
         pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
-        const task = pdfjsLib.getDocument({ url });
+        // disableRange/disableStream: Safari (sobretot iPadOS) té un bug
+        // conegut amb les peticions per trossos (Range) que fa servir
+        // pdf.js per defecte — es queda sense carregar mai cap partitura.
+        // Baixant-lo sencer d'un sol cop (partitures normalment petites)
+        // s'evita del tot aquell camí de codi.
+        const task = pdfjsLib.getDocument({ url, disableRange: true, disableStream: true, disableAutoFetch: true });
         taskRef.current = task;
         const d = await task.promise;
         if (cancelled) { d.cleanup(); task.destroy(); return; }
