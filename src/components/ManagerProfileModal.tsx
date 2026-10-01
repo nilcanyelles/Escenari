@@ -34,16 +34,25 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
   async function handleSave() {
     setBusy(true);
     setError(null);
-    const fd = new FormData();
-    fd.set("role", form.role);
-    fd.set("whatsapp", form.whatsapp);
-    fd.set("phone", form.phone);
-    fd.set("email", form.email);
-    const f = fileRef.current?.files?.[0];
-    if (f) fd.set("photo", f);
-    const res = await saveManagerProfileAction(fd);
+    try {
+      const fd = new FormData();
+      fd.set("role", form.role);
+      fd.set("whatsapp", form.whatsapp);
+      fd.set("phone", form.phone);
+      fd.set("email", form.email);
+      const f = fileRef.current?.files?.[0];
+      if (f) fd.set("photo", f);
+      const res = await saveManagerProfileAction(fd);
+      if (!res.ok) { setBusy(false); setError(res.error || "No s'ha pogut desar"); return; }
+    } catch {
+      // Si el servidor triga massa (la foto és gran, o hi ha molts grups a
+      // sincronitzar) la crida pot acabar rebutjada en lloc de respondre
+      // net — sense aquest catch el botó es quedava a "Desant…" per sempre.
+      setBusy(false);
+      setError("No s'ha pogut desar — torna-ho a provar");
+      return;
+    }
     setBusy(false);
-    if (!res.ok) { setError(res.error || "No s'ha pogut desar"); return; }
     router.refresh();
     onClose();
   }

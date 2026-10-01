@@ -28,6 +28,13 @@ function kindOf(c: Concert): string {
   return c.kind && KIND_META[c.kind] ? c.kind : "bolo";
 }
 
+// Color de l'esdeveniment al calendari: el del seu tipus, tret que estigui
+// cancel·lat — llavors sempre vermell, per destacar-ho per sobre del tipus.
+const CANCELLED_META = { label: "Cancel·lat", color: "var(--red)", bg: "oklch(0.68 0.18 25 / 0.16)" };
+function colorOf(c: Concert): { label: string; color: string; bg: string } {
+  return c.status === "cancel·lat" ? CANCELLED_META : KIND_META[kindOf(c)];
+}
+
 function groupByDate(list: Concert[]) {
   const byDate: Record<string, Concert[]> = {};
   const dates: string[] = [];
@@ -161,7 +168,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
     let body: React.ReactNode;
     if (compact) {
       const counts: Record<string, number> = {};
-      evs.forEach((c) => { counts[kindOf(c)] = (counts[kindOf(c)] || 0) + 1; });
+      evs.forEach((c) => { if (c.status !== "cancel·lat") counts[kindOf(c)] = (counts[kindOf(c)] || 0) + 1; });
       body = (
         <div className="calx-compact">
           {KIND_ORDER.filter((k) => counts[k]).map((k) => (
@@ -175,19 +182,21 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
       body = (
         <div className="calx-evs">
           {evs.map((c) => {
-            const k = kindOf(c);
             const period = c.time ? timePeriodFor(c.time) : null;
+            const ec = colorOf(c);
             return (
               <button
                 key={c.id}
                 type="button"
                 className="calx-ev"
-                style={{ background: KIND_META[k].bg, color: KIND_META[k].color, ["--calx-bar" as string]: KIND_META[k].color }}
+                style={{ background: ec.bg, color: ec.color, ["--calx-bar" as string]: ec.color }}
                 title={`${c.bandName} · ${c.city || c.venue || "—"}${c.time ? ` · ${c.time}h` : ""}`}
                 onClick={(e) => { e.stopPropagation(); router.push(`${detailBase}/${c.id}`); }}
               >
                 <span className="calx-ev-text">
-                  {kindOf(c) !== "bolo"
+                  {kindOf(c) === "reunio"
+                    ? (c.festaEntitat || KIND_META.reunio.label)
+                    : kindOf(c) !== "bolo"
                     ? KIND_META[kindOf(c)].label + (c.festaEntitat && normalize(c.festaEntitat) !== normalize(KIND_META[kindOf(c)].label) ? ` · ${c.festaEntitat}` : "")
                     : (c.city || c.venue || c.bandName).split(",")[0]}
                 </span>
@@ -255,12 +264,11 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
           </div>
           <div className="upcoming-day-card-concerts">
             {(byDate[date] || []).map((c) => {
-              const k = kindOf(c);
               return (
                 <div key={c.id} className="upcoming-concert-row clickable" onClick={() => router.push(`${detailBase}/${c.id}`)}>
                   <div className="upcoming-concert-text">
                     <span className="upcoming-concert-band">
-                      <span className="cal-day-dot" style={{ background: KIND_META[k].color, marginRight: 6, display: "inline-block" }}></span>
+                      <span className="cal-day-dot" style={{ background: colorOf(c).color, marginRight: 6, display: "inline-block" }}></span>
                       {c.bandName}
                     </span>
                     <div className="upcoming-concert-place">{c.time}h · {c.venue}{c.city ? `, ${c.city}` : ""}</div>
@@ -404,7 +412,7 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
                   const mCells: (number | null)[] = [];
                   for (let i = 0; i < off; i++) mCells.push(null);
                   for (let d = 1; d <= dim; d++) mCells.push(d);
-                  const monthCount = calConcerts.filter((c) => c.date.slice(0, 7) === `${y}-${pad2(mi + 1)}`).length;
+                  const monthCount = calConcerts.filter((c) => c.date.slice(0, 7) === `${y}-${pad2(mi + 1)}` && c.status !== "cancel·lat").length;
                   return (
                     <button
                       key={mi} type="button" className="calx-year-month"
@@ -419,10 +427,10 @@ export default function CalendariView({ bands, concerts, selectedBandId = "", ic
                           if (!d) return <span key={"e" + i}></span>;
                           const ds = `${y}-${pad2(mi + 1)}-${pad2(d)}`;
                           const evs = eventsByDate[ds] || [];
-                          const k = evs.length ? (evs[0].kind && KIND_META[evs[0].kind] ? evs[0].kind : "bolo") : null;
+                          const ec = evs.length ? colorOf(evs[0]) : null;
                           return (
                             <span key={ds} className={"calx-year-day" + (ds === today ? " today" : "")}
-                              style={k ? { background: KIND_META[k].bg, color: KIND_META[k].color, fontWeight: 700 } : {}}>
+                              style={ec ? { background: ec.bg, color: ec.color, fontWeight: 700 } : {}}>
                               {d}
                             </span>
                           );

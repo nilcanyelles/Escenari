@@ -9,9 +9,13 @@ import { KIND_META, KIND_ORDER } from "@/components/CalendariView";
 // Plural de cada tipus, per al desglossament "Bolos X, Assajos Y..." de les
 // capçaleres de secció (propers / realitzats).
 const KIND_PLURAL: Record<string, string> = { bolo: "Bolos", assaig: "Assajos", reunio: "Reunions", altre: "Altres" };
-function kindCounts(list: { kind?: string | null }[]): Record<string, number> {
+function kindCounts(list: { kind?: string | null; status?: string }[]): Record<string, number> {
   const out: Record<string, number> = { bolo: 0, assaig: 0, reunio: 0, altre: 0 };
-  list.forEach((c) => { const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo"; out[k] = (out[k] || 0) + 1; });
+  list.forEach((c) => {
+    if (c.status === "cancel·lat") return;
+    const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
+    out[k] = (out[k] || 0) + 1;
+  });
   return out;
 }
 import { uniqueTags } from "@/lib/tags";

@@ -32,6 +32,7 @@ export default async function GrupPage() {
   const historyByBand: Record<string, number> = {};
   const concertCountByPerson: Record<string, number> = {};
   concerts.forEach((c) => {
+    if (c.status === "cancel·lat") return;
     historyByBand[c.bandId] = (historyByBand[c.bandId] || 0) + 1;
     Object.entries(c.attendance || {}).forEach(([name, val]) => {
       if (val === "yes") concertCountByPerson[name] = (concertCountByPerson[name] || 0) + 1;

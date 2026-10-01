@@ -48,6 +48,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
   ]);
   const concertCountByPerson: Record<string, number> = {};
   concerts.forEach((c) => {
+    if (c.status === "cancel·lat") return;
     Object.entries(c.attendance || {}).forEach(([name, val]) => {
       if (val === "yes") concertCountByPerson[name] = (concertCountByPerson[name] || 0) + 1;
     });

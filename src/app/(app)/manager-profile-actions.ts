@@ -45,9 +45,13 @@ export async function saveManagerProfileAction(formData: FormData): Promise<{ ok
   );
 
   // Propaga el contacte a totes les entrades amb el seu nom (crew i members).
+  // En paral·lel (no una darrere l'altra): amb un workspace amb molts grups,
+  // fer-ho en sèrie — sumat a la pujada de la foto — podia allargar prou
+  // l'acció per arribar al límit d'execució del servidor i deixar el
+  // "Desant…" penjat sense ni arribar a respondre.
   const key = normalize(name);
   const bands = (await pool.query("select id, members, crew from bands where workspace_id=$1", [profile.workspaceId])).rows;
-  for (const b of bands) {
+  await Promise.all(bands.map((b) => {
     let changed = false;
     const patch = (m: { name: string; role: string }, isCrew: boolean) => {
       if (normalize(m.name) !== key) return m;
@@ -56,8 +60,9 @@ export async function saveManagerProfileAction(formData: FormData): Promise<{ ok
     };
     const members = (b.members || []).map((m: { name: string; role: string }) => patch(m, false));
     const crew = (b.crew || []).map((m: { name: string; role: string }) => patch(m, true));
-    if (changed) await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), b.id]);
-  }
+    if (!changed) return Promise.resolve();
+    return pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), b.id]);
+  }));
 
   revalidatePath("/grup");
   revalidatePath("/agenda");
