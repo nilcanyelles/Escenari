@@ -597,6 +597,20 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   font-size: 11px; font-weight: 700; letter-spacing: 0.02em; text-transform: none;
   background: var(--bg-panel); color: var(--text-faint);
 }
+/* Desglossament per tipus: la mateixa bombolla de color que la columna
+   "Tipus" de la llista (.cc-kind), amb la xifra integrada a dins com una
+   bombolleta pròpia. */
+/* .cc-kind.concerts-kind-count (dues classes) perquè guanyi en
+   especificitat al padding de .cc-kind — si no, amb el mateix pes, la regla
+   de sota (.cc-kind, més avall al full) hi guanyaria igualment. */
+.cc-kind.concerts-kind-count { display: inline-flex; align-items: center; gap: 6px; text-transform: none; letter-spacing: 0; padding: 3px 4px 3px 9px; }
+/* Rodona perfecta, amb la bombolla gran sobresortint-ne una mica (un filet
+   del seu color visible a la vora), en comptes de tapar-la del tot. */
+.concerts-kind-count .concerts-section-divider-count {
+  width: 20px; height: 20px; padding: 0; margin: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 50%; flex: none;
+}
 .load-more-btn {
   display: block; width: fit-content; margin: 14px auto; text-align: center;
   background: transparent; border: none; border-radius: 999px;
@@ -5595,6 +5609,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-weight: 700;
 }
 .calx-legend { display: flex; flex-direction: column; gap: 5px; }
+/* Mateixa llegenda, però en fila (per a la barra de filtres de la pestanya
+   d'esdeveniments, en comptes de la columna lateral del calendari). */
+.concerts-kind-legend { flex-direction: row; flex-wrap: wrap; gap: 8px; }
 .calx-legend-item {
   display: flex;
   align-items: center;

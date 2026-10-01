@@ -4,7 +4,16 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
 import { formatDate, statusColors, isConcertOver } from "@/lib/format";
-import { KIND_META } from "@/components/CalendariView";
+import { KIND_META, KIND_ORDER } from "@/components/CalendariView";
+
+// Plural de cada tipus, per al desglossament "Bolos X, Assajos Y..." de les
+// capçaleres de secció (propers / realitzats).
+const KIND_PLURAL: Record<string, string> = { bolo: "Bolos", assaig: "Assajos", reunio: "Reunions", altre: "Altres" };
+function kindCounts(list: { kind?: string | null }[]): Record<string, number> {
+  const out: Record<string, number> = { bolo: 0, assaig: 0, reunio: 0, altre: 0 };
+  list.forEach((c) => { const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo"; out[k] = (out[k] || 0) + 1; });
+  return out;
+}
 import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { rsCompletionPercent } from "@/lib/route-sheet";
@@ -105,7 +114,9 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const [importOpen, setImportOpen] = useState(false);
   const [statusFilter, setStatusFilter] = useState("tots");
   const [tagFilter, setTagFilter] = useState("tots");
-  const [kindFilter, setKindFilter] = useState("tots");
+  // Com la llegenda del calendari: cada tipus es pot amagar/mostrar per
+  // separat (no és un sol filtre d'un en un).
+  const [kindsOn, setKindsOn] = useState<Record<string, boolean>>({ bolo: true, assaig: true, reunio: true, altre: true });
   const [modal, setModal] = useState<{ concertId: string } | null>(null);
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
@@ -127,7 +138,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   useEffect(() => {
     setUpcomingVisible(PAGE_SIZE);
     setPastVisible(PAGE_SIZE);
-  }, [search, statusFilter, tagFilter, kindFilter]);
+  }, [search, statusFilter, tagFilter, kindsOn]);
 
   // Reconcile optimistic status overrides against the server-confirmed prop: only
   // drop an override once `concerts` (refreshed by router.refresh() after the write)
@@ -151,7 +162,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const list = concerts.filter((c) =>
     (statusFilter === "tots" || c.status === statusFilter) &&
     (tagFilter === "tots" || (c.tags && c.tags.indexOf(tagFilter) !== -1)) &&
-    (kindFilter === "tots" || (c.kind && KIND_META[c.kind] ? c.kind : "bolo") === kindFilter) &&
+    kindsOn[c.kind && KIND_META[c.kind] ? c.kind : "bolo"] &&
     (!searchL || normalize(c.bandName).includes(searchL) || normalize(c.venue).includes(searchL) || normalize(c.city).includes(searchL) || normalize(c.festaEntitat || "").includes(searchL))
   );
   // "Realitzat" mira si el concert ja s'ha acabat del tot (data i hora
@@ -160,6 +171,8 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   // passat del seu dia efectiu (per a un concert de matinada).
   const upcomingList = list.filter((c) => !isConcertOver(c.date, c.time)).sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
   const pastList = list.filter((c) => isConcertOver(c.date, c.time)).sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time));
+  const upcomingKindCounts = kindCounts(upcomingList);
+  const pastKindCounts = kindCounts(pastList);
 
   const tagOpts = uniqueTags(concerts);
 
@@ -356,12 +369,24 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        <select className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value)}>
-          <option value="tots">Tots els tipus</option>
-          {Object.keys(KIND_META).map((k) => <option key={k} value={k}>{KIND_META[k].label}</option>)}
-        </select>
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
         {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />}
+      </div>
+
+      <div className="calx-legend concerts-kind-legend">
+        {KIND_ORDER.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={"calx-legend-item" + (kindsOn[k] ? " on" : "")}
+            onClick={() => setKindsOn((p) => ({ ...p, [k]: !p[k] }))}
+          >
+            <span className="calx-legend-check" style={kindsOn[k] ? { background: KIND_META[k].color, borderColor: KIND_META[k].color } : {}}>
+              {kindsOn[k] ? "✓" : ""}
+            </span>
+            <span className="calx-legend-swatch" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>{KIND_META[k].label}</span>
+          </button>
+        ))}
       </div>
 
       {importOpen && <ImportConcertsModal bands={bands} onClose={() => setImportOpen(false)} />}
@@ -370,6 +395,17 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>
       ) : (
         <div className="concerts-list">
+          {upcomingList.length > 0 && (
+            <div className="concerts-section-divider">
+              <span>Propers esdeveniments</span>
+              {KIND_ORDER.filter((k) => upcomingKindCounts[k] > 0).map((k) => (
+                <span key={k} className="cc-kind concerts-kind-count" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>
+                  {KIND_PLURAL[k]}
+                  <span className="concerts-section-divider-count">{upcomingKindCounts[k]}</span>
+                </span>
+              ))}
+            </div>
+          )}
           <div className={"t-row t-head " + colsClass}>
             <div>Data</div><div>Tipus</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Festa/entitat</div>
             <div style={{ textAlign: "center" }}>Assistència</div><div>Estat</div>
@@ -386,8 +422,13 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           {pastList.length > 0 && (
             <>
               <div className="concerts-section-divider">
-                <span>Bolos realitzats</span>
-                <span className="concerts-section-divider-count">{pastList.length}</span>
+                <span>Esdeveniments realitzats</span>
+                {KIND_ORDER.filter((k) => pastKindCounts[k] > 0).map((k) => (
+                  <span key={k} className="cc-kind concerts-kind-count" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>
+                    {KIND_PLURAL[k]}
+                    <span className="concerts-section-divider-count">{pastKindCounts[k]}</span>
+                  </span>
+                ))}
               </div>
               <div className="table-wrap no-clip">
                 {pastList.slice(0, pastVisible).map((c) => <ConcertRow key={c.id} c={c} />)}

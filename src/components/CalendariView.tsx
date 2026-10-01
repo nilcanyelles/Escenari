@@ -22,7 +22,7 @@ export const KIND_META: Record<string, { label: string; color: string; bg: strin
   reunio: { label: "Reunió", color: "oklch(0.78 0.14 70)", bg: "oklch(0.78 0.14 70 / 0.16)" },
   altre: { label: "Altre", color: "oklch(0.72 0.12 230)", bg: "oklch(0.72 0.12 230 / 0.16)" },
 };
-const KIND_ORDER = ["bolo", "assaig", "reunio", "altre"];
+export const KIND_ORDER = ["bolo", "assaig", "reunio", "altre"];
 
 function kindOf(c: Concert): string {
   return c.kind && KIND_META[c.kind] ? c.kind : "bolo";

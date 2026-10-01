@@ -10,7 +10,7 @@ export const PAGES: NavPage[] = [
   { key: "agencia", href: "/agencia", label: "Agència" },
   { key: "grup", href: "/grup", label: "Grup" },
   { key: "agenda", href: "/agenda", label: "Calendari" },
-  { key: "concerts", href: "/concerts", label: "Concerts" },
+  { key: "concerts", href: "/concerts", label: "Esdeveniments" },
   { key: "estadistiques", href: "/estadistiques", label: "Estadístiques" },
 ];
 
@@ -19,7 +19,7 @@ export const PAGES: NavPage[] = [
 export const ARTIST_PAGES: NavPage[] = [
   { key: "grup", href: "/artista/grup", label: "Grup" },
   { key: "agenda", href: "/artista/agenda", label: "Calendari" },
-  { key: "concerts", href: "/artista/concerts", label: "Concerts" },
+  { key: "concerts", href: "/artista/concerts", label: "Esdeveniments" },
   { key: "estadistiques", href: "/artista/estadistiques", label: "Estadístiques" },
 ];
 

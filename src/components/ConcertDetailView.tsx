@@ -839,6 +839,12 @@ export default function ConcertDetailView({
 
   const members = band?.members || [];
   const crew = band?.crew || [];
+  // Només per mostrar a la pestanya de Convocatòria: els exclosos d'aquest
+  // bolo van al final (entre ells, mateix ordre de sempre), per no haver
+  // de buscar-los enmig dels convocats. No toca l'ordre de "members"/"crew"
+  // que es fa servir a la resta (repartiment, etc.).
+  const sortedMembers = [...members].sort((a, b) => Number(!!convocatoriaExcluded[a.name]) - Number(!!convocatoriaExcluded[b.name]));
+  const sortedCrew = [...crew].sort((a, b) => Number(!!convocatoriaExcluded[a.name]) - Number(!!convocatoriaExcluded[b.name]));
   const backups = band?.backups || [];
 
   function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact, subConfirmed = substituteConfirmed) {
@@ -1477,7 +1483,7 @@ export default function ConcertDetailView({
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest concert no té grup amb membres assignat.</div>
         ) : (
           <div className="cd-attendance-list">
-            {members.map((m) => {
+            {sortedMembers.map((m) => {
               const linked = linkedByName[m.name];
               const att = attendance[m.name];
               const req = requestByMember[m.name];
@@ -1573,7 +1579,7 @@ export default function ConcertDetailView({
               </div>
             </div>
             <div className="cd-attendance-list">
-              {crew.map((m) => {
+              {sortedCrew.map((m) => {
                 const linked = linkedByName[m.name];
                 const att = attendance[m.name];
                 const req = requestByMember[m.name];
