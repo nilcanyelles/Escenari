@@ -60,28 +60,9 @@ function FullscreenIcon({ active }: { active: boolean }) {
   );
 }
 
-function ScoreIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-      <polyline points="14 2 14 8 20 8"></polyline>
-    </svg>
-  );
-}
-function WaveformIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-      <line x1="4" y1="10" x2="4" y2="14"></line>
-      <line x1="9" y1="6" x2="9" y2="18"></line>
-      <line x1="14" y1="3" x2="14" y2="21"></line>
-      <line x1="19" y1="8" x2="19" y2="16"></line>
-    </svg>
-  );
-}
-
 // Fila de la llista de cançons (menú inicial i barra lateral): igual a
-// totes dues, amb la mateixa estètica que el repertori (carátula, etiquetes
-// i recompte de partitures/àudios) però de només lectura — no s'hi edita
+// totes dues, amb la mateixa estètica que el repertori (etiquetes) però
+// de només lectura — no s'hi edita
 // res, clicar-la només hi entra. L'estrella de destacar surt a mà dreta
 // quan hi ha un concert d'origen (Concert.setlistHighlights) i permís per
 // tocar-la. L'animació de "puja a dalt" la porta el pare (perform-list ref
@@ -94,8 +75,6 @@ function SongListRow({ song, originalIndex, active, highlighted, canHighlight, o
   // no com un avís flotant genèric, perquè quedi clar de quina cançó és.
   warn?: boolean;
 }) {
-  const scoreCount = song.scores.length;
-  const audioCount = song.tracks.length;
   return (
     <div ref={rowRef} className="perform-list-row">
       <button type="button" className={"perform-list-item" + (active ? " active" : "")} onClick={onClick}>
@@ -108,12 +87,6 @@ function SongListRow({ song, originalIndex, active, highlighted, canHighlight, o
               return <span key={t} className="badge sm" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
             })}
           </span>
-          {(scoreCount > 0 || audioCount > 0) && (
-            <span className="perform-list-filecount">
-              {scoreCount > 0 && <span className="sp-file-count" title="Partitures"><ScoreIcon />{scoreCount}</span>}
-              {audioCount > 0 && <span className="sp-file-count" title="Àudios"><WaveformIcon />{audioCount}</span>}
-            </span>
-          )}
         </span>
         <span className="t-dim perform-list-duration">{song.duration}</span>
       </button>

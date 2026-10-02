@@ -13,16 +13,6 @@ function ScoreIcon() {
     </svg>
   );
 }
-function WaveformIcon() {
-  return (
-    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
-      <line x1="4" y1="10" x2="4" y2="14"></line>
-      <line x1="9" y1="6" x2="9" y2="18"></line>
-      <line x1="14" y1="3" x2="14" y2="21"></line>
-      <line x1="19" y1="8" x2="19" y2="16"></line>
-    </svg>
-  );
-}
 function PrinterIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -33,7 +23,7 @@ function PrinterIcon() {
   );
 }
 
-type Candidate = { songId: string; title: string; duration: string; tags: string[]; instruments: string[]; scoreCount: number; audioCount: number };
+type Candidate = { songId: string; title: string; duration: string; tags: string[]; instruments: string[] };
 
 // Menú "Imprimeix partitures" d'una setlist: tria quines cançons (de les
 // que en tenen al repertori) i quins instruments/veus, i baixa un sol PDF
@@ -76,7 +66,6 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
   const candidates: Candidate[] = matchedSongs.map(({ song, scoreFiles }) => ({
     songId: song.id, title: song.title, duration: song.duration || "", tags: song.tags,
     instruments: scoreFiles.map((f) => effectiveInstrument.get(f) || "Totes les veus"),
-    scoreCount: scoreFiles.length, audioCount: song.files.length - scoreFiles.length,
   }));
 
   const instrumentOptions = sortInstrumentInstances(
@@ -131,6 +120,9 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
             <div className="perform-intro-songs print-song-list">
               {candidates.map((c, i) => {
                 const on = selectedSongs.has(c.songId);
+                // Només compta les veus triades a "Instruments / veus" —
+                // desseleccionar-ne una actualitza el número a l'acte.
+                const selectedScoreCount = c.instruments.filter((inst) => selectedInstruments.has(inst)).length;
                 return (
                   <div key={c.songId} className="perform-list-row">
                     <button
@@ -146,13 +138,8 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
                             const tc = tagColors(t);
                             return <span key={t} className="badge sm" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
                           })}
+                          {selectedScoreCount > 0 && <span className="sp-file-count" title="Partitures"><ScoreIcon />{selectedScoreCount}</span>}
                         </span>
-                        {(c.scoreCount > 0 || c.audioCount > 0) && (
-                          <span className="perform-list-filecount">
-                            {c.scoreCount > 0 && <span className="sp-file-count" title="Partitures"><ScoreIcon />{c.scoreCount}</span>}
-                            {c.audioCount > 0 && <span className="sp-file-count" title="Àudios"><WaveformIcon />{c.audioCount}</span>}
-                          </span>
-                        )}
                       </span>
                       <span className="t-dim perform-list-duration">{c.duration}</span>
                     </button>
