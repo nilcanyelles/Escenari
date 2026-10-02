@@ -472,6 +472,11 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   width: 13px; height: 13px; border-radius: 50%; cursor: pointer; color: inherit; opacity: 0.7;
 }
 .instrument-badge-x:hover { opacity: 1; background: oklch(1 0 0 / 0.15); }
+/* Tria, dins d'UN grup, quins dels instruments propis hi toca — cada
+   bombolla és un interruptor (apagada = no el toca en aquest grup). */
+.instrument-badge-toggle { border: none; cursor: pointer; font-family: inherit; opacity: 0.4; transition: opacity .12s, box-shadow .12s; }
+.instrument-badge-toggle:hover { opacity: 0.7; }
+.instrument-badge-toggle.on { opacity: 1; box-shadow: 0 0 0 1.5px oklch(0.72 0.16 290 / 0.6); }
 .instrument-dropdown { width: 240px; padding: 8px; }
 .instrument-search { width: 100%; box-sizing: border-box; margin-bottom: 6px; }
 .instrument-option-list { max-height: 220px; overflow-y: auto; overscroll-behavior: contain; }

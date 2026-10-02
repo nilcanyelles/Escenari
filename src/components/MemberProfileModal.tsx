@@ -5,7 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import type { Band } from "@/lib/types";
 import { personPhotoDataUri, personColorHue, bandColor, splitInstruments } from "@/lib/tags";
 import { instrumentIconKey } from "@/lib/instruments";
-import { updatePersonContactAction, updateMembershipRoleAction } from "@/app/(app)/grups/actions";
+import {
+  updatePersonContactAction, updateMembershipRoleAction,
+  getPersonInstrumentsAction, updatePersonInstrumentsAction, updateMembershipInstrumentsAction,
+} from "@/app/(app)/grups/actions";
 import InstrumentPicker, { InstrumentIcon } from "@/components/InstrumentPicker";
 import { isValidEmail, isValidPhone } from "@/lib/validation";
 import { CrewRoleSvg, crewRoleIconKey } from "@/lib/crewRoles";
@@ -49,10 +52,10 @@ export default function MemberProfileModal({
   }, [name]);
 
   const memberships = useMemo(() => {
-    const out: { bandId: string; bandName: string; role: string; listType: "members" | "crew" }[] = [];
+    const out: { bandId: string; bandName: string; role: string; listType: "members" | "crew"; instruments: string[] }[] = [];
     allBands.forEach((b) => {
-      (b.members || []).forEach((p) => { if (p.name === name) out.push({ bandId: b.id, bandName: b.name, role: p.role, listType: "members" }); });
-      (b.crew || []).forEach((p) => { if (p.name === name) out.push({ bandId: b.id, bandName: b.name, role: p.role, listType: "crew" }); });
+      (b.members || []).forEach((p) => { if (p.name === name) out.push({ bandId: b.id, bandName: b.name, role: p.role, listType: "members", instruments: p.instruments || [] }); });
+      (b.crew || []).forEach((p) => { if (p.name === name) out.push({ bandId: b.id, bandName: b.name, role: p.role, listType: "crew", instruments: [] }); });
     });
     return out;
   }, [allBands, name]);
@@ -78,26 +81,45 @@ export default function MemberProfileModal({
   const emailValid = isValidEmail(email);
   const [showErrors, setShowErrors] = useState(false);
 
-  const initialInstruments = useMemo(() => {
-    for (const b of allBands) {
-      const m = (b.members || []).concat(b.crew || []).find((p) => p.name === name && p.instruments && p.instruments.length);
-      if (m) return m.instruments as string[];
-    }
-    // Cap instrument desat encara: dedueix-los dels rols que ja té a cada grup on toca.
+  // Instruments propis de la persona (person_profiles.instruments): primer
+  // cop d'ull, mentre es carreguen de veres, es dedueixen de cada grup on
+  // ja en té (unió) o, si tampoc, dels rols que té escrits a cada grup.
+  const fallbackInstruments = useMemo(() => {
     const seen: Record<string, boolean> = {};
     const out: string[] = [];
     memberships.filter((m) => m.listType === "members").forEach((m) => {
-      splitInstruments(m.role).forEach((instr) => {
+      m.instruments.forEach((instr) => {
         const key = instr.toLowerCase();
         if (!seen[key]) { seen[key] = true; out.push(instr); }
       });
     });
-    return out;
-  }, [allBands, memberships, name]);
+    if (out.length) return out;
+    const seen2: Record<string, boolean> = {};
+    const out2: string[] = [];
+    memberships.filter((m) => m.listType === "members").forEach((m) => {
+      splitInstruments(m.role).forEach((instr) => {
+        const key = instr.toLowerCase();
+        if (!seen2[key]) { seen2[key] = true; out2.push(instr); }
+      });
+    });
+    return out2;
+  }, [memberships]);
 
-  const [instruments, setInstruments] = useState(initialInstruments);
+  const [instruments, setInstruments] = useState(fallbackInstruments);
+  useEffect(() => {
+    let alive = true;
+    getPersonInstrumentsAction(name).then((list) => {
+      if (alive) setInstruments(list.length ? list : fallbackInstruments);
+    }).catch(() => {});
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name]);
+
   const [pickerOpen, setPickerOpen] = useState(false);
   const [roleEdits, setRoleEdits] = useState<Record<string, string>>({});
+  // Per a cada pertinença (grup+llista), quins dels instruments propis toca
+  // en aquell grup en concret — subconjunt lliure de triar a cada grup.
+  const [membershipInstrumentEdits, setMembershipInstrumentEdits] = useState<Record<string, string[]>>({});
 
   const crewFunctions = useMemo(() => {
     const seen: Record<string, boolean> = {};
@@ -112,14 +134,14 @@ export default function MemberProfileModal({
   }, [memberships]);
 
   const membershipsByBand = useMemo(() => {
-    const out: { bandId: string; bandName: string; entries: { listType: "members" | "crew"; role: string }[] }[] = [];
+    const out: { bandId: string; bandName: string; entries: { listType: "members" | "crew"; role: string; instruments: string[] }[] }[] = [];
     const byId: Record<string, (typeof out)[number]> = {};
     memberships.forEach((m) => {
       if (!byId[m.bandId]) {
         byId[m.bandId] = { bandId: m.bandId, bandName: m.bandName, entries: [] };
         out.push(byId[m.bandId]);
       }
-      byId[m.bandId].entries.push({ listType: m.listType, role: m.role });
+      byId[m.bandId].entries.push({ listType: m.listType, role: m.role, instruments: m.instruments });
     });
     return out;
   }, [memberships]);
@@ -130,10 +152,23 @@ export default function MemberProfileModal({
 
   function startEditing() {
     const seed: Record<string, string> = {};
-    memberships.forEach((m) => { seed[membershipKey(m)] = m.role; });
+    const instrSeed: Record<string, string[]> = {};
+    memberships.forEach((m) => {
+      seed[membershipKey(m)] = m.role;
+      if (m.listType === "members") instrSeed[membershipKey(m)] = m.instruments;
+    });
     setRoleEdits(seed);
+    setMembershipInstrumentEdits(instrSeed);
     setShowErrors(false);
     setIsEditing(true);
+  }
+
+  function toggleMembershipInstrument(key: string, instr: string) {
+    setMembershipInstrumentEdits((prev) => {
+      const cur = prev[key] || [];
+      const next = cur.includes(instr) ? cur.filter((i) => i !== instr) : [...cur, instr];
+      return { ...prev, [key]: next };
+    });
   }
 
   const concertCount = concertCountByPerson[name] || 0;
@@ -145,11 +180,22 @@ export default function MemberProfileModal({
     if (!newName) { setEditName(name); return; }
     if (!phoneValid || !emailValid) { setShowErrors(true); return; }
     setSaving(true);
-    await updatePersonContactAction({ name, newName, phone, email, instruments });
+    await updatePersonContactAction({ name, newName, phone, email });
+    await updatePersonInstrumentsAction(newName, instruments);
     const roleUpdates = memberships.filter((m) => (roleEdits[membershipKey(m)] ?? m.role) !== m.role);
-    await Promise.all(roleUpdates.map((m) =>
-      updateMembershipRoleAction({ bandId: m.bandId, listType: m.listType, name: newName, role: roleEdits[membershipKey(m)] ?? m.role })
-    ));
+    const instrumentUpdates = memberships.filter((m) => {
+      if (m.listType !== "members") return false;
+      const edited = (membershipInstrumentEdits[membershipKey(m)] ?? m.instruments).slice().sort();
+      return JSON.stringify(edited) !== JSON.stringify(m.instruments.slice().sort());
+    });
+    await Promise.all([
+      ...roleUpdates.map((m) =>
+        updateMembershipRoleAction({ bandId: m.bandId, listType: m.listType, name: newName, role: roleEdits[membershipKey(m)] ?? m.role })
+      ),
+      ...instrumentUpdates.map((m) =>
+        updateMembershipInstrumentsAction({ bandId: m.bandId, listType: m.listType, name: newName, instruments: membershipInstrumentEdits[membershipKey(m)] ?? m.instruments })
+      ),
+    ]);
     router.refresh();
     setSaving(false);
     setIsEditing(false);
@@ -216,7 +262,8 @@ export default function MemberProfileModal({
 
         {(instruments.length > 0 || crewFunctions.length > 0 || isEditing) && (
           <div style={{ marginBottom: 16 }}>
-            <label className="form-label">Instruments/funcions</label>
+            <label className="form-label">Instruments propis{crewFunctions.length > 0 ? " / funcions" : ""}</label>
+            {isEditing && <div className="t-dim" style={{ fontSize: 11.5, marginTop: 2, marginBottom: 2 }}>Tot el que sap tocar — a cada grup (a sota) es tria quins hi toca.</div>}
             {isEditing ? (
               <div style={{ marginTop: 6 }}>
                 {(instruments.length > 0 || crewFunctions.length > 0) && (
@@ -274,13 +321,20 @@ export default function MemberProfileModal({
                     <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1, minWidth: 160 }}>
                       {g.entries.map((e, ei) => {
                         if (e.listType === "members") {
+                          const key = g.bandId + "-" + e.listType;
+                          const picked = membershipInstrumentEdits[key] ?? e.instruments;
                           return instruments.length > 0 ? (
                             <span key={ei} style={{ display: "inline-flex", gap: 6, flexWrap: "wrap" }}>
                               {instruments.map((instr, ii) => (
-                                <span key={ii} className="badge instrument-badge sm">
+                                <button
+                                  key={ii} type="button"
+                                  className={"badge instrument-badge sm instrument-badge-toggle" + (picked.includes(instr) ? " on" : "")}
+                                  onClick={() => toggleMembershipInstrument(key, instr)}
+                                  title={picked.includes(instr) ? `Treu ${instr} d'aquest grup` : `Afegeix ${instr} a aquest grup`}
+                                >
                                   <InstrumentIcon name={instr} icon={instrumentIconKey(instr)} />
                                   {instr}
-                                </span>
+                                </button>
                               ))}
                             </span>
                           ) : (
@@ -305,8 +359,8 @@ export default function MemberProfileModal({
                               {fn}
                             </span>
                           ))
-                        ) : instruments.length > 0 ? (
-                          instruments.map((instr, ii) => (
+                        ) : e.instruments.length > 0 ? (
+                          e.instruments.map((instr, ii) => (
                             <span key={ei + "-" + ii} className="badge instrument-badge sm">
                               <InstrumentIcon name={instr} icon={instrumentIconKey(instr)} />
                               {instr}

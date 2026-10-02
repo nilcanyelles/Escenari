@@ -6,6 +6,7 @@ import type { Person } from "@/lib/types";
 import { requireManagerAction } from "@/lib/current-user";
 import { requireBandAccess } from "@/lib/band-access";
 import { syncBandPeopleToContacts } from "@/app/(app)/contactes/actions";
+import { getOrCreatePersonProfile } from "@/lib/person-profile";
 
 export type SaveBandInput = {
   id: string;
@@ -58,7 +59,10 @@ export async function saveBandAction(data: SaveBandInput) {
 // persona pot aparèixer a diversos grups com a entrades independents amb el
 // mateix nom. Editar el seu contacte actualitza totes les entrades que
 // coincideixin de nom a tots els grups, perquè es vegi com una sola persona.
-export async function updatePersonContactAction(data: { name: string; newName?: string; phone: string; email: string; instruments: string[] }) {
+// Els instruments ja NO es toquen aquí: són propis de la persona
+// (updatePersonInstrumentsAction) i, dins de cada grup, un subconjunt propi
+// (updateMembershipInstrumentsAction) — vegeu els comentaris de sota.
+export async function updatePersonContactAction(data: { name: string; newName?: string; phone: string; email: string }) {
   const { workspaceId } = await requireManagerAction();
   const pool = db();
   const name = (data.name || "").trim();
@@ -66,7 +70,6 @@ export async function updatePersonContactAction(data: { name: string; newName?: 
   const newName = (data.newName || "").trim() || name;
   const phone = (data.phone || "").trim();
   const email = (data.email || "").trim();
-  const instruments = (data.instruments || []).filter((i) => i && i.trim());
 
   const { rows } = await pool.query("select id, members, crew from bands where workspace_id=$1", [workspaceId]);
   for (const row of rows) {
@@ -74,7 +77,7 @@ export async function updatePersonContactAction(data: { name: string; newName?: 
     const patch = (list: Person[]) => list.map((p) => {
       if (p.name !== name) return p;
       changed = true;
-      return { ...p, name: newName, phone, email, instruments };
+      return { ...p, name: newName, phone, email };
     });
     const members = patch(row.members || []);
     const crew = patch(row.crew || []);
@@ -90,7 +93,7 @@ export async function updatePersonContactAction(data: { name: string; newName?: 
 }
 
 // Instrument/funció d'una persona dins d'UN grup concret (a diferència del
-// contacte i els instruments globals, el rol pot variar de grup a grup).
+// contacte i els instruments propis, el rol pot variar de grup a grup).
 export async function updateMembershipRoleAction(data: { bandId: string; listType: "members" | "crew"; name: string; role: string }) {
   const { workspaceId } = await requireManagerAction();
   const pool = db();
@@ -103,6 +106,75 @@ export async function updateMembershipRoleAction(data: { bandId: string; listTyp
   if (!rows.length) return;
   const list: Person[] = rows[0].list || [];
   const next = list.map((p) => (p.name === name ? { ...p, role } : p));
+  await pool.query(`update bands set ${column}=$1 where id=$2 and workspace_id=$3`, [JSON.stringify(next), data.bandId, workspaceId]);
+
+  revalidatePath("/grups");
+}
+
+// Instruments PROPIS d'una persona (person_profiles.instruments) —
+// independents de cap grup: és "tot el que sap tocar", i a cada grup se'n
+// tria un subconjunt (updateMembershipInstrumentsAction). Es poden editar
+// en qualsevol moment, com el telèfon o el correu.
+export async function getPersonInstrumentsAction(name: string): Promise<string[]> {
+  const { workspaceId } = await requireManagerAction();
+  const trimmed = (name || "").trim();
+  if (!trimmed) return [];
+  const row = (await db().query(
+    "select instruments from person_profiles where workspace_id=$1 and lower(person_name)=lower($2)",
+    [workspaceId, trimmed]
+  )).rows[0];
+  return row?.instruments || [];
+}
+
+export async function updatePersonInstrumentsAction(name: string, instruments: string[]) {
+  const { workspaceId } = await requireManagerAction();
+  const trimmed = (name || "").trim();
+  if (!trimmed) return;
+  const clean = (instruments || []).filter((i) => i && i.trim());
+  const pool = db();
+  const token = await getOrCreatePersonProfile(workspaceId, trimmed);
+  await pool.query("update person_profiles set instruments=$1 where id=$2", [JSON.stringify(clean), token]);
+
+  // Neteja: si un instrument surt de la llista pròpia, tampoc té sentit que
+  // es quedi marcat com a tocat a cap grup.
+  const allowed = new Set(clean.map((i) => i.toLowerCase()));
+  const { rows } = await pool.query("select id, members, crew from bands where workspace_id=$1", [workspaceId]);
+  for (const row of rows) {
+    let changed = false;
+    const prune = (list: Person[]) => list.map((p) => {
+      if (p.name !== trimmed || !p.instruments?.length) return p;
+      const kept = p.instruments.filter((i) => allowed.has(i.toLowerCase()));
+      if (kept.length === p.instruments.length) return p;
+      changed = true;
+      return { ...p, instruments: kept };
+    });
+    const members = prune(row.members || []);
+    const crew = prune(row.crew || []);
+    if (changed) {
+      await pool.query("update bands set members=$1, crew=$2 where id=$3", [JSON.stringify(members), JSON.stringify(crew), row.id]);
+    }
+  }
+
+  revalidatePath("/grups");
+  revalidatePath("/contactes");
+}
+
+// Quins dels instruments propis d'una persona toca en UN grup concret —
+// sempre un subconjunt del que torna getPersonInstrumentsAction, però cada
+// grup en pot triar un de diferent (p. ex. a un grup només hi toca la
+// gralla, a un altre també el baix).
+export async function updateMembershipInstrumentsAction(data: { bandId: string; listType: "members" | "crew"; name: string; instruments: string[] }) {
+  const { workspaceId } = await requireManagerAction();
+  const pool = db();
+  const name = (data.name || "").trim();
+  if (!name || !data.bandId) return;
+  const instruments = (data.instruments || []).filter((i) => i && i.trim());
+  const column = data.listType === "crew" ? "crew" : "members";
+
+  const { rows } = await pool.query(`select ${column} as list from bands where id=$1 and workspace_id=$2`, [data.bandId, workspaceId]);
+  if (!rows.length) return;
+  const list: Person[] = rows[0].list || [];
+  const next = list.map((p) => (p.name === name ? { ...p, instruments } : p));
   await pool.query(`update bands set ${column}=$1 where id=$2 and workspace_id=$3`, [JSON.stringify(next), data.bandId, workspaceId]);
 
   revalidatePath("/grups");
