@@ -4,12 +4,14 @@ import { useState } from "react";
 import BackLink from "@/components/BackLink";
 import type { Band } from "@/lib/types";
 import type { Rider, Setlist } from "@/lib/material-types";
+import type { Song as LibrarySong } from "@/lib/songs";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 
-export default function ArtistMaterialView({ band, riders, setlists, canRiders, canSetlists }: {
+export default function ArtistMaterialView({ band, riders, setlists, songs, canRiders, canSetlists }: {
   band: Band;
   riders: Rider[];
   setlists: Setlist[];
+  songs: LibrarySong[];
   canRiders: boolean;
   canSetlists: boolean;
 }) {
@@ -33,7 +35,7 @@ export default function ArtistMaterialView({ band, riders, setlists, canRiders, 
         <RidersPanel band={band} riders={riders} linkedMembers={[]} editors={[]} canEdit={canRiders} isManager={false} />
       )}
       {tab === "setlists" && (
-        <SetlistsPanel band={band} setlists={setlists} linkedMembers={[]} editors={[]} canEdit={canSetlists} isManager={false} />
+        <SetlistsPanel band={band} setlists={setlists} linkedMembers={[]} editors={[]} canEdit={canSetlists} isManager={false} songs={songs} />
       )}
     </div>
   );

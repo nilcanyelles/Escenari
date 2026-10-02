@@ -87,7 +87,7 @@ export default async function ConfirmPage({ params, searchParams }: {
     id: c.id, date: toDateStr(c.date), time: c.time || "", exactTime: c.exact_time || "",
     venue: c.venue || "", city: c.city || "", address: c.address || "",
     festaEntitat: c.festa_entitat || "", bandId: c.band_id, bandName: c.band_name || band.name,
-    tags: [], status: c.status as Concert["status"], amount: 0,
+    tags: [], status: c.status as Concert["status"], paid: !!c.paid, amount: 0,
     attendance: (c.attendance || {}) as Record<string, "yes" | "no">, substitutes: c.substitutes || {},
     substituteConfirmed: c.substitute_confirmed || {},
     noSubstitute: {}, convocatoriaExcluded: {}, contact: { email: "", name: "", phone: "", company: "" },

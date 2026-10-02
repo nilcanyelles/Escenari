@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
-import { formatDate, statusColors, isConcertOver } from "@/lib/format";
+import { formatDate, statusColors, isConcertOver, formatCurrency } from "@/lib/format";
 import { KIND_META, KIND_ORDER } from "@/components/CalendariView";
 
 // Plural de cada tipus, per al desglossament "Bolos X, Assajos Y..." de les
@@ -26,7 +26,7 @@ import NewEventButton from "@/components/NewEventButton";
 import ImportConcertsModal from "@/components/ImportConcertsModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { rsIsComplete } from "@/lib/route-sheet";
-import { deleteConcertAction, saveConcertAction, setConcertStatusAction } from "@/app/(app)/concerts/actions";
+import { deleteConcertAction, saveConcertAction, setConcertStatusAction, setConcertPaidAction } from "@/app/(app)/concerts/actions";
 import { setMyAttendanceAction } from "@/app/(artist)/actions";
 import ConcertModal from "@/components/ConcertModal";
 import RouteSheetModal from "@/components/RouteSheetModal";
@@ -42,11 +42,29 @@ function HourglassIcon() {
     </svg>
   );
 }
+function PaidCrossIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line>
+    </svg>
+  );
+}
+function PaidCheckIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12"></polyline>
+    </svg>
+  );
+}
 
 const STATUS_CYCLE = ["cancel·lat", "pendent", "reservat", "confirmat"];
-function nextStatus(status: string): string {
-  const i = STATUS_CYCLE.indexOf(status);
-  return STATUS_CYCLE[(i === -1 ? 0 : i + 1) % STATUS_CYCLE.length];
+// Els assajos no tenen reserva ni pendent — només es confirmen o es
+// cancel·len.
+const ASSAIG_STATUS_CYCLE = ["cancel·lat", "confirmat"];
+function nextStatus(status: string, kind?: string): string {
+  const cycle = kind === "assaig" ? ASSAIG_STATUS_CYCLE : STATUS_CYCLE;
+  const i = cycle.indexOf(status);
+  return cycle[(i === -1 ? 0 : i + 1) % cycle.length];
 }
 
 // Creueta d'eliminar un concert d'una llista, amb diàleg de confirmació
@@ -124,6 +142,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const [modal, setModal] = useState<{ concertId: string } | null>(null);
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
+  const [paidOverrides, setPaidOverrides] = useState<Record<string, boolean>>({});
   const PAGE_SIZE = 50;
   const [upcomingVisible, setUpcomingVisible] = useState(PAGE_SIZE);
   const [pastVisible, setPastVisible] = useState(PAGE_SIZE);
@@ -131,6 +150,12 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const statusSaveTimers = useRef<Record<string, number>>({});
+  // Clicar "Pagat" fa router.refresh() (per agafar l'import actualitzat del
+  // tooltip) — sense això, el re-render que ve del servidor feia saltar la
+  // pàgina a dalt de tot encara que haguessis clicat una fila al final de la
+  // llista. Es desa la posició just abans de refrescar i es torna a fixar
+  // quan el prop "concerts" (ja actualitzat) arriba.
+  const scrollRestoreRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (modal?.concertId) {
@@ -159,6 +184,21 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
       }
       return changed ? next : prev;
     });
+    setPaidOverrides((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const serverConcert = concerts.find((c) => c.id === id);
+        if (serverConcert && serverConcert.paid === next[id]) { delete next[id]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    if (scrollRestoreRef.current !== null) {
+      const y = scrollRestoreRef.current;
+      scrollRestoreRef.current = null;
+      window.scrollTo(0, y);
+    }
   }, [concerts]);
 
   // Cerca sense distingir accents ni majúscules (Sant Adrià = sant adria).
@@ -187,19 +227,25 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // Assistència de músics i crew — mateix càlcul que la barra del bànner
     // del concert (AttendanceMeter): els exclosos de la convocatòria
     // d'aquest concert no compten enlloc (ni al total).
+    const kind = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
     const rowBand = bands.find((b) => b.id === c.bandId);
     const attPeople = rowBand ? [...rowBand.members, ...rowBand.crew] : [];
     const attExcluded = c.convocatoriaExcluded || {};
     const attActive = attPeople.filter((p) => !attExcluded[p.name]);
     const attTotal = attActive.length;
     const attendanceMap = c.attendance || {};
+    const attSubs = c.substitutes || {};
     const attYesNames = attActive.filter((p) => attendanceMap[p.name] === "yes").map((p) => p.name);
     const attNoNames = attActive.filter((p) => attendanceMap[p.name] === "no").map((p) => p.name);
+    // Un "no" amb suplent ja assignat ja no és un buit real a la convocatòria
+    // — es distingeix en blau de la resta de "no" (vermell, sense cobrir).
+    const attNoSubNames = attNoNames.filter((n) => attSubs[n]);
+    const attNoPlainNames = attNoNames.filter((n) => !attSubs[n]);
     const attPendingNames = attActive.filter((p) => attendanceMap[p.name] !== "yes" && attendanceMap[p.name] !== "no").map((p) => p.name);
     const attYes = attYesNames.length;
-    const attNo = attNoNames.length;
     const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
-    const attNoPct = attTotal ? (attNo / attTotal) * 100 : 0;
+    const attNoPlainPct = attTotal ? (attNoPlainNames.length / attTotal) * 100 : 0;
+    const attNoSubPct = attTotal ? (attNoSubNames.length / attTotal) * 100 : 0;
     const rsPct = rsCompletionPercent(c);
     // Ets tu qui hi és convocat (no el gestor, i no exclòs d'aquesta
     // convocatòria en concret) — llavors marques la teva pròpia assistència
@@ -208,6 +254,11 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     const myAns = myName ? attendanceMap[myName] : undefined;
     const myPerson = myName ? attPeople.find((p) => p.name === myName) : undefined;
     const myIsAdmin = myPerson ? memberPerms(myPerson).admin : false;
+    // Import que surt al tooltip de "Pagat": el gestor (sempre) i els
+    // membres admin del grup hi veuen el total del bolo — la resta, només
+    // la seva pròpia part del repartiment.
+    const displayPaid = paidOverrides[c.id] ?? c.paid;
+    const paidAmount = isMgr || myIsAdmin ? c.amount : (c.payouts?.[myName || ""] ?? 0);
     // Si t'han exclòs d'aquesta convocatòria en concret: si ets admin del
     // grup, t'ho diem directament a la columna ("No convocat", sense haver
     // de passar-hi el cursor) — si no ho ets, no et surt res especial (com
@@ -220,10 +271,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
       <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`${detailBase}/${c.id}`)}>
         <div className="t-dim">{formatDate(c.date)}{c.time ? <span className="cc-time"> · {c.time}</span> : ""}</div>
         <div>
-          {(() => {
-            const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
-            return <span className="cc-kind" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>{KIND_META[k].label}</span>;
-          })()}
+          <span className="cc-kind" style={{ background: KIND_META[kind].bg, color: KIND_META[kind].color }}>{KIND_META[kind].label}</span>
         </div>
         {!inBand && <div className="t-strong">{c.bandName}</div>}
         <div className="cc-bold">{c.city ? c.city.split(",")[0] : "—"}</div>
@@ -267,14 +315,20 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             >
               <div className="cc-att-track">
                 <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
-                <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
+                <div className="cc-att-fill" style={{ width: attNoPlainPct + "%", background: "var(--red)" }}></div>
+                <div className="cc-att-fill" style={{ width: attNoSubPct + "%", background: "oklch(0.75 0.14 230)" }}></div>
               </div>
               <div className="cc-att-count">{attYes}/{attTotal}</div>
               <div className="cc-att-tooltip">
                 <div className="cc-att-tooltip-title">Assistència:</div>
                 <div className="cc-att-tooltip-list">
                   {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
-                  {attNoNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+                  {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+                  {attNoSubNames.map((n) => (
+                    <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
+                      ✕ {n} → {attSubs[n]}
+                    </span>
+                  ))}
                   {attPendingNames.map((n) => <span key={n} className="cd-att-bubble pending"><HourglassIcon />{n}</span>)}
                 </div>
               </div>
@@ -287,7 +341,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
               title="Canvia l'estat" aria-label="Canvia l'estat"
               onClick={(e) => {
                 e.stopPropagation();
-                const next = nextStatus(displayStatus);
+                const next = nextStatus(displayStatus, kind);
                 setStatusOverrides((prev) => ({ ...prev, [c.id]: next }));
                 if (statusSaveTimers.current[c.id]) window.clearTimeout(statusSaveTimers.current[c.id]);
                 statusSaveTimers.current[c.id] = window.setTimeout(async () => {
@@ -300,12 +354,34 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           )}
         </div>
         <div className="cc-fdr">
-          <span className="cc-fdr-pct" style={{ color: rsPct >= 100 ? "oklch(0.75 0.15 155)" : rsPct >= 50 ? "oklch(0.82 0.15 80)" : "var(--text-faint)" }}>{rsPct}%</span>
+          {kind === "bolo" && (
+            <span className="cc-fdr-pct" style={{ color: rsPct >= 100 ? "oklch(0.75 0.15 155)" : rsPct >= 50 ? "oklch(0.82 0.15 80)" : "var(--text-faint)" }}>{rsPct}%</span>
+          )}
           <button className="row-rs-btn" title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(e) => { e.stopPropagation(); setRsPreviewConcertId(c.id); }}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
             </svg>
           </button>
+        </div>
+        <div style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
+          <span className="cc-paid-wrap">
+            <button
+              type="button"
+              className={"cc-paid-btn" + (displayPaid ? " paid" : "")}
+              disabled={!isMgr}
+              aria-label={displayPaid ? "Pagat" : "No pagat"}
+              onClick={async () => {
+                const next = !displayPaid;
+                scrollRestoreRef.current = window.scrollY;
+                setPaidOverrides((prev) => ({ ...prev, [c.id]: next }));
+                await setConcertPaidAction(c.id, next);
+                router.refresh();
+              }}
+            >
+              {displayPaid ? <PaidCheckIcon /> : <PaidCrossIcon />}
+            </button>
+            <span className="cc-paid-tooltip">{formatCurrency(paidAmount)}</span>
+          </span>
         </div>
         <div onClick={(e) => e.stopPropagation()}>{isMgr && <DeleteConcertBtn id={c.id} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
       </div>
@@ -411,9 +487,9 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             </div>
           )}
           <div className={"t-row t-head " + colsClass}>
-            <div>Data</div><div>Tipus</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Festa/entitat</div>
-            <div style={{ textAlign: "center" }}>Assistència</div><div>Estat</div>
-            <div style={{ textAlign: "center" }}>FDR</div><div></div>
+            <div>Data</div><div>Tipus</div>{!inBand && <div>Grup</div>}<div>Població</div><div>Ubicació</div><div>Títol</div>
+            <div style={{ textAlign: "center" }}>Assistència</div><div style={{ textAlign: "center" }}>Estat</div>
+            <div style={{ textAlign: "center" }}>FDR</div><div style={{ textAlign: "center" }}>Pagat</div><div></div>
           </div>
           <div className="table-wrap no-clip">
             {upcomingList.slice(0, upcomingVisible).map((c) => <ConcertRow key={c.id} c={c} />)}

@@ -104,6 +104,9 @@ export type Concert = {
   bandName: string;
   tags: string[];
   status: "confirmat" | "pendent" | "reservat" | "cancel·lat";
+  // Si ja s'ha cobrat aquest esdeveniment — casella pròpia a la taula
+  // d'Esdeveniments, independent de l'estat de l'actuació.
+  paid: boolean;
   amount: number;
   attendance: Record<string, "yes" | "no" | "potser">;
   substitutes: Record<string, string>;

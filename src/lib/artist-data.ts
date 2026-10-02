@@ -183,6 +183,7 @@ export async function getArtistConcertsFull(clerkUserId: string, opts?: { months
     bandName: r.band_name,
     tags: r.tags,
     status: r.status,
+    paid: !!r.paid,
     amount: r.show_fees ? r.amount : 0,
     attendance: r.attendance,
     substitutes: r.substitutes,

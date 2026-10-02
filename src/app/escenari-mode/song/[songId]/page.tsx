@@ -17,6 +17,7 @@ function toPerformSong(song: Song): PerformSong {
     tracks: song.files.filter((f) => f.mime.startsWith("audio")).map((f) => ({ id: f.id, name: f.name || f.instrument })),
     scores: song.files.filter((f) => !f.mime.startsWith("audio")).map((f) => ({ id: f.id, name: f.name, mime: f.mime, instrument: f.instrument || "Totes les veus" })),
     instruments: song.instruments || [],
+    tags: song.tags || [],
   };
 }
 

@@ -24,6 +24,7 @@ export async function getSetlists(bandId: string): Promise<Setlist[]> {
     bandId: r.band_id,
     name: r.name,
     songs: r.songs || [],
+    coverUrl: r.cover_url || "",
     publicToken: r.public_token,
     updatedAt: iso(r.updated_at),
   }));

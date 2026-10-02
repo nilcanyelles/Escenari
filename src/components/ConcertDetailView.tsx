@@ -15,7 +15,7 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus, shareLinkCodeStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyPctAction, repeatConcertAction, setSetlistHighlightsAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
+import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyPctAction, repeatConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
 import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
 import { computeInvoiceTotals } from "@/lib/invoice-utils";
 import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
@@ -741,17 +741,6 @@ export default function ConcertDetailView({
   const selectedRider = riders.find((r) => r.id === riderId) || null;
   const selectedSetlist = setlists.find((s) => s.id === setlistId) || null;
   const riderMatches = riders.filter((r) => !riderSearch.trim() || normalize(r.name).includes(normalize(riderSearch.trim())));
-  // Cançons destacades d'aquest concert/assaig en concret
-  // (Concert.setlistHighlights) — la mateixa setlist es pot repetir a
-  // altres esdeveniments amb destacades diferents, per això no viu a la
-  // setlist sinó al concert.
-  const [setlistHighlights, setSetlistHighlights] = useState<Record<string, boolean>>(concert.setlistHighlights || {});
-  async function toggleHighlight(title: string) {
-    const next = { ...setlistHighlights };
-    if (next[title]) delete next[title]; else next[title] = true;
-    setSetlistHighlights(next);
-    await setSetlistHighlightsAction(concert.id, next);
-  }
 
   // ---- Aprovació del rider ----
   const [apName, setApName] = useState("");
@@ -1835,23 +1824,6 @@ export default function ConcertDetailView({
             ) : (
               <div className="t-dim" style={{ fontSize: 12 }}>
                 {setlists.length ? "Tria la setlist d'aquest concert per poder-la enviar." : "Aquest grup encara no té setlists — crea-les a la pestanya Setlists del grup."}
-              </div>
-            )}
-            {(kind === "assaig" || kind === "bolo") && selectedSetlist && (
-              <div className="cd-highlights">
-                <div className="cd-subtitle" style={{ marginTop: 14 }}>Cançons destacades d&apos;aquest {kind === "assaig" ? "assaig" : "concert"}</div>
-                {selectedSetlist.songs.filter((s) => s.title.trim()).length === 0 ? (
-                  <div className="t-dim" style={{ fontSize: 12 }}>Aquesta setlist encara no té cap cançó.</div>
-                ) : (
-                  <div className="cd-highlight-list">
-                    {selectedSetlist.songs.filter((s) => s.title.trim()).map((s) => (
-                      <label key={s.title} className={"cd-highlight-item" + (setlistHighlights[s.title] ? " on" : "")}>
-                        <input type="checkbox" checked={!!setlistHighlights[s.title]} onChange={() => toggleHighlight(s.title)} />
-                        {s.title}
-                      </label>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>

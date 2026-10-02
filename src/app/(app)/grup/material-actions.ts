@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { getProfile } from "@/lib/current-user";
 import { requireBandAccess as requireBandPerm, requireConcertAccess } from "@/lib/band-access";
+import { uploadFileBlob } from "@/lib/blob-storage";
 import type { RiderContent, Song } from "@/lib/material-types";
 
 // Autorització dual: el gestor del workspace del grup, o un artista del grup
@@ -91,6 +92,29 @@ export async function saveSetlistAction(input: { id: string | null; bandId: stri
   );
   revalidateMaterial(input.bandId);
   return { id };
+}
+
+// Foto de portada d'una setlist (mateix circuit que el logo/portada d'un
+// grup: taula "files" + Vercel Blob, servida per /api/file/[id]).
+export async function uploadSetlistCoverAction(formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
+  const bandId = String(formData.get("bandId") || "");
+  const setlistId = String(formData.get("setlistId") || "");
+  const file = formData.get("file") as File | null;
+  if (!bandId || !setlistId || !file) return { ok: false, error: "Falta el fitxer" };
+  const { workspaceId } = await requireMaterialAccess(bandId, "setlists");
+  if (!file.type.startsWith("image/")) return { ok: false, error: "Ha de ser una imatge" };
+  if (file.size > 8 * 1024 * 1024) return { ok: false, error: "Màxim 8 MB" };
+  const buf = Buffer.from(await file.arrayBuffer());
+  const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const blobUrl = await uploadFileBlob("files/" + id, buf, file.type);
+  await db().query(
+    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,$3,null,$4,$5,$6,null,'',$7)",
+    [id, workspaceId, bandId, file.name || "cover", file.type, file.size, blobUrl]
+  );
+  const url = `/api/file/${id}`;
+  await db().query("update setlists set cover_url=$1 where id=$2 and band_id=$3", [url, setlistId, bandId]);
+  revalidateMaterial(bandId);
+  return { ok: true, url };
 }
 
 export async function deleteSetlistAction(bandId: string, setlistId: string) {

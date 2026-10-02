@@ -6,7 +6,26 @@ import type { Band } from "@/lib/types";
 import { songDurationSecs, formatTotalDuration, type Setlist, type Song } from "@/lib/material-types";
 import type { Song as LibrarySong } from "@/lib/songs";
 import { uniqueTags, tagColors } from "@/lib/tags";
-import { saveSetlistAction } from "@/app/(app)/grup/material-actions";
+import { saveSetlistAction, uploadSetlistCoverAction } from "@/app/(app)/grup/material-actions";
+
+function ScoreIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+    </svg>
+  );
+}
+function WaveformIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <line x1="4" y1="10" x2="4" y2="14"></line>
+      <line x1="9" y1="6" x2="9" y2="18"></line>
+      <line x1="14" y1="3" x2="14" y2="21"></line>
+      <line x1="19" y1="8" x2="19" y2="16"></line>
+    </svg>
+  );
+}
 
 export default function SetlistEditor({ band, setlist, librarySongs = [], onClose }: { band: Band; setlist: Setlist | null; librarySongs?: LibrarySong[]; onClose: () => void }) {
   const router = useRouter();
@@ -17,6 +36,10 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [coverUrl, setCoverUrl] = useState(setlist?.coverUrl || "");
+  const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
+  const coverInput = useRef<HTMLInputElement>(null);
   const saveTimer = useRef<number | null>(null);
   const isFirst = useRef(true);
 
@@ -76,6 +99,30 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
     setSelectedTags((prev) => (prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]));
   }
 
+  async function handleCoverChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setCoverPreview(URL.createObjectURL(file));
+    setCoverUploading(true);
+    // Una setlist nova encara no té id fins al primer autodesat — si encara
+    // no n'hi ha, es desa ara mateix per poder-hi penjar la foto.
+    let id = setlistId;
+    if (!id) {
+      const saved = await saveSetlistAction({ id: null, bandId: band.id, name, songs });
+      id = saved.id;
+      setSetlistId(id);
+    }
+    const fd = new FormData();
+    fd.set("bandId", band.id);
+    fd.set("setlistId", id);
+    fd.set("file", file);
+    const res = await uploadSetlistCoverAction(fd);
+    if (res.ok && res.url) setCoverUrl(res.url);
+    setCoverUploading(false);
+    router.refresh();
+  }
+
   // Cançó del repertori d'on ve cada entrada (si en ve) — per mostrar-hi
   // la mateixa carátula i etiquetes que al Repertori, no només el títol.
   const librarySongById = new Map(librarySongs.map((s) => [s.id, s]));
@@ -96,11 +143,30 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
   // aquella etiqueta) perquè es pugui continuar afegint-ne.
   const showingOthers = selectedTags.length > 0 && filteredSuggestions.length === 0 && librarySuggestions.length > 0;
   const displaySuggestions = showingOthers ? librarySuggestions : filteredSuggestions;
+  // Quina cançó és "visible" ara mateix (ni afegida ni amagada pel filtre
+  // d'etiquetes). Es fa servir per amagar-la en lloc de treure-la del
+  // renderitzat: així cada bombolla manté sempre la mateixa posició (no hi
+  // ha reordenació del flex) tant en afegir una cançó com en triar/treure
+  // una etiqueta — només apareix i desapareix al seu lloc.
+  function isVisible(s: LibrarySong): boolean {
+    if (addedSongIds.has(s.id)) return false;
+    if (showingOthers || selectedTags.length === 0) return true;
+    return s.tags.some((t) => selectedTags.includes(t));
+  }
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal wide setlist-editor" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
+          <button type="button" className="setlist-cover-btn" title="Canvia la foto de la setlist" onClick={() => coverInput.current?.click()}>
+            {coverPreview || coverUrl ? (
+              <img className="setlist-cover-img" src={coverPreview || coverUrl} alt="" />
+            ) : (
+              <span className="setlist-cover-placeholder">♪</span>
+            )}
+            <span className="setlist-cover-edit">{coverUploading ? "…" : "📷"}</span>
+          </button>
+          <input ref={coverInput} type="file" hidden accept="image/*" onChange={handleCoverChange} />
           <input className="rider-name-input" value={name} onChange={(e) => setName(e.target.value)} />
           <div className="t-dim" style={{ fontSize: 12, marginRight: 12 }}>{saving ? "Desant…" : "Desat ✓"}</div>
           <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={onClose}>✕</button>
@@ -160,7 +226,20 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
                           return <span key={t} className="badge sm" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
                         })}
                       </span>
-                      <span className="sp-artist">{band.name}{lib?.files.length ? ` · ${lib.files.length} 📎` : ""}</span>
+                      <span className="sp-artist">
+                        {band.name}
+                        {(() => {
+                          if (!lib?.files.length) return null;
+                          const scoreCount = lib.files.filter((f) => !f.mime.startsWith("audio")).length;
+                          const audioCount = lib.files.length - scoreCount;
+                          return (
+                            <>
+                              {scoreCount > 0 && <span className="sp-file-count" title="Partitures"><ScoreIcon />{scoreCount}</span>}
+                              {audioCount > 0 && <span className="sp-file-count" title="Àudios"><WaveformIcon />{audioCount}</span>}
+                            </>
+                          );
+                        })()}
+                      </span>
                     </span>
                     <input
                       className="field-input compact-field setlist-comment-input" placeholder="Solo llarg, enllaça amb la següent…"
@@ -201,18 +280,28 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
               {showingOthers && (
                 <div className="t-dim" style={{ fontSize: 12 }}>Ja hi has afegit totes les cançons amb aquesta etiqueta — la resta del repertori:</div>
               )}
-              {displaySuggestions.length > 0 ? (
+              {librarySongs.length > 0 ? (
                 <div className="access-box-list">
-                  {displaySuggestions.map((s) => (
-                    <button key={s.id} type="button" className="access-chip" onClick={() => addFromLibrary(s)}>
-                      + {s.title}
-                    </button>
-                  ))}
+                  {librarySongs.map((s) => {
+                    const visible = isVisible(s);
+                    return (
+                      <button
+                        key={s.id} type="button" className="access-chip"
+                        style={visible ? undefined : { visibility: "hidden" }}
+                        aria-hidden={!visible}
+                        tabIndex={visible ? 0 : -1}
+                        onClick={() => visible && addFromLibrary(s)}
+                      >
+                        + {s.title}
+                      </button>
+                    );
+                  })}
                 </div>
               ) : (
-                <div className="t-dim" style={{ fontSize: 12 }}>
-                  {librarySongs.length === 0 ? "Encara no hi ha cap cançó al repertori." : "Ja has afegit totes les cançons del repertori."}
-                </div>
+                <div className="t-dim" style={{ fontSize: 12 }}>Encara no hi ha cap cançó al repertori.</div>
+              )}
+              {librarySongs.length > 0 && displaySuggestions.length === 0 && (
+                <div className="t-dim" style={{ fontSize: 12 }}>Ja has afegit totes les cançons del repertori.</div>
               )}
             </div>
             <button type="button" className="btn-ghost-sm" onClick={addBlank}>+ Entrada en blanc (fora del repertori)</button>

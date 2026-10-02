@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
 import { requireArtist } from "@/lib/current-user";
 import { getRiders, getSetlists, getArtistEditableBands } from "@/lib/material-data";
+import { getSongs } from "@/lib/songs";
 import ArtistMaterialView from "./ArtistMaterialView";
 import type { Band } from "@/lib/types";
 
@@ -28,8 +29,8 @@ export default async function ArtistMaterialPage({ params }: { params: Promise<{
     logo: bandRow.logo, color1: bandRow.color1, color2: bandRow.color2,
   };
 
-  const [riders, setlists, editable] = await Promise.all([
-    getRiders(bandId), getSetlists(bandId), getArtistEditableBands(profile.clerkUserId),
+  const [riders, setlists, editable, songs] = await Promise.all([
+    getRiders(bandId), getSetlists(bandId), getArtistEditableBands(profile.clerkUserId), getSongs(bandId),
   ]);
   const perms = editable[bandId] || { canRiders: false, canSetlists: false };
 
@@ -38,6 +39,7 @@ export default async function ArtistMaterialPage({ params }: { params: Promise<{
       band={band}
       riders={riders}
       setlists={setlists}
+      songs={songs}
       canRiders={perms.canRiders}
       canSetlists={perms.canSetlists}
     />

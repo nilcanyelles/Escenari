@@ -506,6 +506,12 @@ export async function setConcertStatusAction(id: string, status: string) {
   revalidateAll();
 }
 
+export async function setConcertPaidAction(id: string, paid: boolean) {
+  const { workspaceId } = await requireConcertAccess(id, "admin");
+  await db().query("update concerts set paid=$1 where id=$2 and workspace_id=$3", [paid, id, workspaceId]);
+  revalidateAll();
+}
+
 export async function deleteConcertAction(id: string) {
   const { workspaceId } = await requireConcertAccess(id, "admin");
   const pool = db();

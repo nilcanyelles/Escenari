@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import BackLink from "@/components/BackLink";
 import { LyricsView } from "@/components/SongsPanel";
-import { instrumentIconFor, sortInstrumentInstances } from "@/lib/tags";
+import { instrumentIconFor, sortInstrumentInstances, tagColors } from "@/lib/tags";
 import PdfViewer from "@/components/PdfViewer";
 import { setSetlistHighlightsAction } from "@/app/(app)/concerts/actions";
 // @ts-expect-error soundtouchjs no porta tipus TS
@@ -60,25 +60,62 @@ function FullscreenIcon({ active }: { active: boolean }) {
   );
 }
 
+function ScoreIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+      <polyline points="14 2 14 8 20 8"></polyline>
+    </svg>
+  );
+}
+function WaveformIcon() {
+  return (
+    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+      <line x1="4" y1="10" x2="4" y2="14"></line>
+      <line x1="9" y1="6" x2="9" y2="18"></line>
+      <line x1="14" y1="3" x2="14" y2="21"></line>
+      <line x1="19" y1="8" x2="19" y2="16"></line>
+    </svg>
+  );
+}
+
 // Fila de la llista de cançons (menú inicial i barra lateral): igual a
-// totes dues, amb l'estrella de destacar a mà dreta del títol quan hi ha
-// un concert d'origen (Concert.setlistHighlights) i permís per tocar-la.
-// L'animació de "puja a dalt" la porta el pare (perform-list ref + FLIP),
-// per això registra la seva pròpia fila amb `rowRef`.
-function SongListRow({ song, originalIndex, active, disabled, disabledTitle, highlighted, canHighlight, onToggleStar, onClick, rowRef, warn }: {
-  song: PerformSong; originalIndex: number; active?: boolean; disabled?: boolean; disabledTitle?: string; highlighted: boolean;
+// totes dues, amb la mateixa estètica que el repertori (carátula, etiquetes
+// i recompte de partitures/àudios) però de només lectura — no s'hi edita
+// res, clicar-la només hi entra. L'estrella de destacar surt a mà dreta
+// quan hi ha un concert d'origen (Concert.setlistHighlights) i permís per
+// tocar-la. L'animació de "puja a dalt" la porta el pare (perform-list ref
+// + FLIP), per això registra la seva pròpia fila amb `rowRef`.
+function SongListRow({ song, originalIndex, active, highlighted, canHighlight, onToggleStar, onClick, rowRef, warn }: {
+  song: PerformSong; originalIndex: number; active?: boolean; highlighted: boolean;
   canHighlight: boolean; onToggleStar: (title: string) => void; onClick: () => void;
   rowRef: (el: HTMLDivElement | null) => void;
   // Avís de "cap partitura assignada" — surt penjat d'aquesta fila mateixa,
   // no com un avís flotant genèric, perquè quedi clar de quina cançó és.
   warn?: boolean;
 }) {
+  const scoreCount = song.scores.length;
+  const audioCount = song.tracks.length;
   return (
     <div ref={rowRef} className="perform-list-row">
-      <button type="button" className={"perform-list-item" + (active ? " active" : "") + (disabled ? " perform-list-item-disabled" : "")} disabled={disabled} title={disabled ? disabledTitle : undefined} onClick={onClick}>
+      <button type="button" className={"perform-list-item" + (active ? " active" : "")} onClick={onClick}>
         <span className="perform-list-num">{originalIndex + 1}</span>
-        <span className={highlighted ? "perform-list-title-on" : undefined}>{song.title}</span>
-        <span className="t-dim" style={{ marginLeft: "auto", fontSize: 12 }}>{song.duration}</span>
+        <span className="perform-list-body">
+          <span className="perform-list-title-row">
+            <span className={"perform-list-title" + (highlighted ? " perform-list-title-on" : "")}>{song.title}</span>
+            {song.tags.map((t) => {
+              const tc = tagColors(t);
+              return <span key={t} className="badge sm" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
+            })}
+          </span>
+          {(scoreCount > 0 || audioCount > 0) && (
+            <span className="perform-list-filecount">
+              {scoreCount > 0 && <span className="sp-file-count" title="Partitures"><ScoreIcon />{scoreCount}</span>}
+              {audioCount > 0 && <span className="sp-file-count" title="Àudios"><WaveformIcon />{audioCount}</span>}
+            </span>
+          )}
+        </span>
+        <span className="t-dim perform-list-duration">{song.duration}</span>
       </button>
       {canHighlight && (
         <button
@@ -107,6 +144,7 @@ export type PerformSong = {
   tracks: PerformTrack[];
   scores: PerformScore[];
   instruments: string[];
+  tags: string[];
 };
 
 type TrackMix = { name: string; volume: number; muted: boolean; solo: boolean };
@@ -170,18 +208,6 @@ export default function PerformView({
   }
 
   const [showIntro, setShowIntro] = useState(!skipIntro);
-  const [pickedInstrument, setPickedInstrument] = useState<string | null>(null);
-  // Cada veu numerada (Clarinet 1, Clarinet 2…) surt com una opció separada
-  // — només es fonen entrades amb el nom EXACTAMENT igual repetides a
-  // diverses cançons.
-  const introInstruments = useMemo(() => {
-    const seen = new Set<string>();
-    const list: string[] = [];
-    songs.forEach((s) => s.scores.forEach((sc) => {
-      if (!seen.has(sc.instrument)) { seen.add(sc.instrument); list.push(sc.instrument); }
-    }));
-    return list;
-  }, [songs]);
 
   // Cançons destacades d'aquest assaig/concert (no toquen l'ordre real de
   // la setlist — go()/idx segueixen l'ordre original — només l'ordre en
@@ -722,45 +748,25 @@ export default function PerformView({
         <div className="perform-intro-body">
           <h1 className="perform-intro-title">{name}</h1>
           <div className="t-dim" style={{ fontSize: 13 }}>{bandName}</div>
-          {introInstruments.length > 0 && (
-            <div className="perform-intro-section">
-              <div className="perform-intro-label">El teu instrument</div>
-              <div className="perform-score-chips">
-                {introInstruments.map((instrument) => (
-                  <button key={instrument} type="button"
-                    className={"perform-score-chip" + (pickedInstrument === instrument ? " active" : "")}
-                    onClick={() => setPickedInstrument((v) => (v === instrument ? null : instrument))}>
-                    <img src={instrumentIconFor(scoreIconName(instrument))} alt="" />
-                    {instrument}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
           <div className="perform-intro-section">
             <div className="perform-intro-label">Cançons</div>
             <div className="perform-intro-songs">
-              {orderedSongs.map(({ s, i }) => {
-                const missing = !!pickedInstrument && findScoreMatch(s.scores, pickedInstrument) < 0;
-                return (
-                  <SongListRow
-                    key={s.title} song={s} originalIndex={i} disabled={missing}
-                    disabledTitle={missing ? `Aquesta cançó no té partitura de ${pickedInstrument}` : undefined}
-                    highlighted={!!highlights[s.title]} canHighlight={canHighlight}
-                    onToggleStar={toggleHighlight} rowRef={registerRow(s.title)} warn={noScoreWarnIdx === i}
-                    onClick={() => {
-                      if (blockIfNoScore(s, i)) return;
-                      // Si ja hi érem (la cançó per defecte, idx 0), canviar
-                      // l'índex al mateix valor no torna a disparar l'efecte
-                      // que aplica l'instrument triat — cal fer-ho ara mateix.
-                      if (i === idx) resolveScoreForSong(i, pickedInstrument);
-                      else pendingInstrumentRef.current = pickedInstrument;
-                      setIdx(i);
-                      setShowIntro(false);
-                    }}
-                  />
-                );
-              })}
+              {orderedSongs.map(({ s, i }) => (
+                <SongListRow
+                  key={s.title} song={s} originalIndex={i}
+                  highlighted={!!highlights[s.title]} canHighlight={canHighlight}
+                  onToggleStar={toggleHighlight} rowRef={registerRow(s.title)} warn={noScoreWarnIdx === i}
+                  onClick={() => {
+                    if (blockIfNoScore(s, i)) return;
+                    // Si ja hi érem (la cançó per defecte, idx 0), canviar
+                    // l'índex al mateix valor no torna a disparar l'efecte
+                    // que obre la partitura per defecte — cal fer-ho ara mateix.
+                    if (i === idx) resolveScoreForSong(i, null);
+                    setIdx(i);
+                    setShowIntro(false);
+                  }}
+                />
+              ))}
             </div>
           </div>
         </div>

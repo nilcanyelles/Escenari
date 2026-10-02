@@ -59,6 +59,7 @@ export default async function PerformPage({ params, searchParams }: {
         tracks,
         scores,
         instruments: match?.instruments || [],
+        tags: match?.tags || [],
       };
     });
 

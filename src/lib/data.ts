@@ -66,6 +66,7 @@ function mapConcertRow(r: any): Concert {
     bandName: r.band_name,
     tags: r.tags,
     status: r.status,
+    paid: !!r.paid,
     amount: r.amount,
     attendance: r.attendance,
     substitutes: r.substitutes,

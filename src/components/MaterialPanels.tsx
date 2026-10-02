@@ -13,33 +13,46 @@ import { today, pad2, capitalize, formatDate, MONTH_FULL, WEEKDAY_SHORT } from "
 import { saveRiderAction, deleteRiderAction, deleteSetlistAction, setBandEditorAction } from "@/app/(app)/grup/material-actions";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
 import SetlistEditor from "@/components/SetlistEditor";
+import PrintScoresModal from "@/components/PrintScoresModal";
 import SpecularButton from "@/components/SpecularButton";
+
+function PrinterIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 9 6 2 18 2 18 9"></polyline>
+      <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+      <rect x="6" y="14" width="12" height="8"></rect>
+    </svg>
+  );
+}
 
 function publicUrl(token: string): string {
   return `${window.location.origin}/m/${token}`;
 }
 
-function ShareBtns({ token, what, bandName }: { token: string; what: string; bandName: string }) {
+function ShareBtns({ token, what, bandName, hideLink = false }: { token: string; what: string; bandName: string; hideLink?: boolean }) {
   const [copied, setCopied] = useState(false);
   return (
     <>
       <button type="button" className="row-rs-btn" title="Obre el PDF" aria-label="Obre el PDF" onClick={() => window.open(publicUrl(token), "_blank")}>
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>
       </button>
-      <button
-        type="button" className="row-rs-btn" title={copied ? "Copiat ✓" : "Copia l'enllaç"} aria-label="Copia l'enllaç"
-        onClick={async () => {
-          await navigator.clipboard.writeText(publicUrl(token));
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1500);
-        }}
-      >
-        {copied ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-        ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
-        )}
-      </button>
+      {!hideLink && (
+        <button
+          type="button" className="row-rs-btn" title={copied ? "Copiat ✓" : "Copia l'enllaç"} aria-label="Copia l'enllaç"
+          onClick={async () => {
+            await navigator.clipboard.writeText(publicUrl(token));
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1500);
+          }}
+        >
+          {copied ? (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+          ) : (
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+          )}
+        </button>
+      )}
       <button
         type="button" className="row-rs-btn cd-wa-btn" title="WhatsApp" aria-label="WhatsApp"
         onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(`${what} de ${bandName}: ${publicUrl(token)}`)}`, "_blank")}
@@ -355,6 +368,7 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
   const router = useRouter();
   const [editing, setEditing] = useState<{ setlist: Setlist | null } | null>(null);
   const [assigning, setAssigning] = useState<Setlist | null>(null);
+  const [printing, setPrinting] = useState<Setlist | null>(null);
   // Qualsevol esdeveniment del grup (bolo, assaig, reunió…) pot portar la
   // setlist — tret dels cancel·lats.
   const assignableConcerts = concerts.filter((c) => c.status !== "cancel·lat");
@@ -374,7 +388,9 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
               const total = s.songs.reduce((acc, song) => acc + songDurationSecs(song.duration), 0);
               return (
                 <div key={s.id} className="material-card">
-                  <div className="material-card-icon">🎵</div>
+                  <div className="material-card-icon">
+                    {s.coverUrl ? <img src={s.coverUrl} alt="" /> : "🎵"}
+                  </div>
                   <div className="material-card-main">
                     <div className="member-name">{s.name}</div>
                     <div className="t-dim" style={{ fontSize: 12 }}>
@@ -383,7 +399,10 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
                   </div>
                   <div className="material-card-actions">
                     <button type="button" className="btn-outline stage-mode-btn" title="Mode escenari: lletres a pantalla completa amb auto-scroll" onClick={() => router.push(`/escenari-mode/${s.id}`)}>▶ Escenari</button>
-                    <ShareBtns token={s.publicToken} what="Setlist" bandName={band.name} />
+                    <ShareBtns token={s.publicToken} what="Setlist" bandName={band.name} hideLink />
+                    <button type="button" className="row-rs-btn" title="Imprimeix partitures" aria-label="Imprimeix partitures" onClick={() => setPrinting(s)}>
+                      <PrinterIcon />
+                    </button>
                     {(isManager || canEdit) && (
                       <button type="button" className="row-rs-btn" title="Assigna a un esdeveniment (bolo, assaig, reunió…)" aria-label="Assigna a un esdeveniment"
                         onClick={() => setAssigning(s)}>
@@ -416,6 +435,15 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
         </div>
       )}
       {editing && <SetlistEditor band={band} setlist={editing.setlist} librarySongs={songs || []} onClose={() => { setEditing(null); router.refresh(); }} />}
+      {printing && (
+        <PrintScoresModal
+          bandId={band.id}
+          setlistName={printing.name}
+          setlist={printing}
+          librarySongs={songs || []}
+          onClose={() => setPrinting(null)}
+        />
+      )}
       {assigning && (
         <AssignSetlistModal
           setlist={assigning}

@@ -100,6 +100,7 @@ export type Setlist = {
   bandId: string;
   name: string;
   songs: Song[];
+  coverUrl: string;
   publicToken: string;
   updatedAt: string;
 };
