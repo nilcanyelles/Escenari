@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { saveManagerProfileAction } from "@/app/(app)/manager-profile-actions";
 import { initialsOf } from "@/lib/nav";
+import ImageCropModal from "@/components/ImageCropModal";
 
 export type ManagerProfile = {
   name: string;
@@ -20,6 +21,9 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  // Fitxer acabat de triar, pendent de retallar — obre ImageCropModal.
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [form, setForm] = useState({
     role: profile.roleLabel || "Mànager",
     whatsapp: profile.whatsapp,
@@ -40,8 +44,7 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
       fd.set("whatsapp", form.whatsapp);
       fd.set("phone", form.phone);
       fd.set("email", form.email);
-      const f = fileRef.current?.files?.[0];
-      if (f) fd.set("photo", f);
+      if (photoFile) fd.set("photo", photoFile);
       const res = await saveManagerProfileAction(fd);
       if (!res.ok) { setBusy(false); setError(res.error || "No s'ha pogut desar"); return; }
     } catch {
@@ -78,7 +81,8 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
               ref={fileRef} type="file" accept="image/*" style={{ display: "none" }}
               onChange={(e) => {
                 const f = e.target.files?.[0];
-                if (f) setPhotoPreview(URL.createObjectURL(f));
+                if (f) setCropFile(f);
+                e.target.value = "";
               }}
             />
           </div>
@@ -106,6 +110,21 @@ export default function ManagerProfileModal({ profile, onClose }: { profile: Man
           </div>
         </div>
       </div>
+      {cropFile && (
+        <ImageCropModal
+          file={cropFile}
+          aspect={1}
+          circular
+          title="Retalla la foto de perfil"
+          onCancel={() => setCropFile(null)}
+          onDone={(blob) => {
+            setCropFile(null);
+            const f = new File([blob], "perfil.png", { type: "image/png" });
+            setPhotoFile(f);
+            setPhotoPreview(URL.createObjectURL(blob));
+          }}
+        />
+      )}
     </div>
   );
 }

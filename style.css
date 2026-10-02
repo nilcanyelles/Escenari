@@ -2797,13 +2797,20 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .perform-list-item-off { opacity: 0.4; }
 .perform-list-item-off:hover { opacity: 0.65; }
 .print-song-row { gap: 6px; }
-.print-song-drag { cursor: grab; flex-shrink: 0; }
+/* Amplada fixa (no només mínima): així la fila "1" i la fila "10" deixen
+   el tick i el títol exactament al mateix punt, en comptes de desplaçar-se
+   segons quants dígits té el número. */
+.print-scores-modal .print-song-drag { cursor: grab; flex-shrink: 0; width: 34px; min-width: 34px; }
 .print-song-check {
   width: 15px; height: 15px; border-radius: 4px; flex-shrink: 0;
   border: 1.5px solid var(--border-input); color: #0b0a12; font-size: 10px; font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center;
 }
 .print-song-check.on { background: var(--accent); border-color: var(--accent); }
+/* El títol no empeny res més enllà de la seva amplada fixa — el recompte
+   de partitures es penja sempre a la mateixa columna, a la vora dreta. */
+.print-scores-modal .perform-list-body { flex: none; }
+.sp-file-count.print-song-filecount { margin-left: auto; flex-shrink: 0; }
 .print-scores-actions { justify-content: center; align-items: center; }
 .print-scores-submit {
   all: unset; box-sizing: border-box; cursor: pointer;
@@ -7088,6 +7095,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .crop-frame:active { cursor: grabbing; }
 .crop-frame img { pointer-events: none; }
+.crop-frame.crop-frame-circle { border-radius: 50%; }
 .crop-zoom { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--text-muted); }
 .crop-zoom input { flex: 1; accent-color: var(--accent); }
 

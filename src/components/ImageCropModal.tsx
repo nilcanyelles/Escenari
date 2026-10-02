@@ -6,9 +6,14 @@ import { useEffect, useRef, useState } from "react";
 // ampliar amb el control lliscant) dins d'un marc amb la proporció triada
 // — el que es veu dins el marc és exactament el que es desarà. S'exporta
 // en PNG per conservar la transparència dels logos.
-export default function ImageCropModal({ file, aspect, title = "Retalla la imatge", onCancel, onDone }: {
+export default function ImageCropModal({ file, aspect, circular = false, title = "Retalla la imatge", onCancel, onDone }: {
   file: File;
   aspect: number; // amplada / alçada
+  // Marc rodó (foto de perfil) en comptes de rectangular (logo, portada…) —
+  // només canvia com es veu el marc mentre es retalla; el fitxer que en
+  // surt és igualment un quadrat/rectangle (com sempre s'ha mostrat una
+  // foto de perfil: arrodonida per CSS allà on es fa servir).
+  circular?: boolean;
   title?: string;
   onCancel: () => void;
   onDone: (blob: Blob) => void;
@@ -91,7 +96,7 @@ export default function ImageCropModal({ file, aspect, title = "Retalla la imatg
         <div className="modal-form">
           <div className="t-dim" style={{ fontSize: 12.5 }}>Arrossega la imatge per triar què es veu; amplia-la amb el control de sota.</div>
           <div
-            className="crop-frame" style={{ width: W, height: H }}
+            className={"crop-frame" + (circular ? " crop-frame-circle" : "")} style={{ width: W, height: H }}
             onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}
           >
             {url && (

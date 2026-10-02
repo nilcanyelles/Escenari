@@ -23,7 +23,7 @@ function PrinterIcon() {
   );
 }
 
-type Candidate = { songId: string; title: string; duration: string; tags: string[]; instruments: string[] };
+type Candidate = { songId: string; title: string; tags: string[]; instruments: string[] };
 
 // Menú "Imprimeix partitures" d'una setlist: tria quines cançons (de les
 // que en tenen al repertori) i quins instruments/veus, i baixa un sol PDF
@@ -64,7 +64,7 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
   const effectiveInstrument = normalizeInstrumentAcrossGroup(allScoreFiles, (f) => f.instrument || "Totes les veus");
 
   const candidates: Candidate[] = matchedSongs.map(({ song, scoreFiles }) => ({
-    songId: song.id, title: song.title, duration: song.duration || "", tags: song.tags,
+    songId: song.id, title: song.title, tags: song.tags,
     instruments: scoreFiles.map((f) => effectiveInstrument.get(f) || "Totes les veus"),
   }));
 
@@ -176,10 +176,9 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
                             const tc = tagColors(t);
                             return <span key={t} className="badge sm" style={{ background: tc.bg, color: tc.color }}>{t}</span>;
                           })}
-                          {selectedScoreCount > 0 && <span className="sp-file-count" title="Partitures"><ScoreIcon />{selectedScoreCount}</span>}
                         </span>
                       </span>
-                      <span className="t-dim perform-list-duration">{c.duration}</span>
+                      {selectedScoreCount > 0 && <span className="sp-file-count print-song-filecount" title="Partitures"><ScoreIcon />{selectedScoreCount}</span>}
                     </button>
                   </div>
                 );
