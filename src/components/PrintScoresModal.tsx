@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import type { Setlist } from "@/lib/material-types";
 import type { Song as LibrarySong } from "@/lib/songs";
-import { instrumentBaseName, instrumentIconFor, sortInstrumentInstances, tagColors } from "@/lib/tags";
+import { instrumentBaseName, instrumentIconFor, normalizeInstrumentAcrossGroup, sortInstrumentInstances, tagColors } from "@/lib/tags";
 
 function ScoreIcon() {
   return (
@@ -54,7 +54,8 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
   // resolució songId -> títol que el mode escenari), en el mateix ordre que
   // la setlist — les que no en tenen no surten a la llista (no hi ha res a
   // imprimir d'elles).
-  const candidates: Candidate[] = [];
+  type ScoreFile = LibrarySong["files"][number];
+  const matchedSongs: { song: LibrarySong; scoreFiles: ScoreFile[] }[] = [];
   const seen = new Set<string>();
   setlist.songs.filter((s) => s.title.trim()).forEach((s) => {
     const match = (s.songId && byId.get(s.songId)) || byTitle.get(s.title.toLowerCase());
@@ -62,12 +63,21 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
     const scoreFiles = match.files.filter((f) => !f.mime.startsWith("audio"));
     if (!scoreFiles.length) return;
     seen.add(match.id);
-    candidates.push({
-      songId: match.id, title: match.title, duration: match.duration || "", tags: match.tags,
-      instruments: scoreFiles.map((f) => f.instrument || "Totes les veus"),
-      scoreCount: scoreFiles.length, audioCount: match.files.length - scoreFiles.length,
-    });
+    matchedSongs.push({ song: match, scoreFiles });
   });
+
+  // Un instrument sense número ("Gralla dolça", en una cançó que només en
+  // porta un) compta com la primera instància si en alguna altra cançó de
+  // la selecció aquest mateix instrument sí que ve numerat — si no, és
+  // l'únic nom possible i es queda tal qual.
+  const allScoreFiles = matchedSongs.flatMap((m) => m.scoreFiles);
+  const effectiveInstrument = normalizeInstrumentAcrossGroup(allScoreFiles, (f) => f.instrument || "Totes les veus");
+
+  const candidates: Candidate[] = matchedSongs.map(({ song, scoreFiles }) => ({
+    songId: song.id, title: song.title, duration: song.duration || "", tags: song.tags,
+    instruments: scoreFiles.map((f) => effectiveInstrument.get(f) || "Totes les veus"),
+    scoreCount: scoreFiles.length, audioCount: song.files.length - scoreFiles.length,
+  }));
 
   const instrumentOptions = sortInstrumentInstances(
     Array.from(new Set(candidates.flatMap((c) => c.instruments))),

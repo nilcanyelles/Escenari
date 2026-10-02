@@ -46,6 +46,29 @@ export function sortInstrumentInstances<T>(list: T[], nameOf: (item: T) => strin
   return order.flatMap((base) => groups[base].slice().sort((a, b) => numSuffix(nameOf(a)) - numSuffix(nameOf(b))));
 }
 
+// Quan es combinen les partitures de diverses cançons (p. ex. per triar
+// quines imprimir), algunes poden tenir un instrument numerat ("Gralla
+// dolça 1", "Gralla dolça 2") i d'altres el mateix instrument sense
+// número (una cançó que només en porta un, "Gralla dolça" a soles) — això
+// no ha de sortir com un "instrument" diferent, sinó comptar com la
+// primera instància. Només es renombra quan de veres hi ha alguna
+// instància numerada enlloc del conjunt; si no n'hi ha cap, es queda tal
+// qual (no té sentit dir-ne "1" si mai n'hi haurà un "2").
+export function normalizeInstrumentAcrossGroup<T>(items: T[], nameOf: (item: T) => string): Map<T, string> {
+  const hasNumbered = new Set<string>();
+  items.forEach((item) => {
+    const raw = nameOf(item);
+    if (raw !== instrumentBaseName(raw)) hasNumbered.add(instrumentBaseName(raw));
+  });
+  const out = new Map<T, string>();
+  items.forEach((item) => {
+    const raw = nameOf(item);
+    const base = instrumentBaseName(raw);
+    out.set(item, raw === base && hasNumbered.has(base) ? `${base} 1` : raw);
+  });
+  return out;
+}
+
 export const INSTRUMENT_PRESETS = [
   "Acordió cromàtic", "Acordió diatònic", "Arpa", "Baix elèctric", "Balalaica", "Bandúrria", "Banjo", "Bateria",
   "Bombardó", "Bombo", "Bongos", "Caixa de percussió", "Caixa de ritmes", "Caixó", "Campanes tubulars", "Castanyoles",

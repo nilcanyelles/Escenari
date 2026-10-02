@@ -2786,7 +2786,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .print-scores-modal .modal-head { position: relative; justify-content: center; text-align: center; }
 .print-scores-modal .modal-head .cf-head-close { position: absolute; right: 0; top: 0; }
 .print-scores-modal .access-box-title { text-align: center; }
-.print-scores-modal .print-song-list { max-width: 760px; margin: 0 auto; }
+.print-scores-modal .print-song-list { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
 /* Cançó deseleccionada al menú d'imprimir: es queda a la llista (per poder
    tornar-la a marcar) però esvaïda, igual que un tipus apagat a la
    llegenda del calendari. */

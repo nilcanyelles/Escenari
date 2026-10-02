@@ -3,6 +3,7 @@ import { PDFDocument } from "pdf-lib";
 import { db } from "@/lib/db";
 import { requireBandAccess } from "@/lib/band-access";
 import { getFileBlob } from "@/lib/blob-storage";
+import { normalizeInstrumentAcrossGroup } from "@/lib/tags";
 
 export const dynamic = "force-dynamic";
 
@@ -49,6 +50,11 @@ export async function POST(req: Request) {
      order by f.created_at`,
     [bandId, songIds]
   );
+  // Mateixa normalització que al menú: un instrument sense número en una
+  // cançó compta com la primera instància si en alguna altra cançó de la
+  // selecció sí que ve numerat — si no ho fem aquí també, el servidor
+  // rebutjaria fitxers que el client ha comptat com a seleccionats.
+  const effectiveInstrument = normalizeInstrumentAcrossGroup(rows, (r) => r.instrument || "Totes les veus");
   const bySong: Record<string, typeof rows> = {};
   rows.forEach((r) => { (bySong[r.song_id] = bySong[r.song_id] || []).push(r); });
 
@@ -56,7 +62,7 @@ export async function POST(req: Request) {
   let pageCount = 0;
   // En l'ordre de la setlist (songIds ja arriba ordenat des del client).
   for (const songId of songIds) {
-    const files = (bySong[songId] || []).filter((f) => instrumentSet.has(f.instrument || "Totes les veus"));
+    const files = (bySong[songId] || []).filter((f) => instrumentSet.has(effectiveInstrument.get(f) || "Totes les veus"));
     for (const f of files) {
       if (!f.blob_url) continue;
       const bytes = await fetchBlobBytes(f.blob_url);
