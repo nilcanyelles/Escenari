@@ -2781,19 +2781,23 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    que aquesta regla vingui després al full d'estils. */
 .modal.setlist-editor { width: 75vw; height: 96vh; max-height: 96vh; overflow: hidden; display: flex; flex-direction: column; }
 .modal.print-scores-modal { width: auto; max-width: 92vw; height: 96vh; max-height: 96vh; overflow-y: auto; }
-/* Tot el contingut del menú d'imprimir partitures centrat: títol, chips
-   d'instruments i la llista de cançons. */
+/* Tot el bloc del menú d'imprimir partitures centrat dins el modal (títol,
+   chips d'instruments i la llista de cançons) — però DINS de cada fila de
+   cançó, els elements (tick, número, títol, etiquetes, partitures) van en
+   columnes fixes d'esquerra a dreta, no centrats com a grup: així el tick
+   de totes les files cau exactament al mateix punt, igual que el títol. */
 .print-scores-modal .modal-head { position: relative; justify-content: center; text-align: center; }
 .print-scores-modal .modal-head .cf-head-close { position: absolute; right: 0; top: 0; }
 .print-scores-modal .access-box-title { text-align: center; }
-.print-scores-modal .print-song-list { grid-template-columns: 1fr; max-width: 520px; margin: 0 auto; }
-.print-scores-modal .perform-list-item { justify-content: center; }
-.print-scores-modal .perform-list-body { flex: none; }
+.print-scores-modal .print-song-list { grid-template-columns: 1fr; max-width: 560px; margin: 0 auto; }
+.print-scores-modal .access-chip img { object-fit: contain; }
 /* Cançó deseleccionada al menú d'imprimir: es queda a la llista (per poder
    tornar-la a marcar) però esvaïda, igual que un tipus apagat a la
    llegenda del calendari. */
 .perform-list-item-off { opacity: 0.4; }
 .perform-list-item-off:hover { opacity: 0.65; }
+.print-song-row { gap: 6px; }
+.print-song-drag { cursor: grab; flex-shrink: 0; }
 .print-song-check {
   width: 15px; height: 15px; border-radius: 4px; flex-shrink: 0;
   border: 1.5px solid var(--border-input); color: #0b0a12; font-size: 10px; font-weight: 800;

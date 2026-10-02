@@ -75,6 +75,11 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
 
   const [selectedSongs, setSelectedSongs] = useState<Set<string>>(new Set(candidates.map((c) => c.songId)));
   const [selectedInstruments, setSelectedInstruments] = useState<Set<string>>(new Set(instrumentOptions));
+  // Ordre d'impressió: comença igual que la setlist, però es pot arrossegar
+  // per canviar-lo sense tocar l'ordre real de la setlist.
+  const [order, setOrder] = useState<string[]>(() => candidates.map((c) => c.songId));
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const formRef = useRef<HTMLFormElement>(null);
 
   function toggleSong(id: string) {
@@ -83,13 +88,27 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
   function toggleInstrument(name: string) {
     setSelectedInstruments((prev) => { const next = new Set(prev); if (next.has(name)) next.delete(name); else next.add(name); return next; });
   }
+  function handleDrop(i: number) {
+    setDragOverIndex(null);
+    if (dragIndex === null || dragIndex === i) { setDragIndex(null); return; }
+    setOrder((prev) => {
+      const next = prev.slice();
+      const [moved] = next.splice(dragIndex, 1);
+      next.splice(i, 0, moved);
+      return next;
+    });
+    setDragIndex(null);
+  }
+
+  const byCandidateId = new Map(candidates.map((c) => [c.songId, c]));
+  const orderedCandidates = order.map((id) => byCandidateId.get(id)).filter((c): c is Candidate => !!c);
 
   // Quantes partitures acabaran al PDF amb la selecció actual.
-  const matchCount = candidates
+  const matchCount = orderedCandidates
     .filter((c) => selectedSongs.has(c.songId))
     .reduce((acc, c) => acc + c.instruments.filter((i) => selectedInstruments.has(i)).length, 0);
 
-  const songIdsInOrder = candidates.filter((c) => selectedSongs.has(c.songId)).map((c) => c.songId);
+  const songIdsInOrder = orderedCandidates.filter((c) => selectedSongs.has(c.songId)).map((c) => c.songId);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -111,26 +130,45 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
                   style={{ display: "inline-flex", alignItems: "center", gap: 6 }}
                   onClick={() => toggleInstrument(name)}
                 >
-                  <img src={instrumentIconFor(instrumentBaseName(name))} alt="" style={{ width: 14, height: 14, flexShrink: 0 }} />
+                  <img src={instrumentIconFor(instrumentBaseName(name))} alt="" style={{ width: 14, height: 14, flexShrink: 0, objectFit: "contain" }} />
                   {name}
                 </button>
               ))}
             </div>
             <div className="access-box-title">Cançons</div>
             <div className="perform-intro-songs print-song-list">
-              {candidates.map((c, i) => {
+              {orderedCandidates.map((c, i) => {
                 const on = selectedSongs.has(c.songId);
                 // Només compta les veus triades a "Instruments / veus" —
                 // desseleccionar-ne una actualitza el número a l'acte.
                 const selectedScoreCount = c.instruments.filter((inst) => selectedInstruments.has(inst)).length;
                 return (
-                  <div key={c.songId} className="perform-list-row">
+                  <div
+                    key={c.songId}
+                    className={"perform-list-row print-song-row" + (dragOverIndex === i ? " setlist-row-dragover" : "") + (dragIndex === i ? " setlist-row-dragging" : "")}
+                    onDragOver={(e) => { e.preventDefault(); if (dragIndex !== null && dragOverIndex !== i) setDragOverIndex(i); }}
+                    onDragLeave={() => setDragOverIndex((v) => (v === i ? null : v))}
+                    onDrop={() => handleDrop(i)}
+                  >
+                    <span
+                      className="perform-list-num print-song-drag"
+                      draggable
+                      title="Arrossega per canviar l'ordre"
+                      onDragStart={(e) => { setDragIndex(i); e.dataTransfer.effectAllowed = "move"; }}
+                      onDragEnd={() => { setDragIndex(null); setDragOverIndex(null); }}
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ marginRight: 4, opacity: 0.5 }}>
+                        <circle cx="8" cy="6" r="1.6"></circle><circle cx="16" cy="6" r="1.6"></circle>
+                        <circle cx="8" cy="12" r="1.6"></circle><circle cx="16" cy="12" r="1.6"></circle>
+                        <circle cx="8" cy="18" r="1.6"></circle><circle cx="16" cy="18" r="1.6"></circle>
+                      </svg>
+                      {i + 1}
+                    </span>
                     <button
                       type="button" className={"perform-list-item" + (on ? "" : " perform-list-item-off")}
                       onClick={() => toggleSong(c.songId)}
                     >
                       <span className={"print-song-check" + (on ? " on" : "")}>{on ? "✓" : ""}</span>
-                      <span className="perform-list-num">{i + 1}</span>
                       <span className="perform-list-body">
                         <span className="perform-list-title-row">
                           <span className="perform-list-title">{c.title}</span>
