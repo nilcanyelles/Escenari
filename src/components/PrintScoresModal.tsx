@@ -24,6 +24,48 @@ function PrinterIcon() {
 }
 
 type Candidate = { songId: string; title: string; tags: string[]; instruments: string[] };
+type PaperSize = "A4" | "A5" | "A6";
+const PAPER_OPTIONS: { size: PaperSize; label: string; cols: number; rows: number }[] = [
+  { size: "A4", label: "A4 (1 pàgina/full)", cols: 1, rows: 1 },
+  { size: "A5", label: "A5 (2 pàgines/full)", cols: 1, rows: 2 },
+  { size: "A6", label: "A6 (4 pàgines/full)", cols: 2, rows: 2 },
+];
+
+// Mini full (sempre vertical, com el paper a la impressora) amb els mateixos
+// traços de tall curts que farà servir de veritat el PDF: només a la vora
+// (dalt/baix els verticals, esquerra/dreta els horitzontals, perquè no es
+// trepitgin mai) i, quan hi ha els dos alhora (A6), una creueta petita
+// exactament on es creuen.
+function PaperSizeIcon({ cols, rows }: { cols: number; rows: number }) {
+  const w = 24, h = 34;
+  const cellW = w / cols, cellH = h / rows;
+  const mark = 4;
+  return (
+    <svg width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true" style={{ flexShrink: 0 }}>
+      <rect x="0.75" y="0.75" width={w - 1.5} height={h - 1.5} rx="1.5" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.6" />
+      {Array.from({ length: cols - 1 }, (_, i) => (i + 1) * cellW).map((x) => (
+        <g key={"v" + x} stroke="currentColor" strokeWidth="1" opacity="0.9">
+          <line x1={x} y1="0.75" x2={x} y2={mark} />
+          <line x1={x} y1={h - mark} x2={x} y2={h - 0.75} />
+        </g>
+      ))}
+      {Array.from({ length: rows - 1 }, (_, i) => (i + 1) * cellH).map((y) => (
+        <g key={"h" + y} stroke="currentColor" strokeWidth="1" opacity="0.9">
+          <line x1="0.75" y1={y} x2={mark} y2={y} />
+          <line x1={w - mark} y1={y} x2={w - 0.75} y2={y} />
+        </g>
+      ))}
+      {cols > 1 && rows > 1 && Array.from({ length: cols - 1 }, (_, i) => (i + 1) * cellW).flatMap((x) =>
+        Array.from({ length: rows - 1 }, (_, j) => (j + 1) * cellH).map((y) => (
+          <g key={"x" + x + "-" + y} stroke="currentColor" strokeWidth="1" opacity="0.9">
+            <line x1={x - 1.5} y1={y} x2={x + 1.5} y2={y} />
+            <line x1={x} y1={y - 1.5} x2={x} y2={y + 1.5} />
+          </g>
+        ))
+      )}
+    </svg>
+  );
+}
 
 // Menú "Imprimeix partitures" d'una setlist: tria quines cançons (de les
 // que en tenen al repertori) i quins instruments/veus, i baixa un sol PDF
@@ -80,6 +122,7 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
   const [order, setOrder] = useState<string[]>(() => candidates.map((c) => c.songId));
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [paperSize, setPaperSize] = useState<PaperSize>("A4");
   const formRef = useRef<HTMLFormElement>(null);
 
   function toggleSong(id: string) {
@@ -132,6 +175,20 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
                 >
                   <img src={instrumentIconFor(instrumentBaseName(name))} alt="" style={{ width: 14, height: 14, flexShrink: 0, objectFit: "contain" }} />
                   {name}
+                </button>
+              ))}
+            </div>
+            <div className="access-box-title">Mida del paper</div>
+            <div className="access-box-list" style={{ marginBottom: 22, justifyContent: "center" }}>
+              {PAPER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.size} type="button"
+                  className={"access-chip" + (paperSize === opt.size ? " active" : "")}
+                  style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+                  onClick={() => setPaperSize(opt.size)}
+                >
+                  <PaperSizeIcon cols={opt.cols} rows={opt.rows} />
+                  {opt.label}
                 </button>
               ))}
             </div>
@@ -189,6 +246,7 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
               <input type="hidden" name="name" value={setlistName} />
               <input type="hidden" name="songIds" value={JSON.stringify(songIdsInOrder)} />
               <input type="hidden" name="instruments" value={JSON.stringify(Array.from(selectedInstruments))} />
+              <input type="hidden" name="paperSize" value={paperSize} />
             </form>
             <div className="modal-actions print-scores-actions">
               <button type="button" className="btn-outline" onClick={onClose}>Cancel·la</button>
