@@ -53,6 +53,7 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
       selectedBandId={bandId}
       viewer="artist"
       canCreate={canCreate}
+      canDelete={canCreate}
       allowBolo={allowBolo}
       detailBase="/artista/concerts"
       myNames={myNames}

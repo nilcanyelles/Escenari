@@ -122,7 +122,7 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, allowBolo, detailBase = "/concerts", contacts = [], myNames, today, fullHistoryLoaded = true }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string; fullHistoryLoaded?: boolean }) {
+export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, canDelete = false, allowBolo, detailBase = "/concerts", contacts = [], myNames, today, fullHistoryLoaded = true }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; canDelete?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string; fullHistoryLoaded?: boolean }) {
   const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
@@ -383,7 +383,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             <span className="cc-paid-tooltip">{formatCurrency(paidAmount)}</span>
           </span>
         </div>
-        <div onClick={(e) => e.stopPropagation()}>{isMgr && <DeleteConcertBtn id={c.id} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
+        <div onClick={(e) => e.stopPropagation()}>{(isMgr || canDelete) && <DeleteConcertBtn id={c.id} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
       </div>
     );
   }

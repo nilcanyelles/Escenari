@@ -513,7 +513,9 @@ export async function setConcertPaidAction(id: string, paid: boolean) {
 }
 
 export async function deleteConcertAction(id: string) {
-  const { workspaceId } = await requireConcertAccess(id, "admin");
+  // Gestor, o membre del grup amb el permís "Esdeveniments" (igual que per
+  // crear-ne un) — no cal ser admin del grup per eliminar-lo.
+  const { workspaceId } = await requireConcertAccess(id, "events");
   const pool = db();
   await pool.query("delete from invoices where concert_id=$1 and workspace_id=$2", [id, workspaceId]);
   await pool.query("delete from concerts where id=$1 and workspace_id=$2", [id, workspaceId]);
