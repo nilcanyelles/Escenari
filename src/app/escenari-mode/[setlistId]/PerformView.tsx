@@ -88,7 +88,6 @@ function SongListRow({ song, originalIndex, active, highlighted, canHighlight, o
             })}
           </span>
         </span>
-        <span className="t-dim perform-list-duration">{song.duration}</span>
       </button>
       {canHighlight && (
         <button

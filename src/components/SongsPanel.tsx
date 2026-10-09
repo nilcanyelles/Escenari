@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import type { Band } from "@/lib/types";
 import type { Song } from "@/lib/songs";
 import { transposeChord, parseChordLine, hasChords } from "@/lib/songs";
@@ -9,6 +9,7 @@ import { normalize } from "@/lib/text";
 import { tagColors, uniqueTags } from "@/lib/tags";
 import { saveSongAction, deleteSongAction, reorderSongsAction } from "@/app/(app)/grup/songs-actions";
 import SpecularButton from "@/components/SpecularButton";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 function fmtSize(bytes: number): string {
   if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
@@ -61,6 +62,10 @@ const PAGE_SIZE = 5;
 
 export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs: Song[]; canEdit: boolean }) {
   const router = useRouter();
+  const pathname = usePathname();
+  // Perquè l'editor de la cançó (Surt) sempre torni exactament a aquesta
+  // pestanya (Cançons), sigui la del gestor o la del músic.
+  const songHref = (id: string) => `/canco/${id}?back=${encodeURIComponent(pathname + "?tab=cancons")}&backLabel=${encodeURIComponent("Cançons")}`;
   const [search, setSearch] = useState("");
   const [creating, setCreating] = useState(false);
   const [showAll, setShowAll] = useState(false);
@@ -75,6 +80,8 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
   // Avís quan es clica una cançó sense cap partitura ni àudio: no té sentit
   // entrar al mode escenari amb la pantalla buida.
   const [emptyWarnId, setEmptyWarnId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Song | null>(null);
+  const [deleting, setDeleting] = useState(false);
   function openSong(s: Song) {
     if (s.files.length === 0) {
       setEmptyWarnId(s.id);
@@ -159,7 +166,7 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
                     id: null, bandId: band.id, title: "Nova cançó", artist: "", tempo: 0,
                     songKey: "", duration: "", notes: "", lyrics: "", instruments: [],
                   });
-                  router.push(`/canco/${id}`);
+                  router.push(songHref(id));
                 }}>
                 {creating ? "Creant…" : "+ Nova cançó"}
               </SpecularButton>
@@ -177,8 +184,6 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
               <span className="sp-idx"></span>
               <span></span>
               <span>Títol</span>
-              <span className="sp-band-col">To · BPM</span>
-              <span className="sp-dur">⏱</span>
               <span className="sp-actions"></span>
             </div>
             {visible.map((s) => {
@@ -282,20 +287,14 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
                       })()}
                     </span>
                   </span>
-                  <span className="sp-band-col">{[s.songKey, s.tempo ? `${s.tempo} bpm` : ""].filter(Boolean).join(" · ") || "—"}</span>
-                  <span className="sp-dur">{s.duration || "—"}</span>
                   <span className="sp-actions" onClick={(e) => e.stopPropagation()}>
                     {canEdit && (
                       <>
-                        <button type="button" className="row-edit-btn" title="Edita la cançó" onClick={() => router.push(`/canco/${s.id}`)}>
+                        <button type="button" className="row-edit-btn" title="Edita la cançó" onClick={() => router.push(songHref(s.id))}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
                         </button>
                         <button type="button" className="row-delete-btn" title="Elimina"
-                          onClick={async () => {
-                            if (!confirm(`Eliminar "${s.title}" del repertori?`)) return;
-                            await deleteSongAction(band.id, s.id);
-                            router.refresh();
-                          }}>
+                          onClick={() => setDeleteTarget(s)}>
                           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                         </button>
                       </>
@@ -315,6 +314,21 @@ export default function SongsPanel({ band, songs, canEdit }: { band: Band; songs
         )}
       </div>
 
+      {deleteTarget && (
+        <ConfirmDialog
+          title="Eliminar la cançó?"
+          message={<>Segur que vols eliminar la cançó <strong>{deleteTarget.title}</strong>?</>}
+          confirmLabel="Elimina" busy={deleting}
+          onCancel={() => setDeleteTarget(null)}
+          onConfirm={async () => {
+            setDeleting(true);
+            await deleteSongAction(band.id, deleteTarget.id);
+            setDeleting(false);
+            setDeleteTarget(null);
+            router.refresh();
+          }}
+        />
+      )}
     </div>
   );
 }

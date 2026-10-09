@@ -97,7 +97,8 @@ export type Song = { title: string; duration: string; key: string; notes: string
 
 export type Setlist = {
   id: string;
-  bandId: string;
+  bandId: string | null;
+  ownerClerkUserId: string | null;
   name: string;
   songs: Song[];
   coverUrl: string;

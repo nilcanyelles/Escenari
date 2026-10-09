@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { Setlist } from "@/lib/material-types";
 import type { Song as LibrarySong } from "@/lib/songs";
 import { instrumentBaseName, instrumentIconFor, normalizeInstrumentAcrossGroup, sortInstrumentInstances, tagColors } from "@/lib/tags";
 
@@ -67,29 +66,30 @@ function PaperSizeIcon({ cols, rows }: { cols: number; rows: number }) {
   );
 }
 
-// Menú "Imprimeix partitures" d'una setlist: tria quines cançons (de les
-// que en tenen al repertori) i quins instruments/veus, i baixa un sol PDF
-// amb totes les partitures triades fusionades — generat a /api/print-scores
-// (pdf-lib, no window.print()) perquè pot combinar PDFs i imatges de
-// cançons diferents en un sol fitxer.
-export default function PrintScoresModal({ bandId, setlistName, setlist, librarySongs, onClose }: {
-  bandId: string;
-  setlistName: string;
-  setlist: Setlist;
+// Menú "Imprimeix partitures": tria quines cançons (de les que en tenen al
+// repertori) i quins instruments/veus, i baixa un sol PDF amb totes les
+// partitures triades fusionades — generat a /api/print-scores (pdf-lib, no
+// window.print()) perquè pot combinar PDFs i imatges de cançons diferents
+// en un sol fitxer. Reutilitzat tant per una setlist (bandId fix, un sol
+// grup) com per la biblioteca d'un músic (sense bandId, cançons de grups
+// diferents — el servidor en comprova l'accés una per una).
+export default function PrintScoresModal({ bandId, title, songs, librarySongs, onClose }: {
+  bandId?: string;
+  title: string;
+  songs: { title: string; songId?: string }[];
   librarySongs: LibrarySong[];
   onClose: () => void;
 }) {
   const byId = new Map(librarySongs.map((s) => [s.id, s]));
   const byTitle = new Map(librarySongs.map((s) => [s.title.toLowerCase(), s]));
 
-  // Cançons de la setlist que tenen partitures al repertori (mateixa
-  // resolució songId -> títol que el mode escenari), en el mateix ordre que
-  // la setlist — les que no en tenen no surten a la llista (no hi ha res a
-  // imprimir d'elles).
+  // Cançons que tenen partitures al repertori (mateixa resolució songId ->
+  // títol que el mode escenari), en el mateix ordre que s'han donat — les
+  // que no en tenen no surten a la llista (no hi ha res a imprimir d'elles).
   type ScoreFile = LibrarySong["files"][number];
   const matchedSongs: { song: LibrarySong; scoreFiles: ScoreFile[] }[] = [];
   const seen = new Set<string>();
-  setlist.songs.filter((s) => s.title.trim()).forEach((s) => {
+  songs.filter((s) => s.title.trim()).forEach((s) => {
     const match = (s.songId && byId.get(s.songId)) || byTitle.get(s.title.toLowerCase());
     if (!match || seen.has(match.id)) return;
     const scoreFiles = match.files.filter((f) => !f.mime.startsWith("audio"));
@@ -157,11 +157,11 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal print-scores-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
-          <div className="rider-name-input" style={{ fontWeight: 700, fontSize: 16 }}>Imprimeix partitures — {setlistName}</div>
+          <div className="rider-name-input" style={{ fontWeight: 700, fontSize: 16 }}>Imprimeix partitures — {title}</div>
           <button className="cf-head-close" title="Tancar" aria-label="Tancar" onClick={onClose}>✕</button>
         </div>
         {candidates.length === 0 ? (
-          <div className="t-dim" style={{ fontSize: 13, textAlign: "center" }}>Cap cançó d&apos;aquesta setlist té partitures penjades al repertori.</div>
+          <div className="t-dim" style={{ fontSize: 13, textAlign: "center" }}>Cap d&apos;aquestes cançons té partitures penjades.</div>
         ) : (
           <>
             <div className="access-box-title">Instruments / veus</div>
@@ -242,8 +242,8 @@ export default function PrintScoresModal({ bandId, setlistName, setlist, library
               })}
             </div>
             <form ref={formRef} method="POST" action="/api/print-scores" target="_blank" style={{ display: "none" }}>
-              <input type="hidden" name="bandId" value={bandId} />
-              <input type="hidden" name="name" value={setlistName} />
+              {bandId && <input type="hidden" name="bandId" value={bandId} />}
+              <input type="hidden" name="name" value={title} />
               <input type="hidden" name="songIds" value={JSON.stringify(songIdsInOrder)} />
               <input type="hidden" name="instruments" value={JSON.stringify(Array.from(selectedInstruments))} />
               <input type="hidden" name="paperSize" value={paperSize} />

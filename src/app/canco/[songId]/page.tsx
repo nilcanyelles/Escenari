@@ -10,8 +10,12 @@ export const dynamic = "force-dynamic";
 // Editor de cançó a pàgina completa: lletra i acords a l'esquerra, dades,
 // instruments i partitures a la dreta. Serveix per a les cançons d'un grup
 // (gestor o membres) i per a les cançons pròpies del músic (biblioteca).
-export default async function SongStudioPage({ params }: { params: Promise<{ songId: string }> }) {
+export default async function SongStudioPage({ params, searchParams }: {
+  params: Promise<{ songId: string }>;
+  searchParams: Promise<{ back?: string; backLabel?: string }>;
+}) {
   const { songId } = await params;
+  const sp = await searchParams;
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
 
@@ -20,6 +24,7 @@ export default async function SongStudioPage({ params }: { params: Promise<{ son
 
   let allowed = false;
   let backHref = "/grup?tab=cancons";
+  let backLabel = "Cançons";
   let bandName = "Les meves cançons";
   let bandLogo = "";
   let bandColor = "#8b7bff";
@@ -51,9 +56,18 @@ export default async function SongStudioPage({ params }: { params: Promise<{ son
     // els seus.
     allowed = song.ownerClerkUserId === profile.clerkUserId;
     backHref = profile.role === "manager" ? "/grup" : "/artista/biblioteca";
+    backLabel = profile.role === "manager" ? "Grup" : "Biblioteca de cançons";
     bandInstruments.push(...profile.instruments);
   }
   if (!allowed) notFound();
+
+  // Si s'hi ha arribat des d'un enllaç real (Repertori, Biblioteca…), "Surt"
+  // torna exactament allà — amb el nom d'aquella pestanya. Sense parar
+  // atenció a camins "//..." (redirigirien a un altre domini).
+  if (sp.back && sp.back.startsWith("/") && !sp.back.startsWith("//")) {
+    backHref = sp.back;
+    if (sp.backLabel) backLabel = sp.backLabel;
+  }
 
   // Etiquetes ja fetes servir a la resta del repertori (o de la biblioteca
   // personal, si és una cançó pròpia), per recomanar-les aquí també.
@@ -71,6 +85,7 @@ export default async function SongStudioPage({ params }: { params: Promise<{ son
       bandInstruments={bandInstruments}
       existingTags={existingTags}
       backHref={backHref}
+      backLabel={backLabel}
     />
   );
 }

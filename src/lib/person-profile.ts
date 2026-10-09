@@ -34,6 +34,7 @@ export type ProfileConcert = {
   bandName: string;
   bandColor: string;
   status: string;
+  kind: string;
   answer: "yes" | "no" | "pending";
 };
 
@@ -248,7 +249,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
   let songs: ProfileSong[] = [];
   if (visibleIds.length) {
     const cRows = (await pool.query(
-      `select id, date, city, venue, band_id, band_name, status, attendance from concerts
+      `select id, date, city, venue, band_id, band_name, status, kind, attendance from concerts
        where workspace_id=$1 and band_id = any($2) and status <> 'cancel·lat'
        order by date`,
       [row.workspace_id, visibleIds]
@@ -265,6 +266,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
         bandName: c.band_name,
         bandColor: band?.color1 || "#8b7bff",
         status: c.status,
+        kind: c.kind || "bolo",
         answer: att === "yes" ? "yes" : att === "no" ? "no" : "pending",
       };
     });
@@ -288,7 +290,8 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     });
   }
 
-  const past = concerts.filter((c) => c.answer === "yes");
+  // "Concerts fets": només bolos de debò, no assajos ni reunions.
+  const past = concerts.filter((c) => c.answer === "yes" && c.kind === "bolo");
 
   // Disponibilitat (només si té compte) i dies ocupats per bolos.
   const availability: Record<string, boolean> = {};

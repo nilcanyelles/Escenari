@@ -22,6 +22,26 @@ export async function getSetlists(bandId: string): Promise<Setlist[]> {
   return rows.map((r) => ({
     id: r.id,
     bandId: r.band_id,
+    ownerClerkUserId: r.owner_clerk_user_id,
+    name: r.name,
+    songs: r.songs || [],
+    coverUrl: r.cover_url || "",
+    publicToken: r.public_token,
+    updatedAt: iso(r.updated_at),
+  }));
+}
+
+// Setlists personals (biblioteca del músic): sense grup, amb propietari —
+// igual que getPersonalSongs a lib/songs.ts.
+export async function getPersonalSetlists(clerkUserId: string): Promise<Setlist[]> {
+  const { rows } = await db().query(
+    "select * from setlists where band_id is null and owner_clerk_user_id=$1 order by created_at",
+    [clerkUserId]
+  );
+  return rows.map((r) => ({
+    id: r.id,
+    bandId: r.band_id,
+    ownerClerkUserId: r.owner_clerk_user_id,
     name: r.name,
     songs: r.songs || [],
     coverUrl: r.cover_url || "",

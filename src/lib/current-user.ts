@@ -2,6 +2,7 @@ import { cache } from "react";
 import { auth, currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "./db";
+import { getViewMode } from "./view-mode";
 
 export type Profile = {
   clerkUserId: string;
@@ -76,15 +77,6 @@ export const getClerkEmail = cache(async (): Promise<string> => {
   return user?.primaryEmailAddress?.emailAddress || user?.emailAddresses?.[0]?.emailAddress || "";
 });
 
-// Per a pàgines de gestor: redirigeix qui no toca (sense perfil → alta;
-// artista → la seva àrea).
-export async function requireManager(): Promise<Profile & { workspaceId: string }> {
-  const profile = await getProfile();
-  if (!profile) redirect("/onboarding");
-  if (profile.role !== "manager" || !profile.workspaceId) redirect("/artista");
-  return profile as Profile & { workspaceId: string };
-}
-
 // Un gestor que també toca (ha creat el seu grup com a músic, o s'hi ha
 // afegit com a músic) entra a l'àrea de músic igual que un artista.
 export const hasBandMembership = cache(async (clerkUserId: string): Promise<boolean> => {
@@ -92,12 +84,29 @@ export const hasBandMembership = cache(async (clerkUserId: string): Promise<bool
   return rows.length > 0;
 });
 
+// Per a pàgines de gestor: redirigeix qui no toca (sense perfil → alta;
+// artista → la seva àrea). Un gestor que també toca en algun grup, i que ha
+// triat veure l'àrea de músic des del seu perfil (escenari_view), hi va en
+// comptes de quedar-se aquí — és el mateix compte, ho fa amb un botó.
+export async function requireManager(): Promise<Profile & { workspaceId: string }> {
+  const profile = await getProfile();
+  if (!profile) redirect("/onboarding");
+  if (profile.role !== "manager" || !profile.workspaceId) redirect("/artista");
+  if ((await getViewMode()) === "artist" && (await hasBandMembership(profile.clerkUserId))) redirect("/artista");
+  return profile as Profile & { workspaceId: string };
+}
+
 // Per a pàgines d'artista. Un gestor (encara que també toqui en algun grup)
-// fa servir sempre l'àrea de gestió, que ho té tot — no hi ha dues vistes.
+// fa servir sempre l'àrea de gestió per defecte — només hi entra si ha
+// triat explícitament la vista de músic des del seu perfil.
 export async function requireArtist(): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
-  if (profile.role === "manager" && profile.workspaceId) redirect("/resum");
+  if (profile.role === "manager" && profile.workspaceId) {
+    const isMusicianToo = await hasBandMembership(profile.clerkUserId);
+    if (!isMusicianToo || (await getViewMode()) !== "artist") redirect("/resum");
+    return profile;
+  }
   if (profile.role !== "artist" && !(await hasBandMembership(profile.clerkUserId))) redirect("/resum");
   return profile;
 }

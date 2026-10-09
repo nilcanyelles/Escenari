@@ -27,8 +27,12 @@ function WaveformIcon() {
   );
 }
 
-export default function SetlistEditor({ band, setlist, librarySongs = [], onClose }: { band: Band; setlist: Setlist | null; librarySongs?: LibrarySong[]; onClose: () => void }) {
+type EditorBand = Pick<Band, "id" | "name" | "color1" | "logo">;
+
+export default function SetlistEditor({ band, setlist, librarySongs = [], onClose }: { band: EditorBand | null; setlist: Setlist | null; librarySongs?: LibrarySong[]; onClose: () => void }) {
   const router = useRouter();
+  const bandName = band?.name || "Les meves cançons";
+  const bandColor = band?.color1 || "#8b7bff";
   const [name, setName] = useState(setlist?.name || "Setlist");
   const [songs, setSongs] = useState<Song[]>(setlist?.songs?.length ? setlist.songs : [{ title: "", duration: "", key: "", notes: "" }]);
   const [setlistId, setSetlistId] = useState<string | null>(setlist?.id || null);
@@ -48,7 +52,7 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
     if (saveTimer.current) window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(async () => {
       setSaving(true);
-      const { id } = await saveSetlistAction({ id: setlistId, bandId: band.id, name, songs });
+      const { id } = await saveSetlistAction({ id: setlistId, bandId: band?.id || null, name, songs });
       setSetlistId(id);
       router.refresh();
       setSaving(false);
@@ -109,12 +113,12 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
     // no n'hi ha, es desa ara mateix per poder-hi penjar la foto.
     let id = setlistId;
     if (!id) {
-      const saved = await saveSetlistAction({ id: null, bandId: band.id, name, songs });
+      const saved = await saveSetlistAction({ id: null, bandId: band?.id || null, name, songs });
       id = saved.id;
       setSetlistId(id);
     }
     const fd = new FormData();
-    fd.set("bandId", band.id);
+    if (band) fd.set("bandId", band.id);
     fd.set("setlistId", id);
     fd.set("file", file);
     const res = await uploadSetlistCoverAction(fd);
@@ -185,12 +189,11 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
                 <span></span>
                 <span>Cançó</span>
                 <span>Comentari</span>
-                <span className="sp-dur">⏱</span>
                 <span className="sp-actions"></span>
               </div>
               {songs.map((s, i) => {
                 const lib = s.songId ? librarySongById.get(s.songId) : undefined;
-                const coverColor = band.color1 || "#8b7bff";
+                const coverColor = bandColor;
                 return (
                   <div
                     key={i}
@@ -213,8 +216,8 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
                       </svg>
                       {i + 1}
                     </span>
-                    {lib?.coverUrl || band.logo ? (
-                      <img className="sp-cover sp-cover-img" src={lib?.coverUrl || band.logo} alt="" draggable={false} />
+                    {lib?.coverUrl || band?.logo ? (
+                      <img className="sp-cover sp-cover-img" src={lib?.coverUrl || band?.logo} alt="" draggable={false} />
                     ) : (
                       <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${coverColor}, #17141f)` }}>♪</span>
                     )}
@@ -227,7 +230,7 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
                         })}
                       </span>
                       <span className="sp-artist">
-                        {band.name}
+                        {bandName}
                         {(() => {
                           if (!lib?.files.length) return null;
                           const scoreCount = lib.files.filter((f) => !f.mime.startsWith("audio")).length;
@@ -245,7 +248,6 @@ export default function SetlistEditor({ band, setlist, librarySongs = [], onClos
                       className="field-input compact-field setlist-comment-input" placeholder="Solo llarg, enllaça amb la següent…"
                       value={s.notes} onChange={(e) => update(i, { notes: e.target.value })}
                     />
-                    <span className="sp-dur">{s.duration || "—"}</span>
                     <span className="sp-actions">
                       <button type="button" className="row-delete-btn" onClick={() => setSongs(songs.filter((_, j) => j !== i))}>✕</button>
                     </span>

@@ -257,10 +257,10 @@ export default function MaterialDoc({ kind, name, band, agencyLogo = "", rider, 
               {songs.filter((s) => s.title.trim()).length} cançons · durada total {formatTotalDuration(totalSecs)}
             </div>
             <table className="md-table md-setlist-table">
-              <thead><tr><th>#</th><th>Cançó</th><th>Durada</th><th>To</th><th>Notes</th></tr></thead>
+              <thead><tr><th>#</th><th>Cançó</th><th>Notes</th></tr></thead>
               <tbody>
                 {songs.filter((s) => s.title.trim()).map((s, i) => (
-                  <tr key={i}><td>{i + 1}</td><td className="md-song">{s.title}</td><td>{s.duration}</td><td>{s.key}</td><td>{s.notes}</td></tr>
+                  <tr key={i}><td>{i + 1}</td><td className="md-song">{s.title}</td><td>{s.notes}</td></tr>
                 ))}
               </tbody>
             </table>

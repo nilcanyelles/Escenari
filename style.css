@@ -3721,8 +3721,6 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    de totes les files comencin sempre al mateix punt, alineades en columna
    — igual que al Repertori (.sp-title). */
 .perform-list-title { flex: 0 1 150px; min-width: 60px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.perform-list-filecount { display: flex; align-items: center; gap: 8px; }
-.perform-list-duration { flex-shrink: 0; font-size: 12px; }
 /* Fila d'una cançó (menú inicial i barra lateral): el botó de sempre +
    l'estrella de destacar-la, a la dreta del tot. */
 .perform-list-row { position: relative; display: flex; align-items: center; gap: 2px; }
@@ -5098,7 +5096,13 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   gap: 24px;
-  align-items: start;
+  align-items: stretch;
+}
+/* Mateixa alçada a les dues columnes — si hi ha molts grups i no hi caben,
+   es fa scroll només dins la pestanya de Grups (vegeu .pv-bands), mai la
+   pàgina sencera. */
+@media (min-width: 861px) {
+  .pv-grid { height: calc(100vh - 170px); margin-bottom: 0; }
 }
 @media (max-width: 860px) {
   .pv-grid { grid-template-columns: 1fr; }
@@ -5166,7 +5170,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   color: var(--text-dim);
 }
 .pv-chip img { width: 15px; height: 15px; object-fit: contain; }
-.pv-bands { display: flex; flex-direction: column; gap: 8px; }
+.pv-bands { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
 .pv-band {
   display: flex; align-items: center; gap: 10px;
   background: oklch(1 0 0 / 0.04);
@@ -5175,17 +5179,32 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   padding: 8px 10px;
 }
 .pv-band img { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; }
+/* Variant clicable (porta directament al grup) — mateix aspecte que la
+   fila normal, només amb cursor i una mica més de contrast en passar-hi
+   per sobre. */
+.pv-band-link {
+  width: 100%; text-align: left; font-family: inherit; color: inherit; cursor: pointer;
+  border: none; border-left: 3px solid var(--pv-accent, var(--accent));
+}
+.pv-band-link:hover, .pv-band-link:focus-visible { background: oklch(1 0 0 / 0.08); }
 .pv-band-name { font-size: 13px; font-weight: 600; }
 .pv-band-role { font-size: 11px; color: var(--text-faint); }
+.pv-band-counts { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: auto; flex-shrink: 0; }
+.pv-band-counts span { font-size: 11px; color: var(--text-faint); }
+.pv-band-counts strong { font-weight: 800; color: var(--text); margin-right: 3px; }
 
 /* Columna principal */
-.pv-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.pv-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; min-height: 0; }
 .pv-panel {
   background: var(--bg-card);
   border: 1px solid var(--border-soft);
   border-radius: 20px;
   padding: 20px 22px;
 }
+/* El panell de Grups (sempre el primer dins pv-main) ocupa tot l'espai
+   restant de la columna — la llista hi fa scroll internament (.pv-bands),
+   el títol es queda fix a dalt. */
+.pv-main .pv-panel:first-child { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .pv-panel-title { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 16px; }
 
 /* Calendari d'assistència */
@@ -5234,7 +5253,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .sp-row {
   position: relative;
   display: grid;
-  grid-template-columns: 34px 44px minmax(0, 1fr) 130px 52px;
+  grid-template-columns: 34px 44px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   padding: 7px 10px;
@@ -5248,13 +5267,14 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   box-shadow: 0 4px 14px rgba(0,0,0,0.35); pointer-events: none;
   animation: copy-toast-in .12s ease-out;
 }
-.sp-row:has(.sp-actions) { grid-template-columns: 34px 44px minmax(0, 1fr) 130px 52px 62px; }
+.sp-row:has(.sp-actions) { grid-template-columns: 34px 44px minmax(0, 1fr) 62px; }
 /* Setlist editor: mateixa estètica de fila que el Repertori, però amb un
    comentari editable en lloc de la columna To·BPM — calen les dues
    classes perquè guanyi en especificitat a la regla ":has()" d'aquí dalt. */
-.sp-row.setlist-sp-row { grid-template-columns: 34px 44px minmax(0, 1fr) minmax(160px, 280px) 60px 34px; }
+.sp-row.setlist-sp-row { grid-template-columns: 34px 44px minmax(0, 1fr) minmax(160px, 280px) 34px; }
 .sp-row:not(.sp-head):hover { background: oklch(1 0 0 / 0.06); }
 .sp-row.playing { background: oklch(0.68 0.19 290 / 0.12); }
+.sp-row.clickable { cursor: pointer; }
 .sp-row-dragging { opacity: 0.4; }
 .sp-drag-handle { cursor: grab; }
 .sp-head {
@@ -5298,7 +5318,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .sp-title { flex: 0 1 200px; min-width: 100px; max-width: 200px; font-size: 14px; font-weight: 600; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sp-row.playing .sp-title { color: var(--accent-text); }
 .sp-artist { font-size: 11.5px; color: var(--text-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-file-count { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; }
+.sp-file-count { display: inline-flex; align-items: center; gap: 3px; margin-left: 8px; color: var(--text-ghost); }
 .sp-file-count svg { flex: none; opacity: 0.8; }
 .sp-tag-add-btn {
   all: unset; cursor: pointer; box-sizing: border-box; flex: none;
@@ -5327,8 +5347,6 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-size: 13px; font-weight: 700; color: var(--accent-text); padding: 0 2px;
 }
 .sp-tag-done-btn:hover { opacity: 0.75; }
-.sp-band-col { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sp-dur { font-size: 12px; color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
 .sp-actions { display: flex; justify-content: center; gap: 2px; }
 .row-edit-btn {
   all: unset; cursor: pointer; box-sizing: border-box;
@@ -5338,8 +5356,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .row-edit-btn:hover, .row-edit-btn.active { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); }
 @media (max-width: 640px) {
-  .sp-row, .sp-row:has(.sp-actions) { grid-template-columns: 30px 38px minmax(0, 1fr) 46px; }
-  .sp-band-col { display: none; }
+  .sp-row, .sp-row:has(.sp-actions) { grid-template-columns: 30px 38px minmax(0, 1fr); }
   .sp-row:has(.sp-actions) .sp-actions { display: none; }
   .sp-head .sp-actions { display: none; }
 }
@@ -6604,24 +6621,55 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .subs-actions .btn-outline, .subs-actions .btn-save { padding: 8px 12px; font-size: 12.5px; text-decoration: none; display: inline-flex; align-items: center; }
 
 /* ============ Biblioteca de cançons (músic) ============ */
+/* Mateixa estètica de fila que el Repertori d'un grup (.sp-row) — aquí
+   amb una columna d'accions més ampla (escolta + mode escenari + edita +
+   esborra, en comptes de només edita/esborra). */
 .lib-filters { display: flex; flex-direction: column; gap: 10px; }
 .lib-chip { display: inline-flex; align-items: center; gap: 6px; }
 .lib-chip img { width: 16px; height: 16px; border-radius: 4px; object-fit: cover; }
-.lib-list { display: flex; flex-direction: column; gap: 6px; }
-.lib-row {
-  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; align-items: center; gap: 12px;
-  padding: 8px 10px; border-radius: 12px; background: var(--bg-card); border: 1px solid var(--border-soft);
-}
-.lib-row.playing { background: oklch(0.68 0.19 290 / 0.12); }
-.lib-main { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.lib-tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .lib-band { font-size: 10.5px; font-weight: 700; border-radius: 999px; padding: 2px 8px; white-space: nowrap; }
-.lib-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
-.lib-actions .btn-outline { padding: 7px 10px; font-size: 12px; }
-@media (max-width: 640px) {
-  .lib-row { grid-template-columns: 44px minmax(0, 1fr); }
-  .lib-actions { grid-column: 1 / -1; justify-content: flex-start; }
+/* Nom del grup com a columna pròpia, a la dreta del tot però abans
+   d'editar/eliminar — no enganxat al títol. */
+.lib-band-col { display: flex; justify-content: flex-end; overflow: hidden; }
+.lib-expand-btn {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  width: 26px; height: 26px; border-radius: 7px; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-fainter); transition: transform .15s;
 }
+.lib-expand-btn:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); }
+.lib-expand-btn.open { transform: rotate(180deg); }
+.lib-setlist-songs { display: flex; flex-direction: column; gap: 2px; padding: 4px 10px 10px 100px; }
+.lib-setlist-song-row { font-size: 13px; color: var(--text-dim); display: flex; gap: 6px; }
+.sp-row:has(.sp-actions.lib-actions-wide) { grid-template-columns: 34px 44px minmax(0, 1fr) 130px 112px; }
+.lib-actions-wide { display: flex; gap: 4px; align-items: center; justify-content: flex-end; }
+
+/* Clicar una cançó la sel·lecciona (en comptes d'obrir el mode escenari
+   directament) — amb una o més sel·leccionades, la barra d'accions massives
+   permet eliminar-les, imprimir-les o obrir-les totes al mode escenari com
+   si fossin una setlist, en l'ordre en què s'han triat. */
+.lib-select-check {
+  font-size: 12.5px; color: var(--text-faint); font-variant-numeric: tabular-nums;
+  width: 20px; height: 20px; border-radius: 6px; display: inline-flex;
+  align-items: center; justify-content: center; transition: background .15s, color .15s;
+}
+.lib-select-check.on { background: var(--accent); color: #fff; font-weight: 700; font-size: 12px; }
+.sp-row.lib-row-selected { background: oklch(0.68 0.19 290 / 0.1); }
+.lib-print-round {
+  all: unset; box-sizing: border-box; cursor: pointer; flex: none;
+  width: 38px; height: 38px; border-radius: 50%;
+  border: 1px solid var(--border-input); background: var(--bg-card-2); color: var(--text-dim);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.lib-print-round:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); border-color: transparent; }
+.lib-print-round:disabled { opacity: 0.45; cursor: default; }
+.lib-select-count-wrap { display: flex; align-items: center; gap: 3px; }
+.lib-select-count { font-size: 11.5px; font-weight: 700; color: var(--accent-text); }
+.lib-select-clear {
+  all: unset; box-sizing: border-box; cursor: pointer; width: 16px; height: 16px; border-radius: 5px;
+  display: flex; align-items: center; justify-content: center; color: var(--text-fainter); font-size: 10px;
+}
+.lib-select-clear:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); }
 
 /* ============ Agència a la barra de grups + perfil del gestor ============ */
 .band-rail-agency-logo { background: var(--bg-card); }
@@ -6898,7 +6946,6 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   .join-box { flex-direction: column; align-items: stretch; }
   .join-code { text-align: center; }
   .subs-filterbar .input.search { min-width: 0; width: 100%; }
-  .lib-actions .btn-outline { padding: 6px 8px; font-size: 11.5px; }
   .ob-link-row { flex-wrap: wrap; }
   .ag-head { flex-direction: column; align-items: flex-start; }
   .ag-head .glow-cta { width: 100%; }

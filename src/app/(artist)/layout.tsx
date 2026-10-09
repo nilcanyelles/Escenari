@@ -9,10 +9,12 @@ import { IconPerson, IconMusic, IconSwap, IconPlus } from "@/components/RailIcon
 
 // L'àrea del músic és un mirall de la del gestor: grups a l'esquerra (amb
 // Perfil i Suplències a dalt de tot) i pestanyes Grup/Calendari/Concerts/Estadístiques.
-// Un gestor (encara que també toqui) no hi entra mai: ho veu tot des de la
-// seva àrea de gestió (vegeu requireArtist).
+// Un gestor només hi entra si ha triat la vista de músic des del seu propi
+// perfil (vegeu requireArtist) — pot tornar a la de gestió amb el mateix
+// botó, sense canviar de compte.
 export default async function ArtistGroupLayout({ children }: { children: React.ReactNode }) {
   const profile = await requireArtist();
+  const isManagerToo = profile.role === "manager";
   const todayLabel = capitalize(formatDateFull(today()));
   const [bands, selectedRaw, photoRow] = await Promise.all([
     getArtistBands(profile.clerkUserId),
@@ -31,8 +33,9 @@ export default async function ArtistGroupLayout({ children }: { children: React.
       pages={pages}
       user={{
         name: profile.name,
-        roleLabel: "Músic",
+        roleLabel: isManagerToo ? "Músic · Gestió" : "Músic",
         photoUrl: photoRow?.photo_file_id ? `/api/file/${photoRow.photo_file_id}` : "",
+        switchView: isManagerToo ? { href: "/resum", label: "Vista de gestor", mode: "manager" } : undefined,
       }}
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "" }))}
       selectedBandId={selectedBandId}

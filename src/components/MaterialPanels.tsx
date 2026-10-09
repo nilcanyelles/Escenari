@@ -438,8 +438,8 @@ export function SetlistsPanel({ band, setlists, linkedMembers, editors, canEdit,
       {printing && (
         <PrintScoresModal
           bandId={band.id}
-          setlistName={printing.name}
-          setlist={printing}
+          title={printing.name}
+          songs={printing.songs}
           librarySongs={songs || []}
           onClose={() => setPrinting(null)}
         />

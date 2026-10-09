@@ -12,6 +12,7 @@ import { normalize } from "@/lib/text";
 import { saveSongAction, uploadFileAction, deleteFileAction, lookupSongAction } from "@/app/(app)/grup/songs-actions";
 import StorageManagerModal from "@/components/StorageManagerModal";
 import SpecularButton from "@/components/SpecularButton";
+import ConfirmDialog from "@/components/ConfirmDialog";
 
 function fmtSize(bytes: number): string {
   if (bytes > 1024 * 1024) return (bytes / 1024 / 1024).toFixed(1) + " MB";
@@ -50,7 +51,7 @@ const ALL_VOICES_INS = "Totes les veus";
 const BACKING_TRACK_INS = "Backing track";
 const BACKING_TRACK_LABEL = "Àudios";
 
-export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor, bandInstruments, existingTags, backHref }: {
+export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor, bandInstruments, existingTags, backHref, backLabel }: {
   song: Song;
   bandId: string;
   bandName: string;
@@ -59,6 +60,7 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
   bandInstruments: string[];
   existingTags: string[];
   backHref: string;
+  backLabel: string;
 }) {
   const router = useRouter();
   const [form, setForm] = useState({
@@ -112,35 +114,25 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
   // amb aquest botó s'amplia a la vista grossa d'abans (dues columnes).
   const [lyricsExpanded, setLyricsExpanded] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [exitConfirmOpen, setExitConfirmOpen] = useState(false);
   const [looking, setLooking] = useState(false);
   const [lookupMsg, setLookupMsg] = useState<string | null>(null);
   const [uploading, setUploading] = useState<string | null>(null); // instrument, o ALL_VOICES_INS
   const fileInput = useRef<HTMLInputElement>(null);
   const backingFileInput = useRef<HTMLInputElement>(null);
   const uploadForRef = useRef<string>("");
-  const saveTimer = useRef<number | null>(null);
   const isFirst = useRef(true);
 
-  // Desat automàtic amb debounce.
+  // Ja no es desa sol — només quan es clica "Desa" (handleSaveAndExit). Això
+  // només marca que hi ha canvis pendents, per avisar si es clica "Surt"
+  // sense haver-los desat.
   useEffect(() => {
     if (isFirst.current) { isFirst.current = false; return; }
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(async () => {
-      setSaving(true);
-      await saveSongAction({
-        id: song.id, bandId, title: form.title, artist: form.artist,
-        tempo: parseInt(form.tempo, 10) || 0, songKey: form.songKey, duration: form.duration,
-        notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments, tags,
-      });
-      router.refresh();
-      setSaving(false);
-    }, 700);
-    return () => { if (saveTimer.current) window.clearTimeout(saveTimer.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    setDirty(true);
   }, [form, instruments, tags]);
 
   async function handleSaveAndExit() {
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
     setSaving(true);
     await saveSongAction({
       id: song.id, bandId, title: form.title, artist: form.artist,
@@ -148,6 +140,12 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
       notes: form.notes, lyrics: form.lyrics, coverUrl: form.coverUrl, instruments, tags,
     });
     setSaving(false);
+    setDirty(false);
+    router.push(backHref);
+  }
+
+  function handleExit() {
+    if (dirty) { setExitConfirmOpen(true); return; }
     router.push(backHref);
   }
 
@@ -349,11 +347,11 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
     <div className="studio">
       {/* Barra superior */}
       <div className="studio-topbar">
-        <BackLink href={backHref}>Surt</BackLink>
+        <BackLink onClick={handleExit}>{backLabel}</BackLink>
         <div className="studio-band-name">{bandName}</div>
         <div className="studio-name studio-name-display">{form.title || "Sense títol"}</div>
         <div className="studio-topbar-right">
-          <span className="t-dim" style={{ fontSize: 12 }}>{saving ? "Desant…" : "Desat ✓"}</span>
+          <span className="t-dim" style={{ fontSize: 12 }}>{saving ? "Desant…" : dirty ? "Canvis sense desar" : "Desat ✓"}</span>
           <button type="button" className="btn-save" disabled={saving} onClick={handleSaveAndExit}>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 6, verticalAlign: "-2px" }}>
               <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
@@ -627,6 +625,16 @@ export default function SongStudio({ song, bandId, bandName, bandLogo, bandColor
 
       {storageManagerOpen && bandId && (
         <StorageManagerModal bandId={bandId} onClose={() => setStorageManagerOpen(false)} onChanged={() => router.refresh()} />
+      )}
+
+      {exitConfirmOpen && (
+        <ConfirmDialog
+          title="Sortir sense desar?"
+          message="Els canvis no es guardaran."
+          confirmLabel="Surt sense desar" danger
+          onCancel={() => setExitConfirmOpen(false)}
+          onConfirm={() => router.push(backHref)}
+        />
       )}
     </div>
   );

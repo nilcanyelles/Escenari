@@ -137,9 +137,7 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
   const [saving, setSaving] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [localPhoto, setLocalPhoto] = useState<string | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
   const [emailCopied, setEmailCopied] = useState(false);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
   const photoInput = useRef<HTMLInputElement>(null);
 
   function copyEmail(email: string) {
@@ -151,11 +149,12 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
 
   // localPhoto: vista prèvia immediata just després de pujar una foto nova.
   const photoUrl = localPhoto || (data.photoFileId ? `/api/file/${data.photoFileId}?v=${data.photoFileId}` : personPhotoDataUri(data.name));
-  const upcoming = data.concerts.filter((c) => c.date >= today);
-  const signedIn = isOwner || isManager;
-  // Al perfil només surten les cançons que el músic no ha amagat.
-  const visibleSongs = data.songs.filter((s) => !s.hidden);
+  // "A la vista": només bolos de debò, no assajos ni reunions.
+  const upcoming = data.concerts.filter((c) => c.date >= today && c.kind === "bolo");
   const canEditInfo = isOwner || (isManager && !data.clerkUserId);
+  // El panell de permisos (a la columna dreta, sota Grups) només el veu el
+  // gestor.
+  const hasMainPanels = isManager && data.bandPerms.length > 0;
 
   // Grups del perfil: si és músic i crew del mateix grup alhora, una sola
   // entrada amb els dos rols junts, no dues de separades.
@@ -170,7 +169,16 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
       if (existing) existing.roleText = `${existing.roleText} · ${crewText}`;
       else byBandId.set(c.bandId, { bandId: c.bandId, name: c.bandName, logo: c.logo, color1: c.color1, roleText: crewText });
     });
-    return Array.from(byBandId.values());
+    // Bolos fets i a la vista d'aquest grup en concret (mateix criteri que
+    // les estadístiques de dalt: només bolos de debò).
+    return Array.from(byBandId.values()).map((g) => {
+      const bandBolos = data.concerts.filter((c) => c.bandId === g.bandId && c.kind === "bolo");
+      return {
+        ...g,
+        doneCount: bandBolos.filter((c) => c.answer === "yes").length,
+        upcomingCount: bandBolos.filter((c) => c.date >= today).length,
+      };
+    });
   })();
 
   async function handleSave() {
@@ -194,19 +202,6 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
     setEditOpen(false);
     router.refresh();
     setSaving(false);
-  }
-
-  function togglePlay(songId: string, fileId: string) {
-    if (playing === songId) {
-      audioRef.current?.pause();
-      setPlaying(null);
-      return;
-    }
-    if (!audioRef.current) audioRef.current = new Audio();
-    audioRef.current.src = `/api/file/${fileId}`;
-    audioRef.current.play();
-    audioRef.current.onended = () => setPlaying(null);
-    setPlaying(songId);
   }
 
   return (
@@ -302,32 +297,54 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
               return <span key={ins} className="pv-chip">{icon && <img src={icon} alt="" />}{ins}</span>;
             }) : <span className="t-dim" style={{ fontSize: 12.5 }}>—</span>}
           </div>
-
-          <div className="pv-section-title">Grups</div>
-          <div className="pv-bands">
-            {/* Com a músic i com a crew: si és totes dues coses del mateix
-                grup, una sola entrada amb els dos rols junts (instrument i
-                càrrec); si són grups diferents, una entrada per cada un. */}
-            {groupEntries.map((g) => (
-              <div key={g.bandId} className="pv-band" style={{ ["--pv-accent" as string]: g.color1 || "#8b7bff", flexWrap: "wrap" }}>
-                <img src={g.logo || bandPhotoDataUri({ id: g.bandId, name: g.name })} alt="" />
-                <div>
-                  <div className="pv-band-name">{g.name}</div>
-                  <div className="pv-band-role">{g.roleText}</div>
-                </div>
-              </div>
-            ))}
-            {groupEntries.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}
-          </div>
         </aside>
 
-        {/* Columna dreta: permisos + cançons. El calendari de bolos i la
-            disponibilitat per a suplències ja no viuen al perfil — es
-            gestionen des del calendari del músic (Calendari) i des de
+        {/* Columna dreta: grups (sempre) + permisos (només el gestor els
             Suplències. */}
         <main className="pv-main">
-          {/* Permisos per grup: només el gestor els veu (i els canvia). */}
-          {isManager && data.bandPerms.length > 0 && (
+          <div className="pv-panel">
+            <div className="pv-panel-title">Grups</div>
+            <div className="pv-bands">
+              {/* Com a músic i com a crew: si és totes dues coses del
+                  mateix grup, una sola entrada amb els dos rols junts
+                  (instrument i càrrec); si són grups diferents, una
+                  entrada per cada un. */}
+              {groupEntries.map((g) => {
+                const content = (
+                  <>
+                    <img src={g.logo || bandPhotoDataUri({ id: g.bandId, name: g.name })} alt="" />
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <div className="pv-band-name">{g.name}</div>
+                      <div className="pv-band-role">{g.roleText}</div>
+                    </div>
+                    <div className="pv-band-counts">
+                      <span><strong>{g.doneCount}</strong> bolos fets</span>
+                      <span><strong>{g.upcomingCount}</strong> a la vista</span>
+                    </div>
+                  </>
+                );
+                // Clicar un grup hi porta directament — només té sentit si
+                // qui mira el perfil hi té accés (el propi músic o el
+                // gestor); un tercer qualsevol el veu igual però sense clicar.
+                return isOwner || isManager ? (
+                  <button
+                    key={g.bandId} type="button" className="pv-band pv-band-link"
+                    style={{ ["--pv-accent" as string]: g.color1 || "#8b7bff", flexWrap: "wrap" }}
+                    onClick={() => {
+                      document.cookie = `escenari_band=${encodeURIComponent(g.bandId)}; path=/; max-age=31536000; samesite=lax`;
+                      router.push(isManager ? "/grup" : "/artista/grup");
+                      router.refresh();
+                    }}
+                  >{content}</button>
+                ) : (
+                  <div key={g.bandId} className="pv-band" style={{ ["--pv-accent" as string]: g.color1 || "#8b7bff", flexWrap: "wrap" }}>{content}</div>
+                );
+              })}
+              {groupEntries.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}
+            </div>
+          </div>
+
+          {hasMainPanels && (
             <div className="pv-panel">
               <div className="pv-panel-title">
                 Permisos de {data.name}
@@ -347,54 +364,6 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
               </div>
             </div>
           )}
-
-          <div className="pv-panel">
-            <div className="pv-panel-title">
-              Cançons que toca
-              <span className="t-dim" style={{ fontSize: 12, fontWeight: 400, marginLeft: 10 }}>
-                {visibleSongs.length} temes{canEditInfo && data.songs.length > visibleSongs.length ? ` · ${data.songs.length - visibleSongs.length} amagats (només ho veus tu)` : ""}
-              </span>
-            </div>
-            {visibleSongs.length === 0 ? (
-              <div className="t-dim" style={{ fontSize: 13 }}>
-                {data.songs.length === 0 ? "Els seus grups encara no tenen repertori penjat." : "No hi ha cap cançó visible al perfil — tria-les des d'“Edita el perfil”."}
-              </div>
-            ) : (
-              <div className="sp-list">
-                <div className="sp-row sp-head">
-                  <span className="sp-idx">#</span>
-                  <span></span>
-                  <span>Títol</span>
-                  <span className="sp-band-col">Grup</span>
-                  <span className="sp-dur">⏱</span>
-                </div>
-                {visibleSongs.map((s, i) => (
-                  <div key={s.id} className={"sp-row" + (playing === s.id ? " playing" : "")}>
-                    <span className="sp-idx">
-                      {signedIn && s.audioFileId ? (
-                        <button type="button" className="sp-play" onClick={() => togglePlay(s.id, s.audioFileId!)}>
-                          {playing === s.id ? "❚❚" : "▶"}
-                        </button>
-                      ) : (
-                        <span className="sp-num">{i + 1}</span>
-                      )}
-                    </span>
-                    {s.coverUrl || s.bandLogo ? (
-                      <img className="sp-cover sp-cover-img" src={s.coverUrl || s.bandLogo} alt="" loading="lazy" />
-                    ) : (
-                      <span className="sp-cover" style={{ background: `linear-gradient(135deg, ${s.bandColor}, #17141f)` }}>♪</span>
-                    )}
-                    <span className="sp-title-wrap">
-                      <span className="sp-title">{s.title}</span>
-                      <span className="sp-artist">{s.artist || s.bandName}</span>
-                    </span>
-                    <span className="sp-band-col">{s.bandName}</span>
-                    <span className="sp-dur">{s.duration || "—"}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
         </main>
       </div>
 
@@ -461,34 +430,6 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                       })}
                     </div>
                   </div>
-                  {data.songs.length > 0 && (
-                    <div>
-                      <label className="form-label" style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                        Cançons visibles al perfil públic
-                        <span style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-                          <button type="button" className="link-btn" onClick={() => setForm({ ...form, hiddenSongs: new Set() })}>Totes</button>
-                          <button type="button" className="link-btn" onClick={() => setForm({ ...form, hiddenSongs: new Set(data.songs.map((s) => s.id)) })}>Cap</button>
-                        </span>
-                      </label>
-                      <div className="pv-songvis">
-                        {data.songs.map((s) => {
-                          const visible = !form.hiddenSongs.has(s.id);
-                          return (
-                            <button key={s.id} type="button" className={"pv-songvis-row" + (visible ? " on" : "")}
-                              onClick={() => {
-                                const next = new Set(form.hiddenSongs);
-                                if (visible) next.add(s.id); else next.delete(s.id);
-                                setForm({ ...form, hiddenSongs: next });
-                              }}>
-                              <span style={{ width: 14, flex: "none" }}>{visible ? "✓" : ""}</span>
-                              <span className="t">{s.title}</span>
-                              <span className="b">{s.bandName}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
                 </>
               )}
               <div className="modal-actions">

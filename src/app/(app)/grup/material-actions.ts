@@ -10,33 +10,46 @@ import type { RiderContent, Song } from "@/lib/material-types";
 
 // Autorització dual: el gestor del workspace del grup, o un artista del grup
 // amb permís d'edició (band_editors) per a aquest tipus de material.
-async function requireMaterialAccess(bandId: string, kind: "riders" | "setlists"): Promise<{ workspaceId: string }> {
+async function requireMaterialAccess(bandId: string, kind: "riders" | "setlists"): Promise<{ workspaceId: string; ownerId: string }> {
   const profile = await getProfile();
   if (!profile) throw new Error("Sessió no vàlida");
   const band = (await db().query("select workspace_id from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
   if (profile.role === "manager" && profile.workspaceId === band.workspace_id) {
-    return { workspaceId: band.workspace_id };
+    return { workspaceId: band.workspace_id, ownerId: profile.clerkUserId };
   }
   const col = kind === "riders" ? "can_riders" : "can_setlists";
   const editor = (await db().query(
     `select 1 from band_editors where band_id=$1 and clerk_user_id=$2 and ${col}`,
     [bandId, profile.clerkUserId]
   )).rows[0];
-  if (editor) return { workspaceId: band.workspace_id };
+  if (editor) return { workspaceId: band.workspace_id, ownerId: profile.clerkUserId };
   // O bé el permís per membre que el gestor posa a la targeta d'equip.
   try {
     await requireBandPerm(bandId, kind === "riders" ? "riders" : "setlists");
-    return { workspaceId: band.workspace_id };
+    return { workspaceId: band.workspace_id, ownerId: profile.clerkUserId };
   } catch {
     throw new Error("Sense permís d'edició");
   }
 }
 
-function revalidateMaterial(bandId: string) {
+// Setlists personals (biblioteca del músic, sense grup): el propietari és
+// l'únic amb accés — igual que requireSongAccess a songs-actions.ts.
+async function requirePersonalSetlistAccess(setlistId?: string | null): Promise<{ ownerId: string }> {
+  const profile = await getProfile();
+  if (!profile) throw new Error("Sessió no vàlida");
+  if (setlistId) {
+    const row = (await db().query("select band_id, owner_clerk_user_id from setlists where id=$1", [setlistId])).rows[0];
+    if (!row || row.band_id || row.owner_clerk_user_id !== profile.clerkUserId) throw new Error("Sense accés a aquesta setlist");
+  }
+  return { ownerId: profile.clerkUserId };
+}
+
+function revalidateMaterial(bandId: string | null) {
   revalidatePath("/grup");
-  revalidatePath("/material/" + bandId);
+  if (bandId) revalidatePath("/material/" + bandId);
   revalidatePath("/concerts");
+  revalidatePath("/artista/biblioteca");
 }
 
 function newToken(prefix: string): string {
@@ -74,9 +87,27 @@ export async function deleteRiderAction(bandId: string, riderId: string) {
 
 // ---------- Setlists ----------
 
-export async function saveSetlistAction(input: { id: string | null; bandId: string; name: string; songs: Song[] }): Promise<{ id: string }> {
-  const { workspaceId } = await requireMaterialAccess(input.bandId, "setlists");
+export async function saveSetlistAction(input: { id: string | null; bandId: string | null; name: string; songs: Song[] }): Promise<{ id: string }> {
   const pool = db();
+  if (!input.bandId) {
+    const { ownerId } = await requirePersonalSetlistAccess(input.id);
+    if (input.id) {
+      await pool.query(
+        "update setlists set name=$1, songs=$2 where id=$3 and band_id is null and owner_clerk_user_id=$4",
+        [(input.name || "Setlist").trim(), JSON.stringify(input.songs || []), input.id, ownerId]
+      );
+      revalidateMaterial(null);
+      return { id: input.id };
+    }
+    const id = "sl" + Date.now();
+    await pool.query(
+      "insert into setlists (id, owner_clerk_user_id, name, songs, public_token) values ($1,$2,$3,$4,$5)",
+      [id, ownerId, (input.name || "Setlist").trim(), JSON.stringify(input.songs || []), newToken("s")]
+    );
+    revalidateMaterial(null);
+    return { id };
+  }
+  const { workspaceId } = await requireMaterialAccess(input.bandId, "setlists");
   if (input.id) {
     await pool.query(
       "update setlists set name=$1, songs=$2 where id=$3 and band_id=$4",
@@ -97,16 +128,28 @@ export async function saveSetlistAction(input: { id: string | null; bandId: stri
 // Foto de portada d'una setlist (mateix circuit que el logo/portada d'un
 // grup: taula "files" + Vercel Blob, servida per /api/file/[id]).
 export async function uploadSetlistCoverAction(formData: FormData): Promise<{ ok: boolean; url?: string; error?: string }> {
-  const bandId = String(formData.get("bandId") || "");
+  const bandIdRaw = String(formData.get("bandId") || "");
+  const bandId = bandIdRaw || null;
   const setlistId = String(formData.get("setlistId") || "");
   const file = formData.get("file") as File | null;
-  if (!bandId || !setlistId || !file) return { ok: false, error: "Falta el fitxer" };
-  const { workspaceId } = await requireMaterialAccess(bandId, "setlists");
+  if (!setlistId || !file) return { ok: false, error: "Falta el fitxer" };
   if (!file.type.startsWith("image/")) return { ok: false, error: "Ha de ser una imatge" };
   if (file.size > 8 * 1024 * 1024) return { ok: false, error: "Màxim 8 MB" };
   const buf = Buffer.from(await file.arrayBuffer());
   const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
   const blobUrl = await uploadFileBlob("files/" + id, buf, file.type);
+  if (!bandId) {
+    const { ownerId } = await requirePersonalSetlistAccess(setlistId);
+    await db().query(
+      "insert into files (id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,null,null,$2,$3,$4,null,$5,$6)",
+      [id, file.name || "cover", file.type, file.size, ownerId, blobUrl]
+    );
+    const url = `/api/file/${id}`;
+    await db().query("update setlists set cover_url=$1 where id=$2 and band_id is null and owner_clerk_user_id=$3", [url, setlistId, ownerId]);
+    revalidateMaterial(null);
+    return { ok: true, url };
+  }
+  const { workspaceId } = await requireMaterialAccess(bandId, "setlists");
   await db().query(
     "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,$3,null,$4,$5,$6,null,'',$7)",
     [id, workspaceId, bandId, file.name || "cover", file.type, file.size, blobUrl]
@@ -117,7 +160,13 @@ export async function uploadSetlistCoverAction(formData: FormData): Promise<{ ok
   return { ok: true, url };
 }
 
-export async function deleteSetlistAction(bandId: string, setlistId: string) {
+export async function deleteSetlistAction(bandId: string | null, setlistId: string) {
+  if (!bandId) {
+    const { ownerId } = await requirePersonalSetlistAccess(setlistId);
+    await db().query("delete from setlists where id=$1 and band_id is null and owner_clerk_user_id=$2", [setlistId, ownerId]);
+    revalidateMaterial(null);
+    return;
+  }
   await requireMaterialAccess(bandId, "setlists");
   await db().query("delete from setlists where id=$1 and band_id=$2", [setlistId, bandId]);
   revalidateMaterial(bandId);

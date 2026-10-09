@@ -1,7 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
-import { getSongs } from "@/lib/songs";
+import { getSongs, getPersonalSongs } from "@/lib/songs";
 import PerformView, { type PerformSong } from "./PerformView";
 
 export const dynamic = "force-dynamic";
@@ -19,21 +19,26 @@ export default async function PerformPage({ params, searchParams }: {
 
   const sl = (await db().query(
     `select s.*, b.name as band_name, b.workspace_id as band_ws from setlists s
-     join bands b on b.id = s.band_id where s.id=$1`,
+     left join bands b on b.id = s.band_id where s.id=$1`,
     [setlistId]
   )).rows[0];
   if (!sl) notFound();
 
-  let allowed = profile.role === "manager" && profile.workspaceId === sl.band_ws;
-  if (!allowed) {
-    const member = (await db().query(
-      "select 1 from band_members where band_id=$1 and clerk_user_id=$2", [sl.band_id, profile.clerkUserId]
-    )).rows[0];
-    allowed = !!member;
+  let allowed: boolean;
+  if (!sl.band_id) {
+    allowed = sl.owner_clerk_user_id === profile.clerkUserId;
+  } else {
+    allowed = profile.role === "manager" && profile.workspaceId === sl.band_ws;
+    if (!allowed) {
+      const member = (await db().query(
+        "select 1 from band_members where band_id=$1 and clerk_user_id=$2", [sl.band_id, profile.clerkUserId]
+      )).rows[0];
+      allowed = !!member;
+    }
   }
   if (!allowed) notFound();
 
-  const lib = await getSongs(sl.band_id);
+  const lib = sl.band_id ? await getSongs(sl.band_id) : await getPersonalSongs(profile.clerkUserId);
   const byId: Record<string, typeof lib[number]> = {};
   const byTitle: Record<string, typeof lib[number]> = {};
   lib.forEach((s) => { byId[s.id] = s; byTitle[s.title.toLowerCase()] = s; });
@@ -69,7 +74,7 @@ export default async function PerformPage({ params, searchParams }: {
   // res a destacar.
   let concertId: string | null = null;
   let highlights: Record<string, boolean> = {};
-  if (concertParam) {
+  if (concertParam && sl.band_id) {
     const c = (await db().query(
       "select id, setlist_highlights from concerts where id=$1 and band_id=$2",
       [concertParam, sl.band_id]
@@ -77,10 +82,10 @@ export default async function PerformPage({ params, searchParams }: {
     if (c) { concertId = c.id; highlights = c.setlist_highlights || {}; }
   }
 
-  const backHref = profile.role === "manager" ? "/grup" : `/material/${sl.band_id}`;
+  const backHref = !sl.band_id ? "/artista/biblioteca" : profile.role === "manager" ? "/grup" : `/material/${sl.band_id}`;
   return (
     <PerformView
-      name={sl.name} bandName={sl.band_name} songs={songs} backHref={backHref}
+      name={sl.name} bandName={sl.band_name || "Les meves cançons"} songs={songs} backHref={backHref}
       concertId={concertId} initialHighlights={highlights} canHighlight={profile.role === "manager"}
     />
   );

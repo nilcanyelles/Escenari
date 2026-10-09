@@ -7,6 +7,7 @@ import { SignOutButton } from "@clerk/nextjs";
 import { NavIcon, initialsOf, type NavPage } from "@/lib/nav";
 import { bandPhotoDataUri } from "@/lib/tags";
 import ManagerProfileModal from "@/components/ManagerProfileModal";
+import { IconSwap } from "@/components/RailIcons";
 
 const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -19,13 +20,21 @@ export type ShellUser = {
   whatsapp?: string;
   email?: string;
   editable?: boolean;
+  // Només per a un gestor que també toca en algun grup: alterna entre la
+  // vista de gestió i la de músic sense canviar de compte ni de correu.
+  switchView?: { href: string; label: string; mode: "manager" | "artist" };
 };
 export type ShellBand = { id: string; name: string; logo: string; color1: string; tags?: string[] };
 
 const BAND_COOKIE = "escenari_band";
+const VIEW_COOKIE = "escenari_view";
 
 function setBandCookie(id: string) {
   document.cookie = `${BAND_COOKIE}=${encodeURIComponent(id)}; path=/; max-age=31536000; samesite=lax`;
+}
+
+function setViewCookie(mode: "manager" | "artist") {
+  document.cookie = `${VIEW_COOKIE}=${mode}; path=/; max-age=31536000; samesite=lax`;
 }
 
 // "icon" (SVG) té preferència sobre "emoji" — vegeu RailIcons.tsx.
@@ -368,6 +377,16 @@ export default function AppShell({
                 type="button" className="btn-outline" style={{ width: "100%", marginBottom: 10 }}
                 onClick={() => { setProfileOpen(false); setProfileEditOpen(true); }}
               >Edita el perfil</button>
+            )}
+            {user.switchView && (
+              <button
+                type="button" className="btn-outline" style={{ width: "100%", marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "center", gap: 7 }}
+                onClick={() => {
+                  setViewCookie(user.switchView!.mode);
+                  setProfileOpen(false);
+                  startTransition(() => { router.push(user.switchView!.href); router.refresh(); });
+                }}
+              ><IconSwap /> {user.switchView.label}</button>
             )}
             <SignOutButton redirectUrl="/">
               <button className="btn-danger-outline" style={{ width: "100%" }} type="button">

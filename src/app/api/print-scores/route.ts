@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { PDFDocument, rgb, degrees } from "pdf-lib";
 import { db } from "@/lib/db";
 import { requireBandAccess } from "@/lib/band-access";
+import { getProfile } from "@/lib/current-user";
 import { getFileBlob } from "@/lib/blob-storage";
 import { normalizeInstrumentAcrossGroup } from "@/lib/tags";
 
@@ -137,7 +138,7 @@ async function renderFinalPdf(srcDoc: PDFDocument, srcPageCount: number, paperSi
 // d'un rider.
 export async function POST(req: Request) {
   const form = await req.formData();
-  const bandId = String(form.get("bandId") || "");
+  const bandId = String(form.get("bandId") || "") || null;
   const name = String(form.get("name") || "Partitures").trim() || "Partitures";
   const paperSizeRaw = String(form.get("paperSize") || "A4");
   const paperSize: "A4" | "A5" | "A6" = paperSizeRaw === "A5" || paperSizeRaw === "A6" ? paperSizeRaw : "A4";
@@ -145,24 +146,47 @@ export async function POST(req: Request) {
   let instruments: string[] = [];
   try { songIds = JSON.parse(String(form.get("songIds") || "[]")); } catch { /* ignore */ }
   try { instruments = JSON.parse(String(form.get("instruments") || "[]")); } catch { /* ignore */ }
-  if (!bandId || !Array.isArray(songIds) || !songIds.length || !Array.isArray(instruments) || !instruments.length) {
+  if (!Array.isArray(songIds) || !songIds.length || !Array.isArray(instruments) || !instruments.length) {
     return new NextResponse("Falten dades", { status: 400 });
   }
 
-  try {
-    await requireBandAccess(bandId);
-  } catch {
-    return new NextResponse("Sense accés a aquest grup", { status: 403 });
+  // Amb bandId: una setlist d'UN grup (com abans). Sense bandId: la
+  // biblioteca d'un músic, que pot incloure cançons de grups diferents (i
+  // de les seves pròpies, sense grup) — es comprova l'accés cançó per
+  // cançó en comptes d'un sol grup.
+  let callerClerkUserId: string | null = null;
+  if (bandId) {
+    try {
+      await requireBandAccess(bandId);
+    } catch {
+      return new NextResponse("Sense accés a aquest grup", { status: 403 });
+    }
+  } else {
+    const profile = await getProfile();
+    if (!profile) return new NextResponse("Sessió no vàlida", { status: 403 });
+    callerClerkUserId = profile.clerkUserId;
   }
 
   const instrumentSet = new Set(instruments);
-  const { rows } = await db().query(
-    `select f.id, f.song_id, f.mime, f.instrument, f.blob_url
-     from files f join songs s on s.id = f.song_id
-     where s.band_id = $1 and f.song_id = any($2) and f.mime not like 'audio/%'
-     order by f.created_at`,
-    [bandId, songIds]
-  );
+  const { rows } = bandId
+    ? await db().query(
+        `select f.id, f.song_id, f.mime, f.instrument, f.blob_url
+         from files f join songs s on s.id = f.song_id
+         where s.band_id = $1 and f.song_id = any($2) and f.mime not like 'audio/%'
+         order by f.created_at`,
+        [bandId, songIds]
+      )
+    : await db().query(
+        `select f.id, f.song_id, f.mime, f.instrument, f.blob_url
+         from files f join songs s on s.id = f.song_id
+         where f.song_id = any($1) and f.mime not like 'audio/%'
+           and (
+             s.band_id in (select band_id from band_members where clerk_user_id = $2)
+             or (s.band_id is null and s.owner_clerk_user_id = $2)
+           )
+         order by f.created_at`,
+        [songIds, callerClerkUserId]
+      );
   // Mateixa normalització que al menú: un instrument sense número en una
   // cançó compta com la primera instància si en alguna altra cançó de la
   // selecció sí que ve numerat — si no ho fem aquí també, el servidor
