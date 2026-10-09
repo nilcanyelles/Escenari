@@ -35,7 +35,7 @@ export const PERM_LABELS: { key: keyof MemberPerms; label: string }[] = [
   { key: "setlists", label: "Setlists" },
   { key: "members", label: "Afegir gent" },
   { key: "removeMembers", label: "Treure gent" },
-  { key: "events", label: "Esdeveniments" },
+  { key: "events", label: "Editar esdeveniments" },
   { key: "seeAllEvents", label: "Veure tots els esdeveniments" },
   { key: "perms", label: "Permisos" },
   { key: "admin", label: "Admin" },

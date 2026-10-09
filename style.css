@@ -6268,7 +6268,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.02em;
-  border-radius: 999px;
+  border-radius: 14px;
   padding: 3px 8px;
   border: 1px solid var(--border-input);
   background: transparent;
@@ -6276,6 +6276,10 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   cursor: pointer;
   font-family: inherit;
   transition: all 0.15s;
+  max-width: 88px;
+  white-space: normal;
+  line-height: 1.25;
+  text-align: center;
 }
 .perm-chip:hover { border-color: var(--accent); }
 .perm-chip.on {
@@ -6572,6 +6576,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .perm-table th {
   text-align: center; font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
   color: var(--text-ghost); font-weight: 700; padding: 6px 8px 10px; border-bottom: 1px solid var(--border-soft);
+  max-width: 90px; white-space: normal; line-height: 1.3;
 }
 .perm-table th:first-child { text-align: left; }
 .perm-table td { padding: 8px; text-align: center; border-bottom: 1px solid var(--border-soft); }
