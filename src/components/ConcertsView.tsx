@@ -361,33 +361,37 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         </div>
         <div className="cc-fdr">
           {kind === "bolo" && (
-            <span className="cc-fdr-pct" style={{ color: rsPct >= 100 ? "oklch(0.75 0.15 155)" : rsPct >= 50 ? "oklch(0.82 0.15 80)" : "var(--text-faint)" }}>{rsPct}%</span>
+            <>
+              <span className="cc-fdr-pct" style={{ color: rsPct >= 100 ? "oklch(0.75 0.15 155)" : rsPct >= 50 ? "oklch(0.82 0.15 80)" : "var(--text-faint)" }}>{rsPct}%</span>
+              <button className="row-rs-btn" title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(e) => { e.stopPropagation(); setRsPreviewConcertId(c.id); }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </button>
+            </>
           )}
-          <button className="row-rs-btn" title="Previsualitza el full de ruta" aria-label="Previsualitza el full de ruta" onClick={(e) => { e.stopPropagation(); setRsPreviewConcertId(c.id); }}>
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z"></path><circle cx="12" cy="12" r="3"></circle>
-            </svg>
-          </button>
         </div>
         <div style={{ textAlign: "center" }} onClick={(e) => e.stopPropagation()}>
-          <span className="cc-paid-wrap">
-            <button
-              type="button"
-              className={"cc-paid-btn" + (displayPaid ? " paid" : "")}
-              disabled={!isMgr}
-              aria-label={displayPaid ? "Pagat" : "No pagat"}
-              onClick={async () => {
-                const next = !displayPaid;
-                scrollRestoreRef.current = window.scrollY;
-                setPaidOverrides((prev) => ({ ...prev, [c.id]: next }));
-                await setConcertPaidAction(c.id, next);
-                router.refresh();
-              }}
-            >
-              {displayPaid ? <PaidCheckIcon /> : <PaidCrossIcon />}
-            </button>
-            <span className="cc-paid-tooltip">{formatCurrency(paidAmount)}</span>
-          </span>
+          {kind === "bolo" && (
+            <span className="cc-paid-wrap">
+              <button
+                type="button"
+                className={"cc-paid-btn" + (displayPaid ? " paid" : "")}
+                disabled={!isMgr}
+                aria-label={displayPaid ? "Pagat" : "No pagat"}
+                onClick={async () => {
+                  const next = !displayPaid;
+                  scrollRestoreRef.current = window.scrollY;
+                  setPaidOverrides((prev) => ({ ...prev, [c.id]: next }));
+                  await setConcertPaidAction(c.id, next);
+                  router.refresh();
+                }}
+              >
+                {displayPaid ? <PaidCheckIcon /> : <PaidCrossIcon />}
+              </button>
+              <span className="cc-paid-tooltip">{formatCurrency(paidAmount)}</span>
+            </span>
+          )}
         </div>
         <div onClick={(e) => e.stopPropagation()}>{(isMgr || canDelete) && <DeleteConcertBtn id={c.id} kind={kind} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
       </div>
