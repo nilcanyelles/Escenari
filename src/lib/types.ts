@@ -3,6 +3,7 @@
 // admin: ho pot tot (vegeu memberPerms a perms.ts).
 export type MemberPerms = {
   songs: boolean; riders: boolean; setlists: boolean; members: boolean; events: boolean;
+  seeAllEvents: boolean;
   removeMembers: boolean; perms: boolean; admin: boolean;
 };
 

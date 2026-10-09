@@ -10,6 +10,7 @@ export const DEFAULT_PERMS: MemberPerms = {
   setlists: true,
   members: false,
   events: false,
+  seeAllEvents: false,
   removeMembers: false,
   perms: false,
   admin: false,
@@ -22,6 +23,7 @@ export const ALL_PERMS: MemberPerms = {
   setlists: true,
   members: true,
   events: true,
+  seeAllEvents: true,
   removeMembers: true,
   perms: true,
   admin: true,
@@ -34,6 +36,7 @@ export const PERM_LABELS: { key: keyof MemberPerms; label: string }[] = [
   { key: "members", label: "Afegir gent" },
   { key: "removeMembers", label: "Treure gent" },
   { key: "events", label: "Esdeveniments" },
+  { key: "seeAllEvents", label: "Veure tots els esdeveniments" },
   { key: "perms", label: "Permisos" },
   { key: "admin", label: "Admin" },
 ];

@@ -1,5 +1,7 @@
 import { db } from "./db";
-import { normalizeContact } from "./types";
+import { normalizeContact, type Person } from "./types";
+import { normalize } from "./text";
+import { memberPerms } from "./perms";
 
 export type ArtistBand = {
   id: string;
@@ -158,6 +160,29 @@ export async function getArtistBandsFull(clerkUserId: string): Promise<import(".
 // segueixen fent servir aquesta mateixa funció sense l'opció (calendari,
 // estadístiques...).
 export async function getArtistConcertsFull(clerkUserId: string, opts?: { monthsBack?: number }): Promise<import("./types").Concert[]> {
+  // Grups on té el permís "Veure tots els esdeveniments": hi veu també els
+  // assajos/reunions/altres als quals no estigui convocat (bypass del
+  // filtre per "invited" de sota).
+  const links = (await db().query(
+    "select band_id, member_name from band_members where clerk_user_id=$1", [clerkUserId]
+  )).rows;
+  let bypassBandIds: string[] = [];
+  if (links.length) {
+    const bandRows = (await db().query(
+      "select id, members, crew from bands where id = any($1::text[])",
+      [links.map((l) => l.band_id)]
+    )).rows;
+    bypassBandIds = bandRows
+      .filter((b) => {
+        const link = links.find((l) => l.band_id === b.id);
+        if (!link) return false;
+        const people: Person[] = [...(b.members || []), ...(b.crew || [])];
+        const me = people.find((p) => normalize(p.name) === normalize(link.member_name)) || null;
+        return memberPerms(me).seeAllEvents;
+      })
+      .map((b) => b.id);
+  }
+
   const { rows } = await db().query(
     `select c.*, b.show_fees, bm.member_name
      from concerts c
@@ -165,10 +190,11 @@ export async function getArtistConcertsFull(clerkUserId: string, opts?: { months
      join bands b on b.id = c.band_id
      where (coalesce(c.kind, 'bolo') = 'bolo'
             or jsonb_array_length(coalesce(c.invited, '[]'::jsonb)) = 0
-            or c.invited ? bm.member_name)
+            or c.invited ? bm.member_name
+            or c.band_id = any($3::text[]))
        and ($2::int is null or c.date >= (current_date - ($2 || ' months')::interval))
      order by c.date desc`,
-    [clerkUserId, opts?.monthsBack ?? null]
+    [clerkUserId, opts?.monthsBack ?? null, bypassBandIds]
   );
   return rows.map((r) => ({
     id: r.id,
