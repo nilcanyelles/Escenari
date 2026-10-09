@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 
 // Diàleg de confirmació propi (mai el confirm() del navegador), amb el
 // mateix aspecte que els de ConcertModal (.cf-confirm-*). "danger" pinta
@@ -23,7 +24,11 @@ export default function ConfirmDialog({ title, message, confirmLabel = "Elimina"
     return () => window.removeEventListener("keydown", onKey);
   }, [busy, onCancel]);
 
-  return (
+  // Portal al body: si el botó que l'obre és dins d'una taula amb scroll
+  // horitzontal (com la llista de concerts), un "position: fixed" imbricat
+  // en un ancestor amb overflow es renderitza mal en alguns navegadors
+  // (apareix centrat respecte al contenidor amb scroll, no a la pantalla).
+  return createPortal(
     <div className="modal-overlay cf-confirm-overlay" onClick={(e) => { e.stopPropagation(); if (!busy) onCancel(); }}>
       <div className="modal cf-confirm-modal" role="alertdialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         {title && <div className="cf-confirm-title">{title}</div>}
@@ -37,6 +42,7 @@ export default function ConfirmDialog({ title, message, confirmLabel = "Elimina"
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

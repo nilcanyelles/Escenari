@@ -70,16 +70,22 @@ function nextStatus(status: string, kind?: string): string {
 // Creueta d'eliminar un concert d'una llista, amb diàleg de confirmació
 // propi (mai el del navegador). "label" és com anomenar el concert al
 // diàleg; "onDeleted" substitueix el refresc de pàgina per defecte.
-export function DeleteConcertBtn({ id, label, onDeleted }: { id: string; label?: string; onDeleted?: () => void }) {
+export function DeleteConcertBtn({ id, label, kind, onDeleted }: { id: string; label?: string; kind?: string; onDeleted?: () => void }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // "Bolo" surt com a "concert"; la resta (assaig, reunió, altre) amb el
+  // seu propi nom en comptes del genèric "concert".
+  const kindArticle: Record<string, string> = { concert: "el concert", assaig: "l'assaig", reunio: "la reunió", altre: "l'altre" };
+  const kindKey = kind && KIND_META[kind] && kind !== "bolo" ? kind : "concert";
+  const kindLabel = kindKey === "concert" ? "concert" : KIND_META[kindKey].label.toLowerCase();
+  const kindPhrase = kindArticle[kindKey] || `el ${kindLabel}`;
   return (
     <>
       <button
         className="row-delete-btn"
-        title="Eliminar concert"
-        aria-label="Eliminar concert"
+        title={`Eliminar ${kindLabel}`}
+        aria-label={`Eliminar ${kindLabel}`}
         onClick={(e) => { e.stopPropagation(); setOpen(true); }}
       >
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
@@ -88,7 +94,7 @@ export function DeleteConcertBtn({ id, label, onDeleted }: { id: string; label?:
       </button>
       {open && (
         <ConfirmDialog
-          title="Eliminar el concert?"
+          title={`Eliminar ${kindPhrase}?`}
           message={<>{label && <><strong>{label}</strong><br /></>}S&apos;esborrarà amb el full de ruta, el repartiment i la factura que hi hagi. No es pot desfer.</>}
           confirmLabel="Elimina" busy={busy}
           onCancel={() => setOpen(false)}
@@ -383,7 +389,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             <span className="cc-paid-tooltip">{formatCurrency(paidAmount)}</span>
           </span>
         </div>
-        <div onClick={(e) => e.stopPropagation()}>{(isMgr || canDelete) && <DeleteConcertBtn id={c.id} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
+        <div onClick={(e) => e.stopPropagation()}>{(isMgr || canDelete) && <DeleteConcertBtn id={c.id} kind={kind} label={`${formatDate(c.date)} · ${c.bandName}${c.city ? " · " + c.city.split(",")[0] : ""}`} />}</div>
       </div>
     );
   }

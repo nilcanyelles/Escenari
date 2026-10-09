@@ -524,6 +524,8 @@ export default function ConcertDetailView({
   const [nudging, setNudging] = useState(false);
   const [nudgeResult, setNudgeResult] = useState<string | null>(null);
   const [kind, setKind] = useState<string>(concert.kind || "bolo");
+  // "Bolo" surt com a "concert"; la resta amb el seu propi nom.
+  const kindArticle: Record<string, string> = { bolo: "el concert", assaig: "l'assaig", reunio: "la reunió", altre: "l'altre" };
   // Repetició d'assajos: no és cap dada del concert (cada ocurrència creada
   // és un concert independent i propi), és només l'acció puntual de
   // generar-los fins a la data triada.
@@ -2424,17 +2426,18 @@ export default function ConcertDetailView({
         );
       })()}
 
-      {/* Zona de perill: eliminar l'esdeveniment sencer */}
+      {/* Zona de perill: eliminar l'esdeveniment sencer — "bolo" com a
+          "concert"; la resta amb el seu propi nom (assaig, reunió, altre). */}
       <div className="panel cd-section cd-danger-zone">
         <div>
-          <div className="panel-title" style={{ marginBottom: 4 }}>Elimina aquest {kind === "bolo" ? "concert" : "esdeveniment"}</div>
+          <div className="panel-title" style={{ marginBottom: 4 }}>Elimina {kindArticle[kind] || `aquest ${KIND_META[kind]?.label.toLowerCase() || "esdeveniment"}`}</div>
           <div className="t-dim" style={{ fontSize: 12.5 }}>S&apos;esborra del tot, amb el full de ruta, el repartiment i la factura que hi hagi. No es pot desfer.</div>
         </div>
         <button type="button" className="btn-danger-outline" onClick={() => setDeleteOpen(true)}>Elimina</button>
       </div>
       {deleteOpen && (
         <ConfirmDialog
-          title={kind === "bolo" ? "Eliminar el concert?" : "Eliminar l'esdeveniment?"}
+          title={`Eliminar ${kindArticle[kind] || `aquest ${KIND_META[kind]?.label.toLowerCase() || "esdeveniment"}`}?`}
           message={<>S&apos;eliminarà <strong>{cf.festaEntitat || cf.city || cf.venue || capitalize(formatDateFull(cf.date))}</strong> ({capitalize(formatDateFull(cf.date))}) amb tot el que hi ha a dins. No es pot desfer.</>}
           confirmLabel="Elimina" busy={deleting}
           onCancel={() => setDeleteOpen(false)}
