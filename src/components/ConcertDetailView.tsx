@@ -565,8 +565,19 @@ export default function ConcertDetailView({
   const [posterOpen, setPosterOpen] = useState(false);
   const [tab, setTab] = useState<"info" | "assistencia" | "ruta" | "facturacio">("info");
   const [generating, setGenerating] = useState(false);
-  const saveTimer = useRef<number | null>(null);
-  const refreshTimer = useRef<number | null>(null);
+  // Res no es desa sol: cada canvi (informació, assistència, convocatòria,
+  // suplents) només queda apuntat aquí fins que es clica "Guarda" — vegeu
+  // schedulePersist/saveNow.
+  const pendingSaveRef = useRef<{
+    next: typeof cf; att: typeof attendance; subs: typeof substitutes; noSubs: typeof noSubstitute;
+    excl: typeof convocatoriaExcluded; cont: typeof contact; subConfirmed: typeof substituteConfirmed;
+  } | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [confirmBackOpen, setConfirmBackOpen] = useState(false);
+  function handleBack() {
+    if (dirty) setConfirmBackOpen(true);
+    else router.back();
+  }
   // Última versió de "cf", sempre al dia — cal per als llocs que combinen
   // "cf" amb una resolució asíncrona (cerca de recinte/allotjament): si
   // s'agafés "cf" directament (capturat en el moment de cridar la funció),
@@ -840,29 +851,34 @@ export default function ConcertDetailView({
   const sortedCrew = [...crew].sort((a, b) => Number(!!convocatoriaExcluded[a.name]) - Number(!!convocatoriaExcluded[b.name]));
   const backups = band?.backups || [];
 
+  // Ja no es desa sol: només apunta l'últim estat (informació + assistència
+  // + convocatòria + suplents, tot plegat en una sola trucada quan es desi
+  // de veres) i marca la pestanya com a bruta — vegeu saveNow, lligat al
+  // botó "Guarda" de la capçalera.
   function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact, subConfirmed = substituteConfirmed) {
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(async () => {
-      setSaving(true);
-      await saveConcertAction({
-        id: concert.id,
-        bandId: concert.bandId,
-        bandName: concert.bandName,
-        date: next.date, time: next.time, exactTime: next.exactTime, venue: next.venue, city: next.city, address: next.address,
-        festaEntitat: next.festaEntitat, amount: parseInt(next.amount, 10) || 0, status: next.status,
-        attendance: att, substitutes: subs, substituteConfirmed: subConfirmed, noSubstitute: noSubs, convocatoriaExcluded: excl, contact: cont,
-        canAnnounce: next.canAnnounce as Concert["canAnnounce"], announceAfter: next.announceAfter,
-        ticketType: next.ticketType as Concert["ticketType"],
-        skipDefaults: true,
-      });
-      setSaving(false);
-    }, 500);
-    // El refresc de tota la pàgina (per si algun altre bloc en depèn) va a
-    // part i amb un debounce més llarg que el desat: mentre s'escriu seguit
-    // (per exemple l'import o el nom del lloc) no cal refer-la a cada pausa
-    // de mig segon, només un cop l'usuari ja s'ha aturat de veres.
-    if (refreshTimer.current) window.clearTimeout(refreshTimer.current);
-    refreshTimer.current = window.setTimeout(() => { router.refresh(); }, 2500);
+    pendingSaveRef.current = { next, att, subs, noSubs, excl, cont, subConfirmed };
+    setDirty(true);
+  }
+
+  async function saveNow() {
+    const p = pendingSaveRef.current;
+    if (!p) return;
+    setSaving(true);
+    await saveConcertAction({
+      id: concert.id,
+      bandId: concert.bandId,
+      bandName: concert.bandName,
+      date: p.next.date, time: p.next.time, exactTime: p.next.exactTime, venue: p.next.venue, city: p.next.city, address: p.next.address,
+      festaEntitat: p.next.festaEntitat, amount: parseInt(p.next.amount, 10) || 0, status: p.next.status,
+      attendance: p.att, substitutes: p.subs, substituteConfirmed: p.subConfirmed, noSubstitute: p.noSubs, convocatoriaExcluded: p.excl, contact: p.cont,
+      canAnnounce: p.next.canAnnounce as Concert["canAnnounce"], announceAfter: p.next.announceAfter,
+      ticketType: p.next.ticketType as Concert["ticketType"],
+      skipDefaults: true,
+    });
+    pendingSaveRef.current = null;
+    setDirty(false);
+    setSaving(false);
+    router.refresh();
   }
 
   function setField<K extends keyof typeof cf>(k: K, v: string) {
@@ -1239,11 +1255,24 @@ export default function ConcertDetailView({
 
       {/* Capçalera */}
       <div className="cd-topbar">
-        <BackLink href={`${base}/concerts`}>Concerts</BackLink>
+        <BackLink onClick={handleBack} />
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          {saving && <span className="t-dim" style={{ fontSize: 12 }}>Desant…</span>}
+          {dirty && !saving && <span className="t-dim" style={{ fontSize: 12 }}>Canvis sense desar</span>}
+          <button type="button" className="btn-save" disabled={!dirty || saving} onClick={saveNow}>
+            {saving ? "Desant…" : "Guarda"}
+          </button>
         </div>
       </div>
+
+      {confirmBackOpen && (
+        <ConfirmDialog
+          title="Els canvis no es desaran"
+          message="Si continues, es perdran els canvis que has fet des de l'última vegada que vas desar."
+          confirmLabel="Continua" cancelLabel="Torna a l'edició" danger
+          onCancel={() => setConfirmBackOpen(false)}
+          onConfirm={() => { setConfirmBackOpen(false); router.back(); }}
+        />
+      )}
 
       {clashes.length > 0 && (
         <div className="clash-banner">

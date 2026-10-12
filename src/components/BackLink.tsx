@@ -8,7 +8,7 @@ import Link from "next/link";
 export default function BackLink({ href, onClick, children, className = "" }: {
   href?: string;
   onClick?: () => void;
-  children: React.ReactNode;
+  children?: React.ReactNode;
   className?: string;
 }) {
   const inner = (
@@ -16,7 +16,7 @@ export default function BackLink({ href, onClick, children, className = "" }: {
       <svg className="back-btn-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
         <line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline>
       </svg>
-      <span>{children}</span>
+      {children && <span>{children}</span>}
     </>
   );
   const cls = ("back-btn " + className).trim();
