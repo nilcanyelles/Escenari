@@ -63,7 +63,7 @@ const ICON_PLUS = (
 // confirmació d'eliminar, sense passar per la tria "treu / passa a suplent".
 function TrashIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <polyline points="3 6 5 6 21 6"></polyline>
       <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
       <line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>
@@ -1169,7 +1169,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <div className="card card-centered"><div className="card-title">Integrants</div><div className="card-value">{bandRoster(band).length}</div></div>
         <div className="card card-centered"><div className="card-title">Concerts totals</div><div className="card-value">{total}</div></div>
         <div className="card card-centered"><div className="card-title">Pròxims bolos</div><div className="card-value">{upcoming.length}</div></div>
-        <div className="card card-centered"><div className="card-title">Suplents</div><div className="card-value">{backups.length}</div></div>
+        <div className="card card-centered"><div className="card-title">Suplents/col·laboradors</div><div className="card-value">{backups.length}</div></div>
       </div>
 
       {/* Membres */}
@@ -1206,7 +1206,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 cardWidth={76}
                 radius={12}
                 visibleCount={8}
-                onAdd={!teamEdit && can.members && addKind !== "member" ? () => setAddKind("member") : undefined}
+                onAdd={teamEdit && can.members && addKind !== "member" ? () => setAddKind("member") : undefined}
                 addLabel="Nou músic"
                 renderItem={(m) => {
                   const item = personChromaItem(
@@ -1276,7 +1276,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 cardWidth={76}
                 radius={12}
                 visibleCount={8}
-                onAdd={!teamEdit && can.members && addKind !== "crew" ? () => setAddKind("crew") : undefined}
+                onAdd={teamEdit && can.members && addKind !== "crew" ? () => setAddKind("crew") : undefined}
                 addLabel="Nou tècnic"
                 renderItem={(m) => {
                   const item = personChromaItem(
@@ -1353,7 +1353,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {/* Suplents */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
-          <div className="panel-title">Suplents de confiança{savingBackups ? " · desant…" : ""}</div>
+          <div className="panel-title">Suplents/col·laboradors de confiança{savingBackups ? " · desant…" : ""}</div>
           {can.members && !backupDraft && (
             <button type="button" className="btn-outline" onClick={() => setBackupDraft({ name: "", instruments: [], phone: "", email: "" })}>+ Afegeix suplent</button>
           )}

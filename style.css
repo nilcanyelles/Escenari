@@ -7131,8 +7131,8 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cf-confirm-title { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
 
 /* ============ Equip: "Edita membres" ============ */
-.team-editing .chroma-card { cursor: pointer; }
-.team-editing .chroma-card::after {
+.team-editing .chroma-card:not(.chroma-add-tile) { cursor: pointer; }
+.team-editing .chroma-card:not(.chroma-add-tile)::after {
   content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit;
   background: oklch(0.58 0.2 25 / 0.38); pointer-events: none;
 }
@@ -7141,12 +7141,13 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   align-items: center; justify-content: center;
   opacity: 0; transition: opacity .15s;
 }
-.team-editing .chroma-card:hover .chroma-actions { opacity: 1; }
+.team-editing .chroma-card:not(.chroma-add-tile):hover .chroma-actions { opacity: 1; }
 .team-editing .chroma-action {
-  width: 36px; height: 36px; border-radius: 10px;
-  background: oklch(0.18 0.02 258 / 0.9); border-color: oklch(0.72 0.18 25 / 0.6); color: oklch(0.85 0.15 25);
+  width: 42px; height: 42px; border-radius: 50%;
+  background: oklch(0.58 0.2 25 / 0.95); border: 1.5px solid oklch(0.9 0.02 25 / 0.5); color: #fff;
+  box-shadow: 0 4px 14px oklch(0.2 0 0 / 0.5);
 }
-.team-editing .chroma-action:hover { background: oklch(0.68 0.18 25 / 0.3); }
+.team-editing .chroma-action:hover { background: oklch(0.65 0.22 25); transform: translateY(-1px); }
 .team-edit-hint { font-size: 12.5px; color: var(--accent-text); margin-bottom: 10px; }
 .team-edit-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
 .team-edit-actions .link-btn { font-size: 12.5px; padding: 6px; }
