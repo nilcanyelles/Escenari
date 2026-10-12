@@ -6453,7 +6453,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    la capçalera de la fitxa del concert, .cd-poster) + llista dels 5 següents. */
 /* overflow:visible perquè el menú de compartir (WhatsApp/Instagram) pugui
    sortir per fora de la targeta en comptes de quedar tallat pel seu marc. */
-.bento-next { border-color: oklch(0.68 0.19 290 / 0.5); background: linear-gradient(135deg, oklch(0.68 0.19 290 / 0.14), var(--bg-card) 60%); overflow: visible; }
+.magic-bento-card.bento-next { border-color: oklch(0.68 0.19 290 / 0.5); background: linear-gradient(135deg, oklch(0.68 0.19 290 / 0.14), var(--bg-card) 60%); overflow: visible; }
 .bento-next-body { display: flex; flex-direction: column; gap: 16px; width: 100%; }
 /* Aquí sí es fan servir els dos colors del grup (principal i
    complementari) — la resta de llocs on surt .cd-poster (fitxa del
