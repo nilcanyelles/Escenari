@@ -312,6 +312,86 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
 // (mai es trenca en diverses files) — si n'hi ha més dels que hi caben,
 // unes fletxes hi passen d'un en un, amb la mateixa animació de
 // desplaçament que la previsualització de la pestanya Inici.
+// Controls/barra d'assistència d'una fila de la llista de bolos a Inici —
+// component propi (no una funció imbricada dins GroupHomeView) amb el seu
+// propi estat local de resposta i d'edició: en clicar Hi seré/No hi seré
+// només es torna a renderitzar aquesta petita peça, no tota la pàgina
+// (que amb els seus gràfics GSAP i graelles triga uns instants a
+// refer-se) — això és el que feia que el canvi trigués a veure's.
+function GigAttendance({
+  concertId, isMgr, myName, myExcluded, serverAns, km, attTotal, attYesPct, attNoPct, attYes,
+  tooltipContent, onShowTooltip, onHideTooltip,
+}: {
+  concertId: string;
+  isMgr: boolean;
+  myName: string;
+  myExcluded: boolean;
+  serverAns: string | undefined;
+  km: { label: string; color: string; bg: string };
+  attTotal: number;
+  attYesPct: number;
+  attNoPct: number;
+  attYes: number;
+  tooltipContent: React.ReactNode;
+  onShowTooltip: (rect: DOMRect, content: React.ReactNode) => void;
+  onHideTooltip: () => void;
+}) {
+  const [override, setOverride] = useState<"yes" | "no" | null | undefined>(undefined);
+  const [editing, setEditing] = useState(false);
+  const myAns = override !== undefined ? override : serverAns;
+
+  if (isMgr || !myName) {
+    return <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>;
+  }
+  if (myExcluded) {
+    return <span className="t-dim bento-gig-att" style={{ marginLeft: "auto" }}>No convocat</span>;
+  }
+  if (!myAns || editing) {
+    return (
+      <span className="bento-gig-att cd-att-controls" style={{ marginTop: 0 }} onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
+          title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
+          onClick={() => {
+            const next = myAns === "yes" ? null : "yes";
+            setOverride(next);
+            setEditing(false);
+            setMyAttendanceAction(concertId, next);
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+        </button>
+        <button
+          type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
+          title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
+          onClick={() => {
+            const next = myAns === "no" ? null : "no";
+            setOverride(next);
+            setEditing(false);
+            setMyAttendanceAction(concertId, next);
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </span>
+    );
+  }
+  return (
+    <div
+      className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
+      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      onMouseEnter={(e) => onShowTooltip(e.currentTarget.getBoundingClientRect(), tooltipContent)}
+      onMouseLeave={onHideTooltip}
+    >
+      <div className="cc-att-track">
+        <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
+        <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
+      </div>
+      <div className="cc-att-count">{attYes}/{attTotal}</div>
+    </div>
+  );
+}
+
 function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4, onAdd, addLabel }: {
   people: Person[];
   renderItem: (p: Person) => ChromaItem;
@@ -624,21 +704,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // "transform" que posa el hover de la targeta (.magic-bento-card) no el
   // deixi tapat per la targeta veïna (context d'apilament nou).
   const [attTooltip, setAttTooltip] = useState<{ rect: DOMRect; content: React.ReactNode } | null>(null);
-  // Un cop el prop "concerts" (refrescat per algun altre motiu) ja
-  // reflecteix la resposta local, es deixa de forçar-la.
-  useEffect(() => {
-    setMyAttOverrides((prev) => {
-      if (Object.keys(prev).length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const id of Object.keys(next)) {
-        const serverConcert = concerts.find((c) => c.id === id);
-        const serverAns = serverConcert && myName ? (serverConcert.attendance || {})[myName] ?? null : undefined;
-        if (serverConcert && serverAns === next[id]) { delete next[id]; changed = true; }
-      }
-      return changed ? next : prev;
-    });
-  }, [concerts, myName]);
   // Petit marge abans de tancar-la de veres: com que la targeta flotant no
   // ocupa exactament el mateix espai que la petita, en moure el ratolí de
   // l'una a l'altra hi hauria un instant sense cap de les dues sota el
@@ -679,10 +744,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // Un cop respost (sí o no), la fila mostra el resum d'assistència del grup
   // en comptes dels botons — tocar-lo torna a mostrar els botons per si es
   // vol canviar la resposta.
-  const [attEditing, setAttEditing] = useState<Set<string>>(new Set());
-  // Resposta d'assistència pròpia: estat local instantani en comptes de
-  // router.refresh() — evita el salt de l'scroll a la llista.
-  const [myAttOverrides, setMyAttOverrides] = useState<Record<string, "yes" | "no" | null>>({});
   // Pàgina pública del grup (es crea l'enllaç el primer cop que s'obre).
   const [shareBusy, setShareBusy] = useState(false);
   async function sharePublicPage() {
@@ -807,9 +868,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // el replega).
   const heroGig = shownGigs.find((c) => c.id === selectedGigId) || null;
   function renderGigRow(c: Concert) {
-    const myAns = myName
-      ? (Object.prototype.hasOwnProperty.call(myAttOverrides, c.id) ? myAttOverrides[c.id] ?? undefined : (c.attendance || {})[myName])
-      : undefined;
+    const myAns = myName ? (c.attendance || {})[myName] : undefined;
     // Tipus (bolo/assaig/reunió/altres) i el seu color — substitueix
     // l'estat (confirmat/pendent...) a la insígnia, i tenyeix també la data.
     const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
@@ -835,7 +894,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     const myExcluded = !isMgr && !!myName && (
       !!attExcluded[myName] || (k !== "bolo" && !((c.invited || []).length === 0 || (c.invited || []).includes(myName)))
     );
-    const showButtons = isMgr || !myName || !myAns || attEditing.has(c.id);
     return (
       <div
         key={c.id} className={"bento-gig" + (selectedGigId === c.id ? " selected" : "") + (myExcluded ? " t-row-not-convoked" : "")}
@@ -843,82 +901,36 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       >
         <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>
         <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
-        {!isMgr && myName ? (
-          myExcluded ? (
-            <span className="t-dim bento-gig-att" style={{ marginLeft: "auto" }}>No convocat</span>
-          ) : showButtons ? (
-            <span className="bento-gig-att cd-att-controls" style={{ marginTop: 0 }} onClick={(e) => e.stopPropagation()}>
-              <button
-                type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
-                title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
-                onClick={() => {
-                  const next = myAns === "yes" ? null : "yes";
-                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
-                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
-                  setMyAttendanceAction(c.id, next);
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
-              </button>
-              <button
-                type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
-                title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
-                onClick={() => {
-                  const next = myAns === "no" ? null : "no";
-                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
-                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
-                  setMyAttendanceAction(c.id, next);
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-              </button>
-            </span>
-          ) : (
-            <div
-              className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
-              onClick={(e) => { e.stopPropagation(); setAttEditing((prev) => new Set(prev).add(c.id)); }}
-              onMouseEnter={(e) => {
-                const rect = e.currentTarget.getBoundingClientRect();
-                setAttTooltip({
-                  rect,
-                  content: (
-                    <>
-                      <div className="cc-att-tooltip-title">Assistència:</div>
-                      <div className="cc-att-tooltip-list">
-                        {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
-                        {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
-                        {attNoSubNames.map((n) => (
-                          <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
-                            ✕ {n} → {attSubs[n]}
-                          </span>
-                        ))}
-                        {attPendingNames.map((n) => (
-                          <span key={n} className="cd-att-bubble pending">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
-                              <path d="M5 22h14"></path><path d="M5 2h14"></path>
-                              <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
-                              <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
-                            </svg>
-                            {n}
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  ),
-                });
-              }}
-              onMouseLeave={() => setAttTooltip(null)}
-            >
-              <div className="cc-att-track">
-                <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
-                <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
+        <GigAttendance
+          concertId={c.id} isMgr={isMgr} myName={myName} myExcluded={myExcluded} serverAns={myAns} km={km}
+          attTotal={attTotal} attYesPct={attYesPct} attNoPct={attNoPct} attYes={attYes}
+          tooltipContent={
+            <>
+              <div className="cc-att-tooltip-title">Assistència:</div>
+              <div className="cc-att-tooltip-list">
+                {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
+                {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+                {attNoSubNames.map((n) => (
+                  <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
+                    ✕ {n} → {attSubs[n]}
+                  </span>
+                ))}
+                {attPendingNames.map((n) => (
+                  <span key={n} className="cd-att-bubble pending">
+                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
+                      <path d="M5 22h14"></path><path d="M5 2h14"></path>
+                      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+                      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+                    </svg>
+                    {n}
+                  </span>
+                ))}
               </div>
-              <div className="cc-att-count">{attYes}/{attTotal}</div>
-            </div>
-          )
-        ) : (
-          <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>
-        )}
+            </>
+          }
+          onShowTooltip={(rect, content) => setAttTooltip({ rect, content })}
+          onHideTooltip={() => setAttTooltip(null)}
+        />
       </div>
     );
   }
