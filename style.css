@@ -5040,6 +5040,14 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    degradat, no en un peu a part, perquè afegir-hi text mai en faci créixer
    l'alçada més enllà del 3:4. */
 .chroma-compact .chroma-card { width: 76px; aspect-ratio: 3 / 4; border-radius: 12px; }
+.chroma-add-tile {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  border: 1.5px dashed var(--border-input); background: transparent; cursor: pointer;
+  color: var(--text-faint); transition: border-color .15s, color .15s, background .15s;
+}
+.chroma-add-tile:hover { border-color: var(--accent); color: var(--accent-text); background: oklch(0.68 0.19 290 / 0.08); }
+.chroma-add-plus { font-size: 26px; font-weight: 300; line-height: 1; }
+.chroma-add-label { font-size: 10.5px; font-weight: 600; text-align: center; padding: 0 4px; }
 .chroma-compact .chroma-img-wrapper { position: absolute; inset: 0; padding: 0; }
 .chroma-compact .chroma-img-wrapper img { width: 100%; height: 100%; aspect-ratio: auto; object-fit: cover; border-radius: 12px; }
 .chroma-compact .chroma-info {
@@ -6679,6 +6687,17 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .lib-print-round:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); border-color: transparent; }
 .lib-print-round:disabled { opacity: 0.45; cursor: default; }
+/* Botó rodó amb una sola icona (sense text) — capçaleres de panell amb
+   diverses accions curtes (correu, edita, afegeix...). */
+.icon-round-btn {
+  all: unset; box-sizing: border-box; cursor: pointer; flex: none; text-decoration: none;
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 1px solid var(--border-input); background: var(--bg-card-2); color: var(--text-dim);
+  display: inline-flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.icon-round-btn:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); border-color: transparent; }
+.icon-round-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
 .lib-select-count-wrap { display: flex; align-items: center; gap: 3px; }
 .lib-select-count { font-size: 11.5px; font-weight: 700; color: var(--accent-text); }
 .lib-select-clear {
@@ -7112,8 +7131,22 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cf-confirm-title { font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 700; margin-bottom: 8px; }
 
 /* ============ Equip: "Edita membres" ============ */
-.team-editing .chroma-card { outline: 1.5px dashed var(--accent); outline-offset: 2px; cursor: pointer; }
-.team-editing .chroma-card:hover { outline-style: solid; }
+.team-editing .chroma-card { cursor: pointer; }
+.team-editing .chroma-card::after {
+  content: ""; position: absolute; inset: 0; z-index: 3; border-radius: inherit;
+  background: oklch(0.58 0.2 25 / 0.38); pointer-events: none;
+}
+.team-editing .chroma-compact .chroma-actions {
+  display: flex; position: absolute; inset: 0; z-index: 6; padding: 0;
+  align-items: center; justify-content: center;
+  opacity: 0; transition: opacity .15s;
+}
+.team-editing .chroma-card:hover .chroma-actions { opacity: 1; }
+.team-editing .chroma-action {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: oklch(0.18 0.02 258 / 0.9); border-color: oklch(0.72 0.18 25 / 0.6); color: oklch(0.85 0.15 25);
+}
+.team-editing .chroma-action:hover { background: oklch(0.68 0.18 25 / 0.3); }
 .team-edit-hint { font-size: 12.5px; color: var(--accent-text); margin-bottom: 10px; }
 .team-edit-actions { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
 .team-edit-actions .link-btn { font-size: 12.5px; padding: 6px; }

@@ -30,6 +30,9 @@ export type ChromaItem = {
   onMouseLeave?: () => void;
   actions?: ChromaAction[];
   footer?: React.ReactNode;
+  // Targeta "+" (afegeix algú nou) en comptes d'una persona — mateixa mida
+  // que la resta, amb una vora discontínua i un "+" al mig.
+  isAddTile?: boolean;
 };
 
 export default function ChromaGrid({
@@ -113,6 +116,16 @@ export default function ChromaGrid({
       onPointerLeave={handleLeave}
     >
       {items.map((c, i) => (
+        c.isAddTile ? (
+          <article
+            key={i}
+            className="chroma-card chroma-add-tile"
+            onClick={(e) => { e.stopPropagation(); c.onClick?.(); }}
+          >
+            <span className="chroma-add-plus">+</span>
+            <span className="chroma-add-label">{c.title}</span>
+          </article>
+        ) : (
         <article
           key={i}
           className="chroma-card"
@@ -158,6 +171,7 @@ export default function ChromaGrid({
           )}
           {c.footer && <div className="chroma-footer" onClick={(e) => e.stopPropagation()}>{c.footer}</div>}
         </article>
+        )
       ))}
       <div className="chroma-overlay" />
       <div ref={fadeRef} className="chroma-fade" />

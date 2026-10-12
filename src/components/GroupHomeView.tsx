@@ -48,6 +48,28 @@ const ICON_PHONE = (
 const ICON_WHATSAPP = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
 );
+// Icones per als botons rodons de capçalera de l'equip (edita, afegeix) —
+// sols icona, sense text, amb el títol com a tooltip. ICON_MAIL i
+// ICON_CHECK ja existeixen més avall per a altres usos.
+const ICON_PENCIL = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+  </svg>
+);
+const ICON_PLUS = (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+);
+// Paperera de la targeta en mode "Edita membres" — treu directament a la
+// confirmació d'eliminar, sense passar per la tria "treu / passa a suplent".
+function TrashIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 6 5 6 21 6"></polyline>
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+      <line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>
+    </svg>
+  );
+}
 const ICON_MAIL = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 6-10 7L2 6"></path></svg>
 );
@@ -288,12 +310,16 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
 // (mai es trenca en diverses files) — si n'hi ha més dels que hi caben,
 // unes fletxes hi passen d'un en un, amb la mateixa animació de
 // desplaçament que la previsualització de la pestanya Inici.
-function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4 }: {
+function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4, onAdd, addLabel }: {
   people: Person[];
   renderItem: (p: Person) => ChromaItem;
   cardWidth: number;
   radius: number;
   visibleCount?: number;
+  // Targeta "+" al final de la pàgina actual, per crear algú nou sense
+  // sortir de la graella.
+  onAdd?: () => void;
+  addLabel?: string;
 }) {
   const [start, setStart] = useState(0);
   const [dir, setDir] = useState<"next" | "prev">("next");
@@ -301,6 +327,8 @@ function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4 }: {
   const s = Math.min(start, maxStart);
   const pageItems = people.slice(s, s + visibleCount);
   const canNav = people.length > visibleCount;
+  const gridItems: ChromaItem[] = pageItems.map(renderItem);
+  if (onAdd) gridItems.push({ image: "", title: addLabel || "Afegeix", subtitle: "", isAddTile: true, onClick: onAdd });
   return (
     <div className="bento-chroma-row">
       {canNav && (
@@ -312,7 +340,7 @@ function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4 }: {
         >‹</button>
       )}
       <div className={"bento-chroma bento-chroma-slide-" + dir} key={s}>
-        <ChromaGrid className="chroma-compact" items={pageItems.map(renderItem)} columns={visibleCount} cardWidth={cardWidth} radius={radius} />
+        <ChromaGrid className="chroma-compact" items={gridItems} columns={visibleCount} cardWidth={cardWidth} radius={radius} />
       </div>
       {canNav && (
         <button
@@ -654,6 +682,15 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     setHoveredTeam(null);
     setTeamTarget({ person, kind });
     setTeamStep("choose");
+  }
+  // La paperera que surt en passar el cursor per una targeta en mode
+  // edició va directa al missatge d'eliminar, sense passar per la tria
+  // "treu / passa a suplent" (aquesta encara hi és clicant la targeta).
+  function openTeamRemove(person: Person, kind: "member" | "crew") {
+    cancelHoverOpen();
+    setHoveredTeam(null);
+    setTeamTarget({ person, kind });
+    setTeamStep("remove");
   }
   async function removeTeamPerson() {
     if (!teamTarget) return;
@@ -1141,15 +1178,21 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="panel-title">Músics</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {memberEmails.length > 0 && (
-              <a className="btn-outline" style={{ textDecoration: "none" }} title={`Correu a tot el grup (${memberEmails.length} adreces)`}
+              <a className="icon-round-btn" title={`Correu a tot el grup (${memberEmails.length} adreces)`} aria-label="Correu a tot el grup"
                 href={`mailto:?bcc=${encodeURIComponent(memberEmails.join(","))}&subject=${encodeURIComponent(band.name)}`}>
-                ✉️ Correu a tot el grup
+                {ICON_MAIL}
               </a>
             )}
             {can.removeMembers && (band.members.length > 0 || band.crew.length > 0) && (
-              <button type="button" className="btn-outline" onClick={() => { setTeamEdit((v) => !v); setTeamTarget(null); }}>{teamEdit ? "Fet" : "Edita membres"}</button>
+              <button
+                type="button" className={"icon-round-btn" + (teamEdit ? " active" : "")}
+                title={teamEdit ? "Fet" : "Edita membres"} aria-label={teamEdit ? "Fet" : "Edita membres"}
+                onClick={() => { setTeamEdit((v) => !v); setTeamTarget(null); }}
+              >{teamEdit ? ICON_CHECK : ICON_PENCIL}</button>
             )}
-            {can.members && addKind !== "member" && <button type="button" className="btn-outline" onClick={() => setAddKind("member")}>+ Afegeix membre</button>}
+            {can.members && addKind !== "member" && (
+              <button type="button" className="icon-round-btn" title="Afegeix membre" aria-label="Afegeix membre" onClick={() => setAddKind("member")}>{ICON_PLUS}</button>
+            )}
           </div>
         </div>
         {band.members.length === 0 && addKind !== "member" ? (
@@ -1163,6 +1206,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 cardWidth={76}
                 radius={12}
                 visibleCount={8}
+                onAdd={!teamEdit && can.members && addKind !== "member" ? () => setAddKind("member") : undefined}
+                addLabel="Nou músic"
                 renderItem={(m) => {
                   const item = personChromaItem(
                     m, band, openProfile, photosByName, igByName,
@@ -1170,7 +1215,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                     undefined,
                     copiedEmailKey, copyEmail,
                   );
-                  if (teamEdit) return { ...item, actions: [], onClick: () => openTeamTarget(m, "member") };
+                  if (teamEdit) return {
+                    ...item, onClick: () => openTeamTarget(m, "member"),
+                    actions: [{ icon: <TrashIcon />, title: "Elimina", onClick: () => openTeamRemove(m, "member") }],
+                  };
                   return {
                     ...item,
                     onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
@@ -1206,9 +1254,15 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           <div className="panel-title">Crew</div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {can.removeMembers && band.crew.length > 0 && (
-              <button type="button" className="btn-outline" onClick={() => { setTeamEdit((v) => !v); setTeamTarget(null); }}>{teamEdit ? "Fet" : "Edita membres"}</button>
+              <button
+                type="button" className={"icon-round-btn" + (teamEdit ? " active" : "")}
+                title={teamEdit ? "Fet" : "Edita membres"} aria-label={teamEdit ? "Fet" : "Edita membres"}
+                onClick={() => { setTeamEdit((v) => !v); setTeamTarget(null); }}
+              >{teamEdit ? ICON_CHECK : ICON_PENCIL}</button>
             )}
-            {can.members && addKind !== "crew" && <button type="button" className="btn-outline" onClick={() => setAddKind("crew")}>+ Afegeix tècnic</button>}
+            {can.members && addKind !== "crew" && (
+              <button type="button" className="icon-round-btn" title="Afegeix tècnic" aria-label="Afegeix tècnic" onClick={() => setAddKind("crew")}>{ICON_PLUS}</button>
+            )}
           </div>
         </div>
         {band.crew.length === 0 && addKind !== "crew" ? (
@@ -1222,6 +1276,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 cardWidth={76}
                 radius={12}
                 visibleCount={8}
+                onAdd={!teamEdit && can.members && addKind !== "crew" ? () => setAddKind("crew") : undefined}
+                addLabel="Nou tècnic"
                 renderItem={(m) => {
                   const item = personChromaItem(
                     m, band, openProfile, photosByName, igByName,
@@ -1229,7 +1285,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                     undefined,
                     copiedEmailKey, copyEmail,
                   );
-                  if (teamEdit) return { ...item, actions: [], onClick: () => openTeamTarget(m, "crew") };
+                  if (teamEdit) return {
+                    ...item, onClick: () => openTeamTarget(m, "crew"),
+                    actions: [{ icon: <TrashIcon />, title: "Elimina", onClick: () => openTeamRemove(m, "crew") }],
+                  };
                   return {
                     ...item,
                     onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
