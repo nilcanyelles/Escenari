@@ -4130,6 +4130,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 9999;
 }
 .cc-att:hover .cc-att-tooltip { opacity: 1; }
+/* Variant renderitzada via portal a <body> (grup/Inici): posicionada en
+   coordenades de finestra (getBoundingClientRect), no relatives a la fila
+   — per sobre de qualsevol targeta veïna, sense cap context d'apilament
+   pel mig que la pugui tapar. */
+.cc-att-tooltip-portal { position: fixed; top: 0; left: 0; opacity: 1; pointer-events: none; }
 .cc-att-tooltip-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 6px; }
 .cc-att-tooltip-list { display: flex; flex-direction: column; gap: 6px; }
 .cc-att-tooltip-list .cd-att-bubble { width: 100%; box-sizing: border-box; }
@@ -6543,6 +6548,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .bento-next-poster-editor .share-month-body { flex-wrap: wrap; }
 .bento-next-poster-editor .share-month-preview-wrap { width: 200px; }
 .bento-next-list { border-top: 1px solid var(--border-soft); padding-top: 14px; }
+.bento-next-footer {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 10px 14px;
+  border-top: 1px solid var(--border-soft); padding-top: 14px; margin-top: 2px;
+}
+.bento-next-all-btn { margin-left: auto; text-decoration: none; padding: 7px 14px; font-size: 12.5px; white-space: nowrap; }
 .bento-next-sched { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 14px; }
 .bento-next-sched-row { display: flex; justify-content: center; gap: 8px; font-size: 13px; color: var(--text-muted); }
 .bento-next-sched-row b { color: var(--text-dim); font-weight: 700; }

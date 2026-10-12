@@ -31,7 +31,7 @@ import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
 import SongsPanel from "@/components/SongsPanel";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/components/SocialIcons";
-import { KIND_META } from "@/components/CalendariView";
+import { KIND_META, KIND_ORDER } from "@/components/CalendariView";
 
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
 import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
@@ -82,6 +82,8 @@ const ICON_LINK = (
 const ICON_CHECK = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
 );
+
+const KIND_PLURAL: Record<string, string> = { bolo: "Bolos", assaig: "Assajos", reunio: "Reunions", altre: "Altres" };
 
 const SOCIAL_ICONS: Record<SocialPlatform, React.ReactNode> = {
   instagram: <InstagramIcon />, tiktok: <TiktokIcon />, spotify: <SpotifyIcon />, youtube: <YoutubeIcon />,
@@ -618,6 +620,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // Equip) flotant per sobre — a través d'un portal a <body>, perquè cap
   // altre element de la pàgina la pugui tapar mai.
   const [hoveredTeam, setHoveredTeam] = useState<{ person: Person; rect: DOMRect } | null>(null);
+  // Tooltip d'assistència d'una fila: via portal a <body> perquè el
+  // "transform" que posa el hover de la targeta (.magic-bento-card) no el
+  // deixi tapat per la targeta veïna (context d'apilament nou).
+  const [attTooltip, setAttTooltip] = useState<{ rect: DOMRect; content: React.ReactNode } | null>(null);
   // Petit marge abans de tancar-la de veres: com que la targeta flotant no
   // ocupa exactament el mateix espai que la petita, en moure el ratolí de
   // l'una a l'altra hi hauria un instant sense cap de les dues sota el
@@ -765,6 +771,19 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // parlar sempre d'un bolo de veritat, no d'un assaig/reunió/altre encara
   // que surti abans a la llista.
   const nextBolo = upcoming.find((c) => (c.kind || "bolo") === "bolo");
+  // Recompte per tipus (mateix estil de píndoles que "Propers esdeveniments"
+  // a la pestanya Esdeveniments) i quants, dels propers, encara esperen la
+  // teva resposta d'assistència — per al peu de la targeta.
+  const upcomingKindCounts: Record<string, number> = { bolo: 0, assaig: 0, reunio: 0, altre: 0 };
+  upcoming.forEach((c) => { const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo"; upcomingKindCounts[k] = (upcomingKindCounts[k] || 0) + 1; });
+  const pendingCount = !isMgr && myName ? upcoming.filter((c) => {
+    const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
+    const excluded = !!(c.convocatoriaExcluded || {})[myName] ||
+      (k !== "bolo" && !((c.invited || []).length === 0 || (c.invited || []).includes(myName)));
+    if (excluded) return false;
+    const ans = (c.attendance || {})[myName];
+    return ans !== "yes" && ans !== "no";
+  }).length : 0;
   // Finestra fixa (els 6 més propers): triar-ne un com a gran no en fa
   // entrar cap altre de nou a la llista, només li canvia el format al que
   // ja hi era — l'ordre i el conjunt es queden sempre igual.
@@ -837,35 +856,46 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               </button>
             </span>
           ) : (
-            <div className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
-              onClick={(e) => { e.stopPropagation(); setAttEditing((prev) => new Set(prev).add(c.id)); }}>
+            <div
+              className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
+              onClick={(e) => { e.stopPropagation(); setAttEditing((prev) => new Set(prev).add(c.id)); }}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setAttTooltip({
+                  rect,
+                  content: (
+                    <>
+                      <div className="cc-att-tooltip-title">Assistència:</div>
+                      <div className="cc-att-tooltip-list">
+                        {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
+                        {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+                        {attNoSubNames.map((n) => (
+                          <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
+                            ✕ {n} → {attSubs[n]}
+                          </span>
+                        ))}
+                        {attPendingNames.map((n) => (
+                          <span key={n} className="cd-att-bubble pending">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
+                              <path d="M5 22h14"></path><path d="M5 2h14"></path>
+                              <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+                              <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+                            </svg>
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                    </>
+                  ),
+                });
+              }}
+              onMouseLeave={() => setAttTooltip(null)}
+            >
               <div className="cc-att-track">
                 <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
                 <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
               </div>
               <div className="cc-att-count">{attYes}/{attTotal}</div>
-              <div className="cc-att-tooltip">
-                <div className="cc-att-tooltip-title">Assistència:</div>
-                <div className="cc-att-tooltip-list">
-                  {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
-                  {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
-                  {attNoSubNames.map((n) => (
-                    <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
-                      ✕ {n} → {attSubs[n]}
-                    </span>
-                  ))}
-                  {attPendingNames.map((n) => (
-                    <span key={n} className="cd-att-bubble pending">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
-                        <path d="M5 22h14"></path><path d="M5 2h14"></path>
-                        <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
-                        <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
-                      </svg>
-                      {n}
-                    </span>
-                  ))}
-                </div>
-              </div>
             </div>
           )
         ) : (
@@ -1004,6 +1034,19 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         document.body
       )}
 
+      {attTooltip && typeof document !== "undefined" && createPortal(
+        <div
+          className="cc-att-tooltip cc-att-tooltip-portal"
+          style={{
+            top: attTooltip.rect.bottom + 8,
+            left: attTooltip.rect.left + attTooltip.rect.width / 2,
+          }}
+        >
+          {attTooltip.content}
+        </div>,
+        document.body
+      )}
+
       {tab === "inici" && (
         <BentoGrid
           cards={([
@@ -1015,8 +1058,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               label: nextBolo
                 ? `Proper concert - ${relativeDayLabel(nextBolo.date, today)}`
                 : "Proper concert",
-              title: `${upcoming.length} bolos a la vista`,
-              description: `${total} concerts en total`,
               colSpan: 2,
               rowSpan: 2,
               className: "bento-next",
@@ -1037,6 +1078,21 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                       ))}
                     </div>
                   )}
+                  <div className="bento-next-footer" onClick={(e) => e.stopPropagation()}>
+                    <div className="concerts-section-divider">
+                      <span>Propers esdeveniments</span>
+                      {KIND_ORDER.filter((k) => upcomingKindCounts[k] > 0).map((k) => (
+                        <span key={k} className="cc-kind concerts-kind-count" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>
+                          {KIND_PLURAL[k]}
+                          <span className="concerts-section-divider-count">{upcomingKindCounts[k]}</span>
+                        </span>
+                      ))}
+                    </div>
+                    {pendingCount > 0 && (
+                      <span className="t-dim" style={{ fontSize: 12.5 }}>{pendingCount} pendents de confirmar assistència</span>
+                    )}
+                    <Link href={base + "/concerts"} className="btn-outline bento-next-all-btn">Tots els esdeveniments</Link>
+                  </div>
                 </div>
               ),
             },

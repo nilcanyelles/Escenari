@@ -401,7 +401,7 @@ export type BentoCard = {
   key: string;
   label: string;
   title: string;
-  description?: string;
+  description?: React.ReactNode;
   content?: React.ReactNode;
   onClick?: () => void;
   colSpan?: number;
