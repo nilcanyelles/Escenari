@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -727,12 +727,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // entrar cap altre de nou a la llista, només li canvia el format al que
   // ja hi era — l'ordre i el conjunt es queden sempre igual.
   const shownGigs = upcoming.slice(0, 6);
-  const heroGig = shownGigs.find((c) => c.id === selectedGigId) || shownGigs[0];
-  const heroIdx = Math.max(0, shownGigs.findIndex((c) => c.id === heroGig?.id));
-  // Els anteriors al que es veu gran (cronològicament) surten a sobre seu;
-  // els posteriors, a sota — mai es barregen en una sola llista.
-  const beforeGigs = shownGigs.slice(0, heroIdx);
-  const afterGigs = shownGigs.slice(heroIdx + 1);
+  // Per defecte no hi ha cap bànner gran: la llista surt sencera i, en
+  // clicar una fila, es desplega el pòster just a sota (tornar-la a clicar
+  // el replega).
+  const heroGig = shownGigs.find((c) => c.id === selectedGigId) || null;
   function renderGigRow(c: Concert) {
     const myAns = myName ? (c.attendance || {})[myName] : undefined;
     // Tipus (bolo/assaig/reunió/altres) i el seu color — substitueix
@@ -746,13 +744,21 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     const attPeople = [...band.members, ...band.crew].filter((p) => !attExcluded[p.name]);
     const attTotal = attPeople.length;
     const attendanceMap = c.attendance || {};
-    const attYes = attPeople.filter((p) => attendanceMap[p.name] === "yes").length;
-    const attNo = attPeople.filter((p) => attendanceMap[p.name] === "no").length;
+    const attSubs = c.substitutes || {};
+    const attYesNames = attPeople.filter((p) => attendanceMap[p.name] === "yes").map((p) => p.name);
+    const attNoNames = attPeople.filter((p) => attendanceMap[p.name] === "no").map((p) => p.name);
+    const attNoSubNames = attNoNames.filter((n) => attSubs[n]);
+    const attNoPlainNames = attNoNames.filter((n) => !attSubs[n]);
+    const attPendingNames = attPeople.filter((p) => attendanceMap[p.name] !== "yes" && attendanceMap[p.name] !== "no").map((p) => p.name);
+    const attYes = attYesNames.length;
     const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
-    const attNoPct = attTotal ? (attNo / attTotal) * 100 : 0;
+    const attNoPct = attTotal ? (attNoNames.length / attTotal) * 100 : 0;
     const showButtons = isMgr || !myName || !myAns || attEditing.has(c.id);
     return (
-      <div key={c.id} className="bento-gig" onClick={(e) => { e.stopPropagation(); setSelectedGigId(c.id); }}>
+      <div
+        key={c.id} className={"bento-gig" + (selectedGigId === c.id ? " selected" : "")}
+        onClick={(e) => { e.stopPropagation(); setSelectedGigId((v) => (v === c.id ? null : c.id)); }}
+      >
         <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>
         <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
         {!isMgr && myName ? (
@@ -789,6 +795,28 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
               </div>
               <div className="cc-att-count">{attYes}/{attTotal}</div>
+              <div className="cc-att-tooltip">
+                <div className="cc-att-tooltip-title">Assistència:</div>
+                <div className="cc-att-tooltip-list">
+                  {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
+                  {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+                  {attNoSubNames.map((n) => (
+                    <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
+                      ✕ {n} → {attSubs[n]}
+                    </span>
+                  ))}
+                  {attPendingNames.map((n) => (
+                    <span key={n} className="cd-att-bubble pending">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
+                        <path d="M5 22h14"></path><path d="M5 2h14"></path>
+                        <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+                        <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+                      </svg>
+                      {n}
+                    </span>
+                  ))}
+                </div>
+              </div>
             </div>
           )
         ) : (
@@ -936,7 +964,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             {
               key: "proper",
               label: upcoming.length
-                ? `Proper concert - ${relativeDayLabel(heroGig.date, today)}`
+                ? `Proper concert - ${relativeDayLabel(upcoming[0].date, today)}`
                 : "Proper concert",
               title: `${upcoming.length} bolos a la vista`,
               description: `${total} concerts en total`,
@@ -949,19 +977,16 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                   {upcoming.length === 0 ? (
                     <span className="t-dim" style={{ fontSize: 12.5 }}>Cap bolo programat.</span>
                   ) : (
-                    <>
-                      {beforeGigs.length > 0 && (
-                        <div className="bento-gigs bento-next-list">
-                          {beforeGigs.map((c) => renderGigRow(c))}
-                        </div>
-                      )}
-                      <NextGigPoster key={heroGig.id} c={heroGig} base={base} band={band} setlists={setlists} songs={songs} canEditSetlists={can.setlists} />
-                      {afterGigs.length > 0 && (
-                        <div className="bento-gigs bento-next-list">
-                          {afterGigs.map((c) => renderGigRow(c))}
-                        </div>
-                      )}
-                    </>
+                    <div className="bento-gigs bento-next-list">
+                      {shownGigs.map((c) => (
+                        <Fragment key={c.id}>
+                          {renderGigRow(c)}
+                          {heroGig?.id === c.id && (
+                            <NextGigPoster c={heroGig} base={base} band={band} setlists={setlists} songs={songs} canEditSetlists={can.setlists} />
+                          )}
+                        </Fragment>
+                      ))}
+                    </div>
                   )}
                 </div>
               ),

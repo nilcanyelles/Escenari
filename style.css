@@ -4654,6 +4654,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   cursor: pointer;
 }
 .bento-gig:hover { background: oklch(1 0 0 / 0.08); }
+.bento-gig.selected { background: oklch(0.68 0.19 290 / 0.16); }
 .bento-gig-date { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
 .bento-gig-place { color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -6459,7 +6460,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    concert, vista del dia, confirmació pública) es queden amb el sol
    --band-accent d'abans. */
 .bento-next-poster {
-  margin: 0; cursor: default; animation: bentoNextPosterIn 0.32s ease;
+  margin: 6px 0; cursor: default; animation: bentoNextPosterIn 0.32s ease;
   background:
     radial-gradient(120% 160% at 20% 0%, color-mix(in oklab, var(--band-accent, #8b7bff) 34%, transparent), transparent 55%),
     radial-gradient(120% 160% at 90% 100%, color-mix(in oklab, var(--band-accent-2, var(--band-accent, #8b7bff)) 26%, transparent), transparent 60%),
