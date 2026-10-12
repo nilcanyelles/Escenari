@@ -39,17 +39,14 @@ export default async function JoinByLinkPage({ params }: { params: Promise<{ cod
   if (!userId) {
     return (
       <Screen>
-        <div className="join-head">
-          <img className="join-logo" src={logo} alt="" />
-          <div>
-            <div className="pf-brand" style={{ margin: 0 }}>ESCENARI</div>
-            <h1 className="onboarding-title" style={{ marginTop: 6 }}>T&apos;han convidat al grup {band.name}</h1>
+        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", textAlign: "center" }}>
+          <img className="join-logo" style={{ width: 72, height: 72, marginBottom: 16 }} src={logo} alt="" />
+          <div className="pf-brand" style={{ margin: 0 }}>ESCENARI</div>
+          <h1 className="onboarding-title" style={{ marginTop: 6 }}>T&apos;han convidat al grup {band.name}</h1>
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center", marginTop: 20 }}>
+            <Link className="btn-primary" style={{ textDecoration: "none", width: "auto" }} href={`/sign-up?redirect_url=${encodeURIComponent(back)}`}>Crea el teu perfil</Link>
+            <Link className="btn-outline" style={{ textDecoration: "none" }} href={`/sign-in?redirect_url=${encodeURIComponent(back)}`}>Ja tinc compte</Link>
           </div>
-        </div>
-        <p className="onboarding-sub">Crea el teu perfil d&apos;Escenari per entrar!</p>
-        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          <Link className="btn-primary" style={{ textDecoration: "none", width: "auto" }} href={`/sign-up?redirect_url=${encodeURIComponent(back)}`}>Crea el teu perfil</Link>
-          <Link className="btn-outline" style={{ textDecoration: "none" }} href={`/sign-in?redirect_url=${encodeURIComponent(back)}`}>Ja tinc compte</Link>
         </div>
       </Screen>
     );
