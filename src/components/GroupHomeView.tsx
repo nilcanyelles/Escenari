@@ -13,7 +13,8 @@ import type { Song, BandFile } from "@/lib/songs";
 import { saveBandBackupsAction, saveBandVehiclesAction, setBackupRequestStatusAction, respondBackupApplicationAction, addBandPersonAction, removeBandPersonAction, moveMemberToBackupsAction, invitePersonAction, setMemberPermAction, type BackupPerson } from "@/app/(app)/grup/actions";
 import { openBandPublicPageAction } from "@/app/g/actions";
 import { generateJoinCodeAction } from "@/app/(app)/grups/actions";
-import { setMyAttendanceAction } from "@/app/(artist)/actions";
+import { setMyAttendanceAction, leaveBandAction } from "@/app/(artist)/actions";
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { memberPerms, PERM_LABELS, DEFAULT_PERMS, ALL_PERMS } from "@/lib/perms";
 import VerifiedTick from "@/components/VerifiedTick";
 import { logoBox } from "@/lib/logo";
@@ -568,6 +569,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const searchParams = useSearchParams();
   const isMgr = viewer === "manager";
   const base = isMgr ? "" : "/artista"; // rutes de l'àrea d'artista
+  const [leaveOpen, setLeaveOpen] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
   const can: MemberPerms = isMgr ? { ...ALL_PERMS } : (caps || { ...DEFAULT_PERMS });
   // Un membre amb el permís "Admin" veu i pot editar exactament el mateix
   // que el gestor dins d'aquest grup (equip, aparença, codi d'unió,
@@ -1363,7 +1366,32 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         </div>
       )}
 
+        {!isMgr && (
+          <div className="panel cd-danger-zone">
+            <div>
+              <div className="panel-title" style={{ marginBottom: 4 }}>Abandona el grup</div>
+              <div className="t-dim" style={{ fontSize: 12.5 }}>Deixes de ser-ne membre. Es pot desfer només si et tornen a convidar.</div>
+            </div>
+            <button type="button" className="btn-danger-outline" onClick={() => setLeaveOpen(true)}>Abandona el grup</button>
+          </div>
+        )}
       </>)}
+
+      {leaveOpen && (
+        <ConfirmDialog
+          title="Abandonar el grup?"
+          message={<>Deixaràs de ser membre de <strong>{band.name}</strong>. Només hi tornaràs a entrar si et conviden de nou.</>}
+          confirmLabel="Abandona" busy={leaveBusy}
+          onCancel={() => setLeaveOpen(false)}
+          onConfirm={async () => {
+            setLeaveBusy(true);
+            await leaveBandAction(band.id);
+            setLeaveBusy(false);
+            setLeaveOpen(false);
+            router.push("/els-meus-grups");
+          }}
+        />
+      )}
 
       {editOpen && (
         <GroupAppearanceModal key={band.id} band={band} canDelete={isMgr && agencyOwner} onClose={() => setEditOpen(false)} />

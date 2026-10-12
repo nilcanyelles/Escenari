@@ -402,3 +402,29 @@ export async function deleteUnavailabilityAction(id: string) {
   await deleteUnavailabilityEvent(profile.clerkUserId, id);
   revalidateArtist();
 }
+
+// Un músic abandona un grup pel seu propi compte — mateixos tres canvis que
+// quan el gestor el treu (removeBandPersonAction a grup/actions.ts), però
+// aquí no cal cap permís: qui és membre es pot treure a si mateix.
+export async function leaveBandAction(bandId: string) {
+  const profile = await requireArtistAction();
+  const pool = db();
+  const link = (await pool.query(
+    "select member_name from band_members where band_id=$1 and clerk_user_id=$2",
+    [bandId, profile.clerkUserId]
+  )).rows[0];
+  if (!link) throw new Error("No ets membre d'aquest grup");
+  const band = (await pool.query("select members, crew from bands where id=$1", [bandId])).rows[0];
+  if (!band) throw new Error("Grup no trobat");
+  const isCrew = (band.crew || []).some((p: { name: string }) => normalize(p.name) === normalize(link.member_name));
+  const col = isCrew ? "crew" : "members";
+  const list = ((isCrew ? band.crew : band.members) || []).filter(
+    (p: { name: string }) => normalize(p.name) !== normalize(link.member_name)
+  );
+  await pool.query(`update bands set ${col}=$1 where id=$2`, [JSON.stringify(list), bandId]);
+  await pool.query("delete from band_members where band_id=$1 and clerk_user_id=$2", [bandId, profile.clerkUserId]);
+  await pool.query("delete from invitations where band_id=$1 and lower(name)=lower($2) and status='pendent'", [bandId, link.member_name]);
+  revalidateArtist();
+  revalidatePath("/grup");
+  revalidatePath("/artista/grup");
+}
