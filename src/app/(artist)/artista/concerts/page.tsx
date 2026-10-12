@@ -41,6 +41,10 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
   // d'aquell grup — la resta d'esdeveniments (assaig/reunió/altre) ja els
   // deixa crear el permís "Esdeveniments".
   const allowBolo = eligible.some((b) => permsFor(b).admin);
+  // Qui té "Veure tots els esdeveniments" pot alternar entre veure'ls tots
+  // (el que ja li arriba de getArtistConcertsFull) o només als quals
+  // estigui convocat — vegeu el botó a ConcertsView.
+  const canSeeAllEvents = eligible.some((b) => permsFor(b).seeAllEvents);
   // El teu nom a cada grup (per marcar la teva pròpia assistència a la
   // columna "Assistència" — només quan hi ets convocat, vegeu ConcertsView).
   const myNames: Record<string, string> = {};
@@ -59,6 +63,7 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
       myNames={myNames}
       today={today()}
       fullHistoryLoaded={!!full}
+      showMineToggle={canSeeAllEvents}
     />
   );
 }
