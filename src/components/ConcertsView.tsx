@@ -178,6 +178,10 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
   const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
   const [paidOverrides, setPaidOverrides] = useState<Record<string, boolean>>({});
+  // Resposta d'assistència pròpia: estat local instantani en comptes de
+  // router.refresh() — evita el salt de l'scroll que feia qualsevol
+  // refresc de pàgina en una taula llarga.
+  const [myAttOverrides, setMyAttOverrides] = useState<Record<string, "yes" | "no" | null>>({});
   const PAGE_SIZE = 50;
   const [upcomingVisible, setUpcomingVisible] = useState(PAGE_SIZE);
   const [pastVisible, setPastVisible] = useState(PAGE_SIZE);
@@ -226,6 +230,18 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
       for (const id of Object.keys(next)) {
         const serverConcert = concerts.find((c) => c.id === id);
         if (serverConcert && serverConcert.paid === next[id]) { delete next[id]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+    setMyAttOverrides((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const serverConcert = concerts.find((c) => c.id === id);
+        const myName = serverConcert && myNames?.[serverConcert.bandId];
+        const serverAns = myName ? (serverConcert!.attendance || {})[myName] ?? null : undefined;
+        if (serverConcert && serverAns === next[id]) { delete next[id]; changed = true; }
       }
       return changed ? next : prev;
     });
@@ -287,7 +303,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // convocatòria en concret) — llavors marques la teva pròpia assistència
     // amb tick/creu en comptes de només veure el resum de tothom.
     const myName = myNames?.[c.bandId];
-    const myAns = myName ? attendanceMap[myName] : undefined;
+    const myAns = myName ? (Object.prototype.hasOwnProperty.call(myAttOverrides, c.id) ? myAttOverrides[c.id] ?? undefined : attendanceMap[myName]) : undefined;
     const myPerson = myName ? attPeople.find((p) => p.name === myName) : undefined;
     const myIsAdmin = myPerson ? memberPerms(myPerson).admin : false;
     // Import que surt al tooltip de "Pagat": el gestor (sempre) i els
@@ -330,12 +346,12 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
               <button
                 type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
                 title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
-                onClick={async (e) => {
+                onClick={(e) => {
                   e.stopPropagation();
-                  scrollRestoreRef.current = window.scrollY;
-                  await setMyAttendanceAction(c.id, myAns === "yes" ? null : "yes");
-                  setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
-                  router.refresh();
+                  const next = myAns === "yes" ? null : "yes";
+                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
+                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
+                  setMyAttendanceAction(c.id, next);
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -343,12 +359,12 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
               <button
                 type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
                 title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
-                onClick={async (e) => {
+                onClick={(e) => {
                   e.stopPropagation();
-                  scrollRestoreRef.current = window.scrollY;
-                  await setMyAttendanceAction(c.id, myAns === "no" ? null : "no");
-                  setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
-                  router.refresh();
+                  const next = myAns === "no" ? null : "no";
+                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
+                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
+                  setMyAttendanceAction(c.id, next);
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>

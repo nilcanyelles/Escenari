@@ -624,16 +624,21 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // "transform" que posa el hover de la targeta (.magic-bento-card) no el
   // deixi tapat per la targeta veïna (context d'apilament nou).
   const [attTooltip, setAttTooltip] = useState<{ rect: DOMRect; content: React.ReactNode } | null>(null);
-  // Marcar assistència fa router.refresh() — sense desar/restaurar la
-  // posició, la pàgina saltava a dalt de tot si l'esdeveniment era avall.
-  const scrollRestoreRef = useRef<number | null>(null);
+  // Un cop el prop "concerts" (refrescat per algun altre motiu) ja
+  // reflecteix la resposta local, es deixa de forçar-la.
   useEffect(() => {
-    if (scrollRestoreRef.current !== null) {
-      const y = scrollRestoreRef.current;
-      scrollRestoreRef.current = null;
-      window.scrollTo(0, y);
-    }
-  }, [concerts]);
+    setMyAttOverrides((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      let changed = false;
+      const next = { ...prev };
+      for (const id of Object.keys(next)) {
+        const serverConcert = concerts.find((c) => c.id === id);
+        const serverAns = serverConcert && myName ? (serverConcert.attendance || {})[myName] ?? null : undefined;
+        if (serverConcert && serverAns === next[id]) { delete next[id]; changed = true; }
+      }
+      return changed ? next : prev;
+    });
+  }, [concerts, myName]);
   // Petit marge abans de tancar-la de veres: com que la targeta flotant no
   // ocupa exactament el mateix espai que la petita, en moure el ratolí de
   // l'una a l'altra hi hauria un instant sense cap de les dues sota el
@@ -675,6 +680,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // en comptes dels botons — tocar-lo torna a mostrar els botons per si es
   // vol canviar la resposta.
   const [attEditing, setAttEditing] = useState<Set<string>>(new Set());
+  // Resposta d'assistència pròpia: estat local instantani en comptes de
+  // router.refresh() — evita el salt de l'scroll a la llista.
+  const [myAttOverrides, setMyAttOverrides] = useState<Record<string, "yes" | "no" | null>>({});
   // Pàgina pública del grup (es crea l'enllaç el primer cop que s'obre).
   const [shareBusy, setShareBusy] = useState(false);
   async function sharePublicPage() {
@@ -799,7 +807,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // el replega).
   const heroGig = shownGigs.find((c) => c.id === selectedGigId) || null;
   function renderGigRow(c: Concert) {
-    const myAns = myName ? (c.attendance || {})[myName] : undefined;
+    const myAns = myName
+      ? (Object.prototype.hasOwnProperty.call(myAttOverrides, c.id) ? myAttOverrides[c.id] ?? undefined : (c.attendance || {})[myName])
+      : undefined;
     // Tipus (bolo/assaig/reunió/altres) i el seu color — substitueix
     // l'estat (confirmat/pendent...) a la insígnia, i tenyeix també la data.
     const k = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
@@ -841,11 +851,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               <button
                 type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
                 title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
-                onClick={async () => {
-                  scrollRestoreRef.current = window.scrollY;
-                  await setMyAttendanceAction(c.id, myAns === "yes" ? null : "yes");
-                  setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
-                  router.refresh();
+                onClick={() => {
+                  const next = myAns === "yes" ? null : "yes";
+                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
+                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
+                  setMyAttendanceAction(c.id, next);
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
@@ -853,11 +863,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               <button
                 type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
                 title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
-                onClick={async () => {
-                  scrollRestoreRef.current = window.scrollY;
-                  await setMyAttendanceAction(c.id, myAns === "no" ? null : "no");
-                  setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
-                  router.refresh();
+                onClick={() => {
+                  const next = myAns === "no" ? null : "no";
+                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
+                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
+                  setMyAttendanceAction(c.id, next);
                 }}
               >
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
