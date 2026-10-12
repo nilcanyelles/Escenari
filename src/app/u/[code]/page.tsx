@@ -1,0 +1,73 @@
+import Link from "next/link";
+import { redirect } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
+import { db } from "@/lib/db";
+import { getProfile } from "@/lib/current-user";
+import { bandPhotoDataUri } from "@/lib/tags";
+
+export const dynamic = "force-dynamic";
+
+function Screen({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="onboarding-screen">
+      <div className="login-glow"></div>
+      <img className="login-bg-logo" src="/logo-escenari.png" alt="" />
+      <div className="onboarding-card">{children}</div>
+    </div>
+  );
+}
+
+// Enllaç d'invitació pel codi d'un grup (compartit per WhatsApp des de la
+// pestanya Equip): si qui el clica ja té compte, el porta a "Els meus
+// grups" amb el codi ja introduït (com si l'hagués escrit a mà); si no en
+// té, primer li fa crear el perfil i torna aquí després.
+export default async function JoinByLinkPage({ params }: { params: Promise<{ code: string }> }) {
+  const { code } = await params;
+  const cleaned = (code || "").trim().toUpperCase();
+  const band = (await db().query(
+    "select id, name, logo, color1 from bands where upper(join_code)=$1 and join_code_active",
+    [cleaned]
+  )).rows[0];
+  if (!band) {
+    return <Screen><h1 className="onboarding-title">Aquest enllaç no és vàlid</h1><p className="onboarding-sub">Demana al gestor del grup que te&apos;n generi un de nou.</p></Screen>;
+  }
+  const logo = band.logo || bandPhotoDataUri({ id: band.id, name: band.name });
+  const back = `/u/${cleaned}`;
+
+  const { userId } = await auth();
+  if (!userId) {
+    return (
+      <Screen>
+        <div className="join-head">
+          <img className="join-logo" src={logo} alt="" />
+          <div>
+            <div className="pf-brand" style={{ margin: 0 }}>ESCENARI</div>
+            <h1 className="onboarding-title" style={{ marginTop: 6 }}>T&apos;han convidat al grup {band.name}</h1>
+          </div>
+        </div>
+        <p className="onboarding-sub">Crea el teu perfil d&apos;Escenari per entrar!</p>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <Link className="btn-primary" style={{ textDecoration: "none", width: "auto" }} href={`/sign-up?redirect_url=${encodeURIComponent(back)}`}>Crea el teu perfil</Link>
+          <Link className="btn-outline" style={{ textDecoration: "none" }} href={`/sign-in?redirect_url=${encodeURIComponent(back)}`}>Ja tinc compte</Link>
+        </div>
+      </Screen>
+    );
+  }
+
+  const profile = await getProfile();
+  // Sense perfil encara: primer l'alta com a artista, i torna aquí.
+  if (!profile) redirect(`/onboarding?next=${encodeURIComponent(back)}`);
+  if (profile.role !== "artist") {
+    return (
+      <Screen>
+        <h1 className="onboarding-title">Aquest enllaç és per a músics</h1>
+        <p className="onboarding-sub">El teu compte és de gestor. Per unir-te a un grup com a músic, entra amb un altre compte.</p>
+        <Link className="btn-outline" style={{ textDecoration: "none" }} href="/resum">Torna a l&apos;app</Link>
+      </Screen>
+    );
+  }
+
+  // Compte d'artista ja fet: mateixa pàgina que si hagués escrit el codi a
+  // mà a "Els meus grups", amb el codi ja introduït.
+  redirect(`/els-meus-grups?code=${encodeURIComponent(cleaned)}`);
+}

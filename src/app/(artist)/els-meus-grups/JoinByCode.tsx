@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { joinByCodeAction, previewBandByCodeAction, type PreviewPerson } from "../actions";
 import InstrumentPicker from "@/components/InstrumentPicker";
@@ -11,9 +11,9 @@ import { personPhotoDataUri, splitInstruments } from "@/lib/tags";
 // emergent on es tria músic o crew, qui ets (si el gestor ja t'havia creat
 // a mà en aquest grup, reclamant aquell perfil en comptes de crear-ne un de
 // nou) i què hi tocaràs — o quina funció hi faràs, si és com a crew.
-export default function JoinByCode({ defaultInstruments = [] }: { defaultInstruments?: string[] }) {
+export default function JoinByCode({ defaultInstruments = [], initialCode }: { defaultInstruments?: string[]; initialCode?: string }) {
   const router = useRouter();
-  const [code, setCode] = useState("");
+  const [code, setCode] = useState(initialCode || "");
   const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [pending, startTransition] = useTransition();
 
@@ -40,6 +40,13 @@ export default function JoinByCode({ defaultInstruments = [] }: { defaultInstrum
       setModal(preview);
     });
   }
+
+  // Arribant d'un enllaç d'invitació (/u/[code]) amb el codi a la URL: es
+  // mostra directament la pestanya emergent, com si s'hagués escrit a mà.
+  useEffect(() => {
+    if (initialCode) handleJoinClick();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function doJoin() {
     if (joining) return;

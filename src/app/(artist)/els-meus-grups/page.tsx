@@ -9,7 +9,8 @@ import CreateGroupLauncher from "./CreateGroupLauncher";
 
 export const dynamic = "force-dynamic";
 
-export default async function ArtistGroupsPage() {
+export default async function ArtistGroupsPage({ searchParams }: { searchParams: Promise<{ code?: string }> }) {
+  const { code } = await searchParams;
   const profile = await requireArtist();
   const [bands, invitations, editable] = await Promise.all([
     getArtistBands(profile.clerkUserId),
@@ -72,7 +73,7 @@ export default async function ArtistGroupsPage() {
       )}
 
       <div className="artist-section-title">Uneix-te amb un codi</div>
-      <JoinByCode defaultInstruments={profile.instruments} />
+      <JoinByCode defaultInstruments={profile.instruments} initialCode={code} />
     </div>
   );
 }

@@ -841,8 +841,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   }
 
   const memberEmails = band.members.map((m) => m.email).filter(Boolean) as string[];
+  // Enllaç d'invitació (en comptes de fer escriure el codi a mà): si qui el
+  // clica ja té compte, li mostra la pàgina com si hagués introduït el codi;
+  // si no, li surt una pantalla per crear el perfil abans d'entrar-hi.
+  const joinLink = () => (typeof window !== "undefined" ? window.location.origin : "") + `/u/${effectiveJoinCode}`;
   const joinMsg = (rol: "membre" | "tècnic") =>
-    `Uneix-te a ${band.name} a Escenari com a ${rol}: registra't a escenari i introdueix el codi ${effectiveJoinCode} a "Els meus grups".`;
+    `Uneix-te a ${band.name} a Escenari com a ${rol}: ${joinLink()}`;
 
   async function persistBackups(next: BackupPerson[]) {
     setSavingBackups(true);
@@ -1227,8 +1231,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       <div className="panel">
         <div className="panel-title" style={{ marginBottom: 10 }}>Uneix-te al grup</div>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 12 }}>
-          Comparteix el codi: qui es registri a Escenari i l&apos;introdueixi a &ldquo;Els meus grups&rdquo; quedarà
-          vinculat a aquest grup, com a músic o com a tècnic de so segons el que triï en unir-s&apos;hi.
+          Comparteix el codi o l&apos;enllaç: qui el faci servir quedarà vinculat a aquest grup, com a músic o
+          com a tècnic de so segons el que triï en unir-s&apos;hi. Si ja té compte a Escenari, l&apos;enllaç
+          l&apos;hi porta directament; si no, primer l&apos;hi fa crear el perfil.
           Si la persona ja existeix aquí creada a mà, usa el botó 🔗 de la seva targeta per convidar-la a reclamar el perfil.
         </div>
         {effectiveJoinActive && effectiveJoinCode ? (
@@ -1367,12 +1372,19 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
         {!isMgr && (
-          <div className="panel cd-danger-zone">
-            <div>
-              <div className="panel-title" style={{ marginBottom: 4 }}>Abandona el grup</div>
-              <div className="t-dim" style={{ fontSize: 12.5 }}>Deixes de ser-ne membre. Es pot desfer només si et tornen a convidar.</div>
-            </div>
-            <button type="button" className="btn-danger-outline" onClick={() => setLeaveOpen(true)}>Abandona el grup</button>
+          <div className="panel cd-danger-zone" style={{ justifyContent: "center" }}>
+            <button
+              type="button" className="btn-danger-outline"
+              style={{ display: "inline-flex", alignItems: "center", gap: 8 }}
+              onClick={() => setLeaveOpen(true)}
+            >
+              Abandona el grup
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                <polyline points="16 17 21 12 16 7"></polyline>
+                <line x1="21" y1="12" x2="9" y2="12"></line>
+              </svg>
+            </button>
           </div>
         )}
       </>)}
