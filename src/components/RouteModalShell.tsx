@@ -28,10 +28,12 @@ export default function RouteModalShell({ children }: { children: React.ReactNod
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Sense ✕ propi: la pròpia fitxa ja té la fletxa de tornar (a dalt a
+  // l'esquerra) i el tick de desar i sortir (a dalt a la dreta) — un ✕ a
+  // sobre s'hi solapava.
   return (
     <div className="route-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="route-modal-panel">
-        <button type="button" className="route-modal-close" title="Tanca" aria-label="Tanca" onClick={close}>✕</button>
         {children}
       </div>
     </div>
