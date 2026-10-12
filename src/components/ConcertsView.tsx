@@ -147,8 +147,9 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   function amIConvoked(c: Concert): boolean {
     const myName = myNames?.[c.bandId];
     if (!myName) return true;
+    if ((c.convocatoriaExcluded || {})[myName]) return false;
     const kind = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
-    if (kind === "bolo") return !(c.convocatoriaExcluded || {})[myName];
+    if (kind === "bolo") return true;
     const invited = c.invited || [];
     return invited.length === 0 || invited.includes(myName);
   }

@@ -798,7 +798,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     // Exclòs d'aquest bolo en concret, o fora de la llista d'invitats d'un
     // assaig/reunió/altre — en qualsevol cas, no hi estàs convocat.
     const myExcluded = !isMgr && !!myName && (
-      k === "bolo" ? !!attExcluded[myName] : !((c.invited || []).length === 0 || (c.invited || []).includes(myName))
+      !!attExcluded[myName] || (k !== "bolo" && !((c.invited || []).length === 0 || (c.invited || []).includes(myName)))
     );
     const showButtons = isMgr || !myName || !myAns || attEditing.has(c.id);
     return (
