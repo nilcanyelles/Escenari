@@ -1222,18 +1222,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "equip" && (<>
-      {/* KPIs */}
-      <div className="kpi-grid kpi-grid-4">
-        <div className="card card-centered"><div className="card-title">Integrants</div><div className="card-value">{bandRoster(band).length}</div></div>
-        <div className="card card-centered"><div className="card-title">Concerts totals</div><div className="card-value">{total}</div></div>
-        <div className="card card-centered"><div className="card-title">Pròxims bolos</div><div className="card-value">{upcoming.length}</div></div>
-        <div className="card card-centered"><div className="card-title">Suplents/col·laboradors</div><div className="card-value">{backups.length}</div></div>
-      </div>
-
       {/* Membres */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
-          <div className="panel-title">Músics</div>
+          <div className="panel-title">Músics <span className="panel-title-count">· {band.members.length} {band.members.length === 1 ? "membre" : "membres"}</span></div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {memberEmails.length > 0 && (
               <a className="icon-round-btn" title={`Correu a tot el grup (${memberEmails.length} adreces)`} aria-label="Correu a tot el grup"
@@ -1309,7 +1301,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {/* Crew */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
-          <div className="panel-title">Crew</div>
+          <div className="panel-title">Crew <span className="panel-title-count">· {band.crew.length} {band.crew.length === 1 ? "membre" : "membres"}</span></div>
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             {can.removeMembers && band.crew.length > 0 && (
               <button
@@ -1411,7 +1403,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {/* Suplents */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
-          <div className="panel-title">Suplents/col·laboradors de confiança{savingBackups ? " · desant…" : ""}</div>
+          <div className="panel-title">
+            Suplents/col·laboradors de confiança <span className="panel-title-count">· {backups.length} {backups.length === 1 ? "membre" : "membres"}</span>
+            {savingBackups ? " · desant…" : ""}
+          </div>
           {can.members && !backupDraft && (
             <button type="button" className="btn-outline" onClick={() => setBackupDraft({ name: "", instruments: [], phone: "", email: "", role: "" })}>+ Afegeix suplent</button>
           )}
