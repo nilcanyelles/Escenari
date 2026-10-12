@@ -103,8 +103,10 @@ export async function requireArtist(): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
   if (profile.role === "manager" && profile.workspaceId) {
-    const isMusicianToo = await hasBandMembership(profile.clerkUserId);
-    if (!isMusicianToo || (await getViewMode()) !== "artist") redirect("/resum");
+    // Qualsevol gestor pot tenir també el seu compte de músic, encara que
+    // encara no toqui en cap grup (p. ex. just entrant per un enllaç
+    // d'invitació) — només cal que hagi triat la vista de músic.
+    if ((await getViewMode()) !== "artist") redirect("/resum");
     return profile;
   }
   if (profile.role !== "artist" && !(await hasBandMembership(profile.clerkUserId))) redirect("/resum");
@@ -124,6 +126,8 @@ export async function requireManagerAction(): Promise<Profile & { workspaceId: s
 export async function requireArtistAction(): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) throw new Error("Sessió d'artista no vàlida");
-  if (profile.role !== "artist" && !(await hasBandMembership(profile.clerkUserId))) throw new Error("Sessió d'artista no vàlida");
+  // Qualsevol compte (músic o gestor que també hi vulgui tocar) pot cridar
+  // les accions pròpies de músic — són totes auto-referides (la teva
+  // assistència, abandonar un grup, unir-t'hi...), no calen permisos extra.
   return profile;
 }

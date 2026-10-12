@@ -1372,7 +1372,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
         {!isMgr && (
-          <div className="panel cd-danger-zone" style={{ justifyContent: "center" }}>
+          <div style={{ display: "flex", justifyContent: "center", marginTop: 4 }}>
             <button
               type="button" className="btn-danger-outline"
               style={{ display: "inline-flex", alignItems: "center", gap: 8 }}

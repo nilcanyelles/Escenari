@@ -6,6 +6,7 @@ import { bandPhotoDataUri } from "@/lib/tags";
 import InvitationCard from "./InvitationCard";
 import JoinByCode from "./JoinByCode";
 import CreateGroupLauncher from "./CreateGroupLauncher";
+import ViewSwitchToast from "@/components/ViewSwitchToast";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,7 @@ export default async function ArtistGroupsPage({ searchParams }: { searchParams:
 
   return (
     <div>
+      <ViewSwitchToast />
       {/* Un músic sense grup propi (ni agència) en pot crear un, i el gestiona. */}
       {profile.role === "artist" && !profile.workspaceId && (
         <CreateGroupLauncher selfName={profile.name} selfInstruments={profile.instruments} />

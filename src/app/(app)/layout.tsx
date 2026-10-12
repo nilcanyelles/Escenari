@@ -20,8 +20,9 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
     // L'agència del gestor: nom i logotip a dalt de la barra de grups.
     db().query("select name, logo from workspaces where id=$1", [profile.workspaceId]).then((r) => r.rows[0] || null),
   ]);
-  // Un gestor que també toca en algun grup pot alternar a la vista de
-  // músic des del seu perfil (vegeu el botó "switchView" a AppShell).
+  // Tot gestor pot alternar a la vista de músic des del seu perfil (vegeu
+  // el botó "switchView" a AppShell) — encara que no toqui en cap grup, hi
+  // pot entrar amb un codi o un enllaç d'invitació des d'allà mateix.
   const isMusician = await hasBandMembership(profile.clerkUserId);
   const roleLabel = (ppRow?.role_label || "Gestió") + (isMusician ? " · Músic" : "");
   const selectedBandId = resolveBandScope(bands, selectedRaw);
@@ -37,7 +38,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
         whatsapp: ppRow?.whatsapp || "",
         email: ppRow?.contact_email || profile.email || "",
         editable: true,
-        switchView: isMusician ? { href: "/artista/perfil", label: "Vista de músic", mode: "artist" } : undefined,
+        switchView: { href: "/artista/perfil", label: "Vista de músic", mode: "artist" },
       }}
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "", tags: b.tags }))}
       selectedBandId={selectedBandId}

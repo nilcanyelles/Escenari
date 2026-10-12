@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { getProfile } from "@/lib/current-user";
 import { bandPhotoDataUri } from "@/lib/tags";
+import SwitchToArtistBridge from "./SwitchToArtistBridge";
 
 export const dynamic = "force-dynamic";
 
@@ -57,17 +58,19 @@ export default async function JoinByLinkPage({ params }: { params: Promise<{ cod
   const profile = await getProfile();
   // Sense perfil encara: primer l'alta com a artista, i torna aquí.
   if (!profile) redirect(`/onboarding?next=${encodeURIComponent(back)}`);
+  const target = `/els-meus-grups?code=${encodeURIComponent(cleaned)}`;
   if (profile.role !== "artist") {
+    // Tot gestor pot tenir també el seu compte de músic (botó "Vista de
+    // músic" del perfil) — entrant per un enllaç d'invitació hi canvia
+    // automàticament, sense cap pantalla de bloqueig pel mig.
     return (
       <Screen>
-        <h1 className="onboarding-title">Aquest enllaç és per a músics</h1>
-        <p className="onboarding-sub">El teu compte és de gestor. Per unir-te a un grup com a músic, entra amb un altre compte.</p>
-        <Link className="btn-outline" style={{ textDecoration: "none" }} href="/resum">Torna a l&apos;app</Link>
+        <SwitchToArtistBridge next={`${target}&switched=artist`} />
       </Screen>
     );
   }
 
   // Compte d'artista ja fet: mateixa pàgina que si hagués escrit el codi a
   // mà a "Els meus grups", amb el codi ja introduït.
-  redirect(`/els-meus-grups?code=${encodeURIComponent(cleaned)}`);
+  redirect(target);
 }
