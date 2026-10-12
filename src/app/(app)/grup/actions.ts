@@ -9,7 +9,7 @@ import type { MemberPerms, Vehicle, SocialLinks, Person } from "@/lib/types";
 import { uploadFileBlob } from "@/lib/blob-storage";
 import { instrumentsFor } from "@/lib/tags";
 
-export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string };
+export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string; role?: string };
 
 // Tot el que mostra l'equip d'un grup (gestor i músics).
 function revalidateGroup() {
@@ -186,18 +186,26 @@ export async function removeBandPersonAction(bandId: string, kind: "member" | "c
 export async function moveMemberToBackupsAction(bandId: string, name: string): Promise<{ backups: BackupPerson[] }> {
   await requireBandAccess(bandId, "removeMembers");
   const pool = db();
-  const band = (await pool.query("select members, backups from bands where id=$1", [bandId])).rows[0];
+  const band = (await pool.query("select members, crew, backups from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
   const members: Person[] = band.members || [];
-  const person = members.find((p) => normalize(p.name) === normalize(name));
-  if (!person) throw new Error("Aquesta persona no és músic del grup");
+  const crew: Person[] = band.crew || [];
+  const inMembers = members.find((p) => normalize(p.name) === normalize(name));
+  const person = inMembers || crew.find((p) => normalize(p.name) === normalize(name));
+  if (!person) throw new Error("Aquesta persona no és del grup");
   const backups: BackupPerson[] = band.backups || [];
   if (!backups.some((b) => normalize(b.name) === normalize(person.name))) {
-    backups.push({ name: person.name, instruments: instrumentsFor(person), phone: person.phone || "", email: person.email || "" });
+    backups.push({
+      name: person.name, phone: person.phone || "", email: person.email || "",
+      instruments: inMembers ? instrumentsFor(person) : [],
+      role: inMembers ? undefined : person.role,
+    });
   }
+  const col = inMembers ? "members" : "crew";
+  const nextList = (inMembers ? members : crew).filter((p) => p !== person);
   await pool.query(
-    "update bands set members=$1, backups=$2 where id=$3",
-    [JSON.stringify(members.filter((p) => p !== person)), JSON.stringify(backups), bandId]
+    `update bands set ${col}=$1, backups=$2 where id=$3`,
+    [JSON.stringify(nextList), JSON.stringify(backups), bandId]
   );
   await pool.query("delete from band_members where band_id=$1 and lower(member_name)=lower($2)", [bandId, person.name]);
   revalidateGroup();

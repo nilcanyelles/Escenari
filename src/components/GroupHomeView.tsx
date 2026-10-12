@@ -1270,7 +1270,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         ) : (
           band.crew.length > 0 && (
             <div className={teamEdit ? "team-editing" : undefined}>
-              {teamEdit && <div className="team-edit-hint">Clica una persona per treure-la del grup.</div>}
+              {teamEdit && <div className="team-edit-hint">Clica una persona per treure-la del grup o passar-la a suplents.</div>}
               <TeamRow
                 people={band.crew}
                 cardWidth={76}
@@ -1355,7 +1355,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
           <div className="panel-title">Suplents/col·laboradors de confiança{savingBackups ? " · desant…" : ""}</div>
           {can.members && !backupDraft && (
-            <button type="button" className="btn-outline" onClick={() => setBackupDraft({ name: "", instruments: [], phone: "", email: "" })}>+ Afegeix suplent</button>
+            <button type="button" className="btn-outline" onClick={() => setBackupDraft({ name: "", instruments: [], phone: "", email: "", role: "" })}>+ Afegeix suplent</button>
           )}
         </div>
         {backups.length === 0 && !backupDraft ? (
@@ -1370,7 +1370,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                   <img className="member-photo backup-photo" src={personPhotoDataUri(b.name)} alt="" />
                   <div className="backup-row-main">
                     <div className="member-name">{b.name}</div>
-                    <InstrumentChips items={b.instruments} />
+                    {b.instruments?.length > 0 && <InstrumentChips items={b.instruments} />}
+                    {b.role && <span className="badge sm">{b.role}</span>}
                   </div>
                 </button>
                 <div className="t-dim" style={{ fontSize: 12 }}>{b.phone}</div>
@@ -1392,6 +1393,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               onChange={(e) => setBackupDraft({ ...backupDraft, name: e.target.value })} />
             <InstrumentPicker value={backupDraft.instruments}
               onChange={(next) => setBackupDraft({ ...backupDraft, instruments: next })} />
+            <input
+              className="field-input form-field compact-field" placeholder="Funció de crew (so, llums, backliner…)"
+              value={backupDraft.role || ""} onChange={(e) => setBackupDraft({ ...backupDraft, role: e.target.value })}
+            />
             <input className="field-input form-field compact-field" placeholder="Telèfon" value={backupDraft.phone}
               onChange={(e) => setBackupDraft({ ...backupDraft, phone: e.target.value })} />
             <div style={{ display: "flex", gap: 8 }}>
@@ -1507,11 +1512,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
               <>
                 <div className="cf-confirm-message">Què vols fer amb {teamTarget.person.name.split(" ")[0]}?</div>
                 <div className="team-edit-actions">
-                  {teamTarget.kind === "member" && (
-                    <button type="button" className="btn-outline" disabled={teamBusy} onClick={moveTeamPersonToBackups}>
-                      {teamBusy ? "Un moment…" : "Passa a suplent de confiança"}
-                    </button>
-                  )}
+                  <button type="button" className="btn-outline" disabled={teamBusy} onClick={moveTeamPersonToBackups}>
+                    {teamBusy ? "Un moment…" : "Passa a suplent de confiança"}
+                  </button>
                   <button type="button" className="btn-danger-outline" disabled={teamBusy} onClick={() => setTeamStep("remove")}>Treu del grup</button>
                   <button type="button" className="link-btn" disabled={teamBusy} onClick={() => setTeamTarget(null)}>Cancel·la</button>
                 </div>
