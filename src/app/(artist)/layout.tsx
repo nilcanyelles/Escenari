@@ -12,7 +12,7 @@ import { IconPerson, IconMusic, IconSwap, IconPlus } from "@/components/RailIcon
 // Un gestor només hi entra si ha triat la vista de músic des del seu propi
 // perfil (vegeu requireArtist) — pot tornar a la de gestió amb el mateix
 // botó, sense canviar de compte.
-export default async function ArtistGroupLayout({ children }: { children: React.ReactNode }) {
+export default async function ArtistGroupLayout({ children, modal }: { children: React.ReactNode; modal: React.ReactNode }) {
   const profile = await requireArtist();
   const isManagerToo = profile.role === "manager";
   const todayLabel = capitalize(formatDateFull(today()));
@@ -49,6 +49,7 @@ export default async function ArtistGroupLayout({ children }: { children: React.
       homeHref="/artista/perfil"
     >
       {children}
+      {modal}
     </AppShell>
   );
 }

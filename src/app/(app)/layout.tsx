@@ -7,7 +7,7 @@ import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 import { db } from "@/lib/db";
 import { IconSwap } from "@/components/RailIcons";
 
-export default async function AppGroupLayout({ children }: { children: React.ReactNode }) {
+export default async function AppGroupLayout({ children, modal }: { children: React.ReactNode; modal: React.ReactNode }) {
   const profile = await requireManager();
   const todayLabel = capitalize(formatDateFull(today()));
   const [bands, selectedRaw, ppRow, wsRow] = await Promise.all([
@@ -48,6 +48,7 @@ export default async function AppGroupLayout({ children }: { children: React.Rea
       ]}
     >
       {children}
+      {modal}
     </AppShell>
   );
 }

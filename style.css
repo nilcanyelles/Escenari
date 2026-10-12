@@ -778,6 +778,30 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
   overscroll-behavior: contain;
 }
 .modal.wide { width: 440px; }
+/* Finestra emergent d'una ruta interceptada (crear/editar un esdeveniment
+   des de la llista): el mateix contingut que la pàgina sencera, dins un
+   panell gran i desplaçable en comptes de navegar-hi. */
+.route-modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.65); z-index: 45;
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 28px 20px; overflow-y: auto; overscroll-behavior: contain;
+}
+.route-modal-panel {
+  position: relative; width: 100%; max-width: 1100px;
+  background: var(--bg-deep); border: 1px solid var(--border-input); border-radius: 18px;
+  padding: 28px; box-shadow: 0 30px 80px -20px rgba(0,0,0,0.6);
+}
+.route-modal-close {
+  all: unset; box-sizing: border-box; position: absolute; top: 16px; right: 16px; z-index: 5;
+  width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--bg-card-2); border: 1px solid var(--border-input); color: var(--text-dim);
+}
+.route-modal-close:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); border-color: transparent; }
+@media (max-width: 680px) {
+  .route-modal-overlay { padding: 0; }
+  .route-modal-panel { max-width: 100%; min-height: 100vh; border-radius: 0; }
+}
 .cf-confirm-overlay { z-index: 55; }
 .cf-confirm-modal { width: 320px; text-align: center; }
 .cf-confirm-message { font-size: 14px; color: var(--text); margin-bottom: 18px; }
