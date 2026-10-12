@@ -724,6 +724,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const upcoming = concerts
     .filter((c) => c.date >= today && c.status !== "cancel·lat")
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
+  // El comptador de dalt de tot ("Proper concert - d'aquí a X dies") ha de
+  // parlar sempre d'un bolo de veritat, no d'un assaig/reunió/altre encara
+  // que surti abans a la llista.
+  const nextBolo = upcoming.find((c) => (c.kind || "bolo") === "bolo");
   // Finestra fixa (els 6 més propers): triar-ne un com a gran no en fa
   // entrar cap altre de nou a la llista, només li canvia el format al que
   // ja hi era — l'ordre i el conjunt es queden sempre igual.
@@ -964,8 +968,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             // mateixa llista compacta que abans hi havia a "Agenda".
             {
               key: "proper",
-              label: upcoming.length
-                ? `Proper concert - ${relativeDayLabel(upcoming[0].date, today)}`
+              label: nextBolo
+                ? `Proper concert - ${relativeDayLabel(nextBolo.date, today)}`
                 : "Proper concert",
               title: `${upcoming.length} bolos a la vista`,
               description: `${total} concerts en total`,
@@ -980,12 +984,12 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                   ) : (
                     <div className="bento-gigs bento-next-list">
                       {shownGigs.map((c) => (
-                        <Fragment key={c.id}>
+                        <div key={c.id} className="bento-gig-wrap">
                           {renderGigRow(c)}
                           {heroGig?.id === c.id && (
                             <NextGigPoster c={heroGig} base={base} band={band} setlists={setlists} songs={songs} canEditSetlists={can.setlists} />
                           )}
-                        </Fragment>
+                        </div>
                       ))}
                     </div>
                   )}
@@ -1456,7 +1460,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             ) : (
               <>
                 <div className="cf-confirm-message">
-                  Segur que vols treure <strong>{teamTarget.person.name}</strong> del grup? Si té compte d&apos;Escenari, deixarà de veure-hi el grup.
+                  Segur que vols treure <strong>{teamTarget.person.name}</strong> del grup? Deixarà de veure el grup.
                 </div>
                 <div className="modal-actions cf-confirm-actions">
                   <button type="button" className="btn-outline" disabled={teamBusy} onClick={() => setTeamStep("choose")}>Enrere</button>

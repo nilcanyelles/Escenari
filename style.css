@@ -4643,6 +4643,16 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-weight: 700;
 }
 .bento-gigs { display: flex; flex-direction: column; gap: 7px; width: 100%; }
+/* Cada fila i, si està desplegada, el seu pòster — units sense separació
+   entre ells (la fila perd la cantonada de sota, el pòster la de dalt),
+   com un sol bloc; l'espai entre blocs el dona el gap de .bento-gigs. */
+.bento-gig-wrap { display: flex; flex-direction: column; }
+.bento-gig-wrap:has(.bento-next-poster) .bento-gig {
+  border-bottom-left-radius: 0; border-bottom-right-radius: 0;
+}
+.bento-gig-wrap .bento-next-poster {
+  margin: 0; border-top-left-radius: 0; border-top-right-radius: 0; border-top-color: transparent;
+}
 .bento-gig {
   display: flex;
   align-items: center;
@@ -6460,7 +6470,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
    concert, vista del dia, confirmació pública) es queden amb el sol
    --band-accent d'abans. */
 .bento-next-poster {
-  margin: 6px 0; cursor: default; animation: bentoNextPosterIn 0.32s ease;
+  margin: 0; cursor: default; animation: bentoNextPosterIn 0.32s ease;
   background:
     radial-gradient(120% 160% at 20% 0%, color-mix(in oklab, var(--band-accent, #8b7bff) 34%, transparent), transparent 55%),
     radial-gradient(120% 160% at 90% 100%, color-mix(in oklab, var(--band-accent-2, var(--band-accent, #8b7bff)) 26%, transparent), transparent 60%),
