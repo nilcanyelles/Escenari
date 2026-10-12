@@ -4552,6 +4552,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   transform: translateY(-2px);
   box-shadow: 0 8px 25px rgba(0, 0, 0, 0.25);
 }
+/* El hover ja posa "transform" a la targeta (línia de sobre), que crea un
+   nou context d'apilament — sense aquest z-index, el tooltip d'assistència
+   d'una fila queda tapat per la targeta veïna en comptes de sortir per
+   sobre seu. */
+.magic-bento-card:has(.cc-att:hover) { z-index: 30; }
 
 .magic-bento-card__header,
 .magic-bento-card__content {
