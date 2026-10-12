@@ -481,14 +481,16 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </select>
-        {showMineToggle && (
-          <button type="button" className="btn-outline" onClick={() => setOnlyMine((v) => !v)}>
-            {onlyMine ? "Meus" : "Tots els esdeveniments"}
-          </button>
-        )}
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
         {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />}
       </div>
+
+      {showMineToggle && (
+        <div className="mine-toggle">
+          <button type="button" className={"mine-toggle-item" + (!onlyMine ? " active" : "")} onClick={() => setOnlyMine(false)}>Tots els esdeveniments</button>
+          <button type="button" className={"mine-toggle-item" + (onlyMine ? " active" : "")} onClick={() => setOnlyMine(true)}>Meus</button>
+        </div>
+      )}
 
       <div className="calx-legend concerts-kind-legend">
         {KIND_ORDER.map((k) => (

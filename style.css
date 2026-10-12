@@ -192,6 +192,23 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 @media (prefers-reduced-motion: reduce) {
   .topnav-indicator { transition: opacity 0.15s ease; }
 }
+/* Commutador "Tots els esdeveniments / Meus" — mateix estil de píndola
+   que el menú superior (.topnav), just a sobre de les caselles de tipus. */
+.mine-toggle {
+  display: inline-flex; align-items: center; gap: 2px; align-self: flex-start;
+  background: var(--bg-panel); border: 1px solid var(--border); border-radius: 13px; padding: 4px;
+}
+.mine-toggle-item {
+  background: transparent; border: none; border-radius: 9px;
+  padding: 8px 14px; cursor: pointer; font-size: 13px; font-weight: 500;
+  color: var(--text-muted); white-space: nowrap; transition: color 0.2s ease, background 0.2s ease;
+}
+.mine-toggle-item:hover { background: oklch(1 0 0 / 0.05); color: var(--text); }
+.mine-toggle-item.active {
+  color: oklch(0.99 0.01 330);
+  background: linear-gradient(135deg, oklch(0.66 0.25 330), oklch(0.58 0.23 295));
+  box-shadow: 0 6px 20px -6px oklch(0.6 0.27 330 / 0.65);
+}
 .page-title-badge {
   height: 40px; border-radius: 12px; flex: none;
   background: linear-gradient(135deg, oklch(0.68 0.19 290 / 0.25), oklch(0.68 0.19 290 / 0.06));
