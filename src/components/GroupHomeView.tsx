@@ -5,7 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import type { Band, Concert } from "@/lib/types";
-import { formatCurrency, formatDate, formatDateShort, formatDateFull, capitalize, relativeDayLabel, formatConcertTime } from "@/lib/format";
+import { formatCurrency, formatDate, formatDateShort, formatDateFull, capitalize, formatConcertTime } from "@/lib/format";
 import { tagColors, bandPhotoDataUri, personPhotoDataUri, personPhotoDataUriColored, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
 import type { Rider, Setlist, BandEditor } from "@/lib/material-types";
@@ -767,10 +767,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const upcoming = concerts
     .filter((c) => c.date >= today && c.status !== "cancel·lat")
     .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time));
-  // El comptador de dalt de tot ("Proper concert - d'aquí a X dies") ha de
-  // parlar sempre d'un bolo de veritat, no d'un assaig/reunió/altre encara
-  // que surti abans a la llista.
-  const nextBolo = upcoming.find((c) => (c.kind || "bolo") === "bolo");
   // Recompte per tipus (mateix estil de píndoles que "Propers esdeveniments"
   // a la pestanya Esdeveniments) i quants, dels propers, encara esperen la
   // teva resposta d'assistència — per al peu de la targeta.
@@ -1055,9 +1051,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             // mateixa llista compacta que abans hi havia a "Agenda".
             {
               key: "proper",
-              label: nextBolo
-                ? `Proper concert - ${relativeDayLabel(nextBolo.date, today)}`
-                : "Proper concert",
+              label: (
+                <span className="bento-next-label-pills">
+                  <span>Propers esdeveniments</span>
+                  {KIND_ORDER.filter((k) => upcomingKindCounts[k] > 0).map((k) => (
+                    <span key={k} className="cc-kind concerts-kind-count" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>
+                      {KIND_PLURAL[k]}
+                      <span className="concerts-section-divider-count">{upcomingKindCounts[k]}</span>
+                    </span>
+                  ))}
+                </span>
+              ),
               colSpan: 2,
               rowSpan: 2,
               className: "bento-next",
@@ -1079,15 +1083,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                     </div>
                   )}
                   <div className="bento-next-footer" onClick={(e) => e.stopPropagation()}>
-                    <div className="concerts-section-divider">
-                      <span>Propers esdeveniments</span>
-                      {KIND_ORDER.filter((k) => upcomingKindCounts[k] > 0).map((k) => (
-                        <span key={k} className="cc-kind concerts-kind-count" style={{ background: KIND_META[k].bg, color: KIND_META[k].color }}>
-                          {KIND_PLURAL[k]}
-                          <span className="concerts-section-divider-count">{upcomingKindCounts[k]}</span>
-                        </span>
-                      ))}
-                    </div>
                     {pendingCount > 0 && (
                       <span className="t-dim" style={{ fontSize: 12.5 }}>{pendingCount} pendents de confirmar assistència</span>
                     )}

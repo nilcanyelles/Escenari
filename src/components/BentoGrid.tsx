@@ -399,7 +399,7 @@ function useMobileDetection() {
 
 export type BentoCard = {
   key: string;
-  label: string;
+  label: React.ReactNode;
   title: string;
   description?: React.ReactNode;
   content?: React.ReactNode;

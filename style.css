@@ -4581,6 +4581,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   color: var(--text-ghost);
   font-weight: 700;
 }
+.bento-next-label-pills { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .magic-bento-card__title {
   font-family: "Space Grotesk", sans-serif;
   font-weight: 700;
