@@ -287,8 +287,15 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     const myIsExcluded = !isMgr && !!myName && !!attExcluded[myName];
     const iAmConvoked = !isMgr && !!myName && !attExcluded[myName];
     const showButtons = iAmConvoked && (!myAns || attEditing.has(c.id));
+    // Esdeveniment on no hi estàs convocat (bolo exclòs, o assaig/reunió/
+    // altre amb una llista d'invitats que no t'hi inclou) — fila atenuada.
+    const notConvoked = !isMgr && !!myName && !amIConvoked(c);
     return (
-      <div ref={(el) => { rowRefs.current[c.id] = el; }} className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "")} onClick={() => router.push(`${detailBase}/${c.id}`)}>
+      <div
+        ref={(el) => { rowRefs.current[c.id] = el; }}
+        className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "") + (notConvoked ? " t-row-not-convoked" : "")}
+        onClick={() => router.push(`${detailBase}/${c.id}`)}
+      >
         <div className="t-dim">{formatDate(c.date)}{c.time ? <span className="cc-time"> · {c.time}</span> : ""}</div>
         <div>
           <span className="cc-kind" style={{ background: KIND_META[kind].bg, color: KIND_META[kind].color }}>{KIND_META[kind].label}</span>

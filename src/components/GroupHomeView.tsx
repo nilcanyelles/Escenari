@@ -795,11 +795,15 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     const attYes = attYesNames.length;
     const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
     const attNoPct = attTotal ? (attNoNames.length / attTotal) * 100 : 0;
-    const myExcluded = !isMgr && !!myName && !!attExcluded[myName];
+    // Exclòs d'aquest bolo en concret, o fora de la llista d'invitats d'un
+    // assaig/reunió/altre — en qualsevol cas, no hi estàs convocat.
+    const myExcluded = !isMgr && !!myName && (
+      k === "bolo" ? !!attExcluded[myName] : !((c.invited || []).length === 0 || (c.invited || []).includes(myName))
+    );
     const showButtons = isMgr || !myName || !myAns || attEditing.has(c.id);
     return (
       <div
-        key={c.id} className={"bento-gig" + (selectedGigId === c.id ? " selected" : "")}
+        key={c.id} className={"bento-gig" + (selectedGigId === c.id ? " selected" : "") + (myExcluded ? " t-row-not-convoked" : "")}
         onClick={(e) => { e.stopPropagation(); setSelectedGigId((v) => (v === c.id ? null : c.id)); }}
       >
         <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>

@@ -587,6 +587,10 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .t-row.clickable:hover { background: oklch(0.26 0.02 258); }
 .t-row.selected { background: oklch(0.68 0.19 290 / 0.14); box-shadow: inset 2px 0 0 var(--accent); }
 .t-row.selected:hover { background: oklch(0.68 0.19 290 / 0.18); }
+/* Esdeveniment on el músic/crew que mira la taula no està convocat —
+   igual, però atenuat, perquè es distingeixi d'un cop d'ull. */
+.t-row-not-convoked { filter: grayscale(0.85); opacity: 0.55; }
+.t-row-not-convoked:hover { opacity: 0.8; }
 .t-dim { color: var(--text-muted); }
 .t-strong { font-weight: 600; }
 .t-head button { all: unset; cursor: pointer; }
