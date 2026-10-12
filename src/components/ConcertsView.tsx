@@ -143,7 +143,17 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   // Qui té el permís "Veure tots els esdeveniments" pot alternar entre
   // veure'ls tots o només aquells als quals estigui convocat — mateix
   // càlcul de convocatòria que fa servir el servidor sense aquest permís.
-  const [onlyMine, setOnlyMine] = useState(false);
+  // L'última tria es recorda (localStorage) perquè torni a sortir igual
+  // cada cop que s'obre la pestanya.
+  const MINE_KEY = "escenari_events_only_mine";
+  const [onlyMine, setOnlyMineState] = useState(false);
+  useEffect(() => {
+    try { if (localStorage.getItem(MINE_KEY) === "1") setOnlyMineState(true); } catch { /* localStorage no disponible */ }
+  }, []);
+  function setOnlyMine(v: boolean) {
+    setOnlyMineState(v);
+    try { localStorage.setItem(MINE_KEY, v ? "1" : "0"); } catch { /* localStorage no disponible */ }
+  }
   function amIConvoked(c: Concert): boolean {
     const myName = myNames?.[c.bandId];
     if (!myName) return true;
