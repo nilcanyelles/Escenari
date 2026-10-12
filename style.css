@@ -6760,6 +6760,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .icon-round-btn:hover { background: oklch(0.68 0.19 290 / 0.16); color: var(--accent-text); border-color: transparent; }
 .icon-round-btn.active { background: var(--accent); color: #fff; border-color: transparent; }
+.cd-save-btn { background: oklch(0.72 0.15 155 / 0.16); color: oklch(0.78 0.15 155); border-color: transparent; width: 36px; height: 36px; }
+.cd-save-btn:hover { background: oklch(0.72 0.15 155 / 0.28); color: oklch(0.82 0.15 155); }
+.cd-save-btn:disabled { opacity: 0.6; cursor: default; }
+.cd-save-spinner { animation: cdSaveSpin 0.8s linear infinite; }
+@keyframes cdSaveSpin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .lib-select-count-wrap { display: flex; align-items: center; gap: 3px; }
 .lib-select-count { font-size: 11.5px; font-weight: 700; color: var(--accent-text); }
 .lib-select-clear {

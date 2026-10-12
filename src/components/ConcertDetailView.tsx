@@ -860,25 +860,29 @@ export default function ConcertDetailView({
     setDirty(true);
   }
 
+  // El tick de la capçalera desa (si hi ha res pendent) i torna directament
+  // a la pestanya d'on venies (calendari o esdeveniments) — desar i sortir
+  // en un sol clic, en comptes de desar i quedar-se a l'edició.
   async function saveNow() {
     const p = pendingSaveRef.current;
-    if (!p) return;
-    setSaving(true);
-    await saveConcertAction({
-      id: concert.id,
-      bandId: concert.bandId,
-      bandName: concert.bandName,
-      date: p.next.date, time: p.next.time, exactTime: p.next.exactTime, venue: p.next.venue, city: p.next.city, address: p.next.address,
-      festaEntitat: p.next.festaEntitat, amount: parseInt(p.next.amount, 10) || 0, status: p.next.status,
-      attendance: p.att, substitutes: p.subs, substituteConfirmed: p.subConfirmed, noSubstitute: p.noSubs, convocatoriaExcluded: p.excl, contact: p.cont,
-      canAnnounce: p.next.canAnnounce as Concert["canAnnounce"], announceAfter: p.next.announceAfter,
-      ticketType: p.next.ticketType as Concert["ticketType"],
-      skipDefaults: true,
-    });
-    pendingSaveRef.current = null;
-    setDirty(false);
-    setSaving(false);
-    router.refresh();
+    if (p) {
+      setSaving(true);
+      await saveConcertAction({
+        id: concert.id,
+        bandId: concert.bandId,
+        bandName: concert.bandName,
+        date: p.next.date, time: p.next.time, exactTime: p.next.exactTime, venue: p.next.venue, city: p.next.city, address: p.next.address,
+        festaEntitat: p.next.festaEntitat, amount: parseInt(p.next.amount, 10) || 0, status: p.next.status,
+        attendance: p.att, substitutes: p.subs, substituteConfirmed: p.subConfirmed, noSubstitute: p.noSubs, convocatoriaExcluded: p.excl, contact: p.cont,
+        canAnnounce: p.next.canAnnounce as Concert["canAnnounce"], announceAfter: p.next.announceAfter,
+        ticketType: p.next.ticketType as Concert["ticketType"],
+        skipDefaults: true,
+      });
+      pendingSaveRef.current = null;
+      setDirty(false);
+      setSaving(false);
+    }
+    router.back();
   }
 
   function setField<K extends keyof typeof cf>(k: K, v: string) {
@@ -1258,8 +1262,17 @@ export default function ConcertDetailView({
         <BackLink onClick={handleBack} />
         <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
           {dirty && !saving && <span className="t-dim" style={{ fontSize: 12 }}>Canvis sense desar</span>}
-          <button type="button" className="btn-save" disabled={!dirty || saving} onClick={saveNow}>
-            {saving ? "Desant…" : "Guarda"}
+          <button
+            type="button" className="icon-round-btn cd-save-btn" disabled={saving}
+            title="Guarda i surt" aria-label="Guarda i surt" onClick={saveNow}
+          >
+            {saving ? (
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="cd-save-spinner">
+                <path d="M21 12a9 9 0 1 1-9-9"></path>
+              </svg>
+            ) : (
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            )}
           </button>
         </div>
       </div>
@@ -2464,19 +2477,28 @@ export default function ConcertDetailView({
           <div className="panel-title" style={{ marginBottom: 4 }}>Elimina {kindArticle[kind] || `aquest ${KIND_META[kind]?.label.toLowerCase() || "esdeveniment"}`}</div>
           <div className="t-dim" style={{ fontSize: 12.5 }}>S&apos;esborra del tot, amb el full de ruta, el repartiment i la factura que hi hagi. No es pot desfer.</div>
         </div>
-        <button type="button" className="btn-danger-outline" onClick={() => setDeleteOpen(true)}>Elimina</button>
+        <button type="button" className="btn-danger-outline" title="Elimina" aria-label="Elimina" onClick={() => setDeleteOpen(true)}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"></polyline>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+            <line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line>
+          </svg>
+        </button>
       </div>
       {deleteOpen && (
         <ConfirmDialog
           title={`Eliminar ${kindArticle[kind] || `aquest ${KIND_META[kind]?.label.toLowerCase() || "esdeveniment"}`}?`}
-          message={<>S&apos;eliminarà <strong>{cf.festaEntitat || cf.city || cf.venue || capitalize(formatDateFull(cf.date))}</strong> ({capitalize(formatDateFull(cf.date))}) amb tot el que hi ha a dins. No es pot desfer.</>}
+          message="S'esborrarà tota la informació."
           confirmLabel="Elimina" busy={deleting}
           onCancel={() => setDeleteOpen(false)}
           onConfirm={async () => {
             setDeleting(true);
             await deleteConcertAction(concert.id);
-            router.push(`${base}/concerts`);
-            router.refresh();
+            // "replace" (no "push" + "refresh"): un cop eliminat, el
+            // concert ja no existeix — refrescar la ruta vella (p. ex. dins
+            // la finestra emergent) hi donava un 404 abans de completar-se
+            // la navegació cap a la llista.
+            router.replace(`${base}/concerts`);
           }}
         />
       )}

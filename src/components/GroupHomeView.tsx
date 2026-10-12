@@ -624,6 +624,16 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // "transform" que posa el hover de la targeta (.magic-bento-card) no el
   // deixi tapat per la targeta veïna (context d'apilament nou).
   const [attTooltip, setAttTooltip] = useState<{ rect: DOMRect; content: React.ReactNode } | null>(null);
+  // Marcar assistència fa router.refresh() — sense desar/restaurar la
+  // posició, la pàgina saltava a dalt de tot si l'esdeveniment era avall.
+  const scrollRestoreRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (scrollRestoreRef.current !== null) {
+      const y = scrollRestoreRef.current;
+      scrollRestoreRef.current = null;
+      window.scrollTo(0, y);
+    }
+  }, [concerts]);
   // Petit marge abans de tancar-la de veres: com que la targeta flotant no
   // ocupa exactament el mateix espai que la petita, en moure el ratolí de
   // l'una a l'altra hi hauria un instant sense cap de les dues sota el
@@ -832,6 +842,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
                 title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
                 onClick={async () => {
+                  scrollRestoreRef.current = window.scrollY;
                   await setMyAttendanceAction(c.id, myAns === "yes" ? null : "yes");
                   setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
                   router.refresh();
@@ -843,6 +854,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
                 type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
                 title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
                 onClick={async () => {
+                  scrollRestoreRef.current = window.scrollY;
                   await setMyAttendanceAction(c.id, myAns === "no" ? null : "no");
                   setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
                   router.refresh();

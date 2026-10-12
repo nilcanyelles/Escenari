@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useRouter, usePathname } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
 import { formatDate, statusColors, isConcertOver, formatCurrency } from "@/lib/format";
@@ -96,7 +97,7 @@ export function DeleteConcertBtn({ id, label, kind, onDeleted }: { id: string; l
       {open && (
         <ConfirmDialog
           title={`Eliminar ${kindPhrase}?`}
-          message={<>{label && <><strong>{label}</strong><br /></>}S&apos;esborrarà amb el full de ruta, el repartiment i la factura que hi hagi. No es pot desfer.</>}
+          message={<>{label && <><strong>{label}</strong><br /></>}S&apos;esborrarà tota la informació.</>}
           confirmLabel="Elimina" busy={busy}
           onCancel={() => setOpen(false)}
           onConfirm={async () => {
@@ -139,6 +140,10 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   // el resum d'assistència en comptes dels botons — mateix comportament que
   // "Els meus grups" (tocar-lo torna a mostrar els botons).
   const [attEditing, setAttEditing] = useState<Set<string>>(new Set());
+  // Tooltip d'assistència via portal a <body> perquè sempre surti per
+  // sobre de tot (capçalera fixa, altres files...), sense dependre de cap
+  // context d'apilament de la fila on es mostra.
+  const [attTooltip, setAttTooltip] = useState<{ rect: DOMRect; content: React.ReactNode } | null>(null);
   const [search, setSearch] = useState("");
   // Qui té el permís "Veure tots els esdeveniments" pot alternar entre
   // veure'ls tots o només aquells als quals estigui convocat — mateix
@@ -327,6 +332,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
                 onClick={async (e) => {
                   e.stopPropagation();
+                  scrollRestoreRef.current = window.scrollY;
                   await setMyAttendanceAction(c.id, myAns === "yes" ? null : "yes");
                   setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
                   router.refresh();
@@ -339,6 +345,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
                 onClick={async (e) => {
                   e.stopPropagation();
+                  scrollRestoreRef.current = window.scrollY;
                   await setMyAttendanceAction(c.id, myAns === "no" ? null : "no");
                   setAttEditing((prev) => { const next = new Set(prev); next.delete(c.id); return next; });
                   router.refresh();
@@ -352,6 +359,28 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
               className="cc-att" style={iAmConvoked ? { cursor: "pointer", margin: "0 auto" } : { margin: "0 auto" }}
               title={iAmConvoked ? "Toca per canviar la teva resposta" : undefined}
               onClick={iAmConvoked ? (e) => { e.stopPropagation(); setAttEditing((prev) => new Set(prev).add(c.id)); } : undefined}
+              onMouseEnter={(e) => {
+                const rect = e.currentTarget.getBoundingClientRect();
+                setAttTooltip({
+                  rect,
+                  content: (
+                    <>
+                      <div className="cc-att-tooltip-title">Assistència:</div>
+                      <div className="cc-att-tooltip-list">
+                        {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
+                        {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+                        {attNoSubNames.map((n) => (
+                          <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
+                            ✕ {n} → {attSubs[n]}
+                          </span>
+                        ))}
+                        {attPendingNames.map((n) => <span key={n} className="cd-att-bubble pending"><HourglassIcon />{n}</span>)}
+                      </div>
+                    </>
+                  ),
+                });
+              }}
+              onMouseLeave={() => setAttTooltip(null)}
             >
               <div className="cc-att-track">
                 <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
@@ -359,19 +388,6 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 <div className="cc-att-fill" style={{ width: attNoSubPct + "%", background: "oklch(0.75 0.14 230)" }}></div>
               </div>
               <div className="cc-att-count">{attYes}/{attTotal}</div>
-              <div className="cc-att-tooltip">
-                <div className="cc-att-tooltip-title">Assistència:</div>
-                <div className="cc-att-tooltip-list">
-                  {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
-                  {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
-                  {attNoSubNames.map((n) => (
-                    <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
-                      ✕ {n} → {attSubs[n]}
-                    </span>
-                  ))}
-                  {attPendingNames.map((n) => <span key={n} className="cd-att-bubble pending"><HourglassIcon />{n}</span>)}
-                </div>
-              </div>
             </div>
           ) : <span className="t-dim">—</span>}
         </div>
@@ -521,6 +537,16 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
       </div>
 
       {importOpen && <ImportConcertsModal bands={bands} onClose={() => setImportOpen(false)} />}
+
+      {attTooltip && typeof document !== "undefined" && createPortal(
+        <div
+          className="cc-att-tooltip cc-att-tooltip-portal"
+          style={{ top: attTooltip.rect.bottom + 8, left: attTooltip.rect.left + attTooltip.rect.width / 2 }}
+        >
+          {attTooltip.content}
+        </div>,
+        document.body
+      )}
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
         <div className="empty-state">Cap concert coincideix amb els filtres.</div>
