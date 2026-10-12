@@ -376,7 +376,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           ) : <span className="t-dim">—</span>}
         </div>
         <div>
-          {isMgr ? (
+          {isMgr || canCreate ? (
             <button type="button" className="badge-btn" style={{ background: sc.bg, color: sc.color }}
               title="Canvia l'estat" aria-label="Canvia l'estat"
               onClick={(e) => {

@@ -501,7 +501,9 @@ export async function setInvoiceStateAction(invoiceId: string, state: "pagada" |
 }
 
 export async function setConcertStatusAction(id: string, status: string) {
-  const { workspaceId } = await requireConcertAccess(id, "admin");
+  // Gestor, o membre amb el permís "Editar esdeveniments" — igual que per
+  // crear-ne un o eliminar-lo.
+  const { workspaceId } = await requireConcertAccess(id, "events");
   await db().query("update concerts set status=$1 where id=$2 and workspace_id=$3", [status, id, workspaceId]);
   revalidateAll();
 }
