@@ -315,8 +315,10 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         <div className="cc-bold">{c.city ? c.city.split(",")[0] : "—"}</div>
         <div className="cc-bold">{c.venue || "—"}</div>
         <div className="cc-bold">{c.festaEntitat || "—"}</div>
-        <div style={{ textAlign: "center" }} onClick={(e) => { if (showButtons) e.stopPropagation(); }}>
-          {myIsExcluded ? (
+        <div style={{ textAlign: "center" }} onClick={(e) => { if (showButtons && c.status !== "cancel·lat") e.stopPropagation(); }}>
+          {c.status === "cancel·lat" ? (
+            <span className="t-dim">—</span>
+          ) : myIsExcluded ? (
             myIsAdmin ? <span className="t-dim">No convocat</span> : <span className="t-dim">—</span>
           ) : showButtons ? (
             <span className="cd-att-controls" style={{ justifyContent: "center" }}>
