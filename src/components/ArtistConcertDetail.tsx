@@ -6,6 +6,8 @@ import type { Band, Concert, Contact } from "@/lib/types";
 import type { Setlist } from "@/lib/material-types";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
 import { saveConcertAction, setConvocatoriaAction } from "@/app/(app)/concerts/actions";
+import { setShareLinkCodeAction, clearShareLinkCodeAction } from "@/app/(app)/concerts/share-actions";
+import type { ShareLink } from "@/lib/share-data";
 import { formatCurrency, formatDateFull, capitalize, formatDate, statusColors, formatConcertTime } from "@/lib/format";
 import { personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { normalize } from "@/lib/text";
@@ -32,7 +34,7 @@ type Tab = "info" | "ruta" | "assistencia" | "diners";
 // que el gestor: editar informació, full de ruta i assistència de tothom
 // (caixet, despeses, comissió i repartiment, ara mateix només lectura —
 // s'editen des d'Estadístiques); la resta, només el que els toca.
-export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, isAdmin = false, money = null, photosByName = {}, setlists = [], canSetlists = false, linkedNames = [], contacts = [], today }: {
+export default function ArtistConcertDetail({ concert, band, myName, myAmount, showFees, isAdmin = false, money = null, photosByName = {}, setlists = [], canSetlists = false, linkedNames = [], contacts = [], today, canEvents = false, shareLink = null }: {
   concert: Concert;
   band: Band | null;
   myName: string;
@@ -46,9 +48,16 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
   linkedNames?: string[]; // membres amb compte d'Escenari vinculat (tick lila)
   contacts?: Contact[];
   today: string;
+  // Permís "Editar esdeveniments" (sense ser Admin del grup): pot generar
+  // i gestionar l'enllaç de regidor del bolo.
+  canEvents?: boolean;
+  shareLink?: ShareLink | null;
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<Tab>("info");
+  const [shareCopied, setShareCopied] = useState(false);
+  const [shareBusy, setShareBusy] = useState(false);
+  const shareUrl = shareLink && typeof window !== "undefined" ? `${window.location.origin}/f/${shareLink.id}` : "";
   const [rsOpen, setRsOpen] = useState(false);
   const [setlistId, setSetlistId] = useState<string>(concert.setlistId || "");
   const selectedSetlist = setlists.find((s) => s.id === setlistId) || null;
@@ -236,6 +245,42 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
           ) : (
             !canSetlists && <div className="t-dim" style={{ fontSize: 13 }}>Cap setlist assignada a aquest esdeveniment.</div>
           )}
+        </div>
+      )}
+
+      {/* Enllaç de regidor: per a qui pugui editar/crear esdeveniments,
+          encara que no sigui Admin del grup — mateix enllaç que es genera
+          sol en crear el bolo, perquè l'ajuntament/promotor/sala hi
+          ompli la informació que falta. */}
+      {tab === "info" && canEvents && shareLink && (
+        <div className="panel cd-section">
+          <div className="panel-title cd-section-title">Enllaç de regidor</div>
+          <div className="t-dim" style={{ fontSize: 13, marginBottom: 10 }}>
+            Perquè l&apos;ajuntament, el promotor o la sala omplin la informació que falta.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="field-input compact-field" readOnly value={shareUrl} style={{ flex: 1, minWidth: 220 }} onClick={(e) => (e.target as HTMLInputElement).select()} />
+            <button
+              type="button" className="btn-outline"
+              onClick={async () => { await navigator.clipboard.writeText(shareUrl); setShareCopied(true); window.setTimeout(() => setShareCopied(false), 1600); }}
+            >{shareCopied ? "Copiat ✓" : "Copia"}</button>
+          </div>
+          <div style={{ marginTop: 10, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {shareLink.accessCode ? (
+              <>
+                <span className="t-dim" style={{ fontSize: 13 }}>Codi d&apos;accés: <strong className="t-strong">{shareLink.accessCode}</strong></span>
+                <button
+                  type="button" className="btn-outline" disabled={shareBusy}
+                  onClick={async () => { setShareBusy(true); await clearShareLinkCodeAction(shareLink!.id); setShareBusy(false); router.refresh(); }}
+                >Treu el codi</button>
+              </>
+            ) : (
+              <button
+                type="button" className="btn-outline" disabled={shareBusy}
+                onClick={async () => { setShareBusy(true); await setShareLinkCodeAction(shareLink!.id, "event"); setShareBusy(false); router.refresh(); }}
+              >{shareBusy ? "Un moment…" : "Genera un codi d&apos;accés"}</button>
+            )}
+          </div>
         </div>
       )}
 

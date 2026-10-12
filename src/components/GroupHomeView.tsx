@@ -795,6 +795,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     const attYes = attYesNames.length;
     const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
     const attNoPct = attTotal ? (attNoNames.length / attTotal) * 100 : 0;
+    const myExcluded = !isMgr && !!myName && !!attExcluded[myName];
     const showButtons = isMgr || !myName || !myAns || attEditing.has(c.id);
     return (
       <div
@@ -804,7 +805,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <span className="bento-gig-date" style={{ color: km.color }}>{formatDateShort(c.date)}</span>
         <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
         {!isMgr && myName ? (
-          showButtons ? (
+          myExcluded ? (
+            <span className="t-dim bento-gig-att" style={{ marginLeft: "auto" }}>No convocat</span>
+          ) : showButtons ? (
             <span className="bento-gig-att cd-att-controls" style={{ marginTop: 0 }} onClick={(e) => e.stopPropagation()}>
               <button
                 type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}

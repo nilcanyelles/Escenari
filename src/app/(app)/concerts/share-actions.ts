@@ -51,7 +51,9 @@ export type CreateShareLinkInput = {
 };
 
 export async function createShareLinkAction(input: CreateShareLinkInput): Promise<{ id: string; url: string; code?: string; codeExpiresAt?: string }> {
-  const { workspaceId } = await requireConcertAccess(input.concertId, "admin");
+  // Gestor, o membre amb el permís "Editar esdeveniments" (igual que per
+  // crear-ne un) — no cal ser admin del grup per generar-ne l'enllaç.
+  const { workspaceId } = await requireConcertAccess(input.concertId, "events");
   const concert = (await db().query("select date from concerts where id=$1 and workspace_id=$2", [input.concertId, workspaceId])).rows[0];
   if (!concert) throw new Error("Concert no trobat");
   // Límit d'enllaços actius per grup del pla gratuït.
@@ -133,7 +135,7 @@ function codeDaysFor(validity: CodeValidity, concertDate: string): number {
 export async function setShareLinkCodeAction(linkId: string, validity: CodeValidity): Promise<{ code: string; codeExpiresAt: string }> {
   const pre = (await db().query("select concert_id from share_links where id=$1", [linkId])).rows[0];
   if (!pre) throw new Error("Enllaç no trobat");
-  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "events");
   const link = (await db().query(
     `select sl.concert_id, c.date from share_links sl join concerts c on c.id = sl.concert_id
      where sl.id=$1 and sl.workspace_id=$2`,
@@ -157,7 +159,7 @@ export async function setShareLinkCodeAction(linkId: string, validity: CodeValid
 export async function clearShareLinkCodeAction(linkId: string): Promise<void> {
   const pre = (await db().query("select concert_id from share_links where id=$1", [linkId])).rows[0];
   if (!pre) throw new Error("Enllaç no trobat");
-  const { workspaceId } = await requireConcertAccess(pre.concert_id, "admin");
+  const { workspaceId } = await requireConcertAccess(pre.concert_id, "events");
   const link = (await db().query(
     `update share_links set access_code=null, code_expires_at=null where id=$1 and workspace_id=$2 returning concert_id`,
     [linkId, workspaceId]

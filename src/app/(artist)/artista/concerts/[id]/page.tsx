@@ -140,7 +140,12 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
     );
   }
 
-  const [setlists, linkedMembers, raw, txs, photoRows] = await Promise.all([
+  // Qui pot editar/crear esdeveniments (encara que no sigui Admin del
+  // grup) també pot generar l'enllaç de regidor d'un bolo.
+  const canEvents = !isAdmin && perms.events && concert.kind === "bolo";
+  if (canEvents && workspaceId) await ensureShareLinkForConcert(id, workspaceId);
+
+  const [setlists, linkedMembers, raw, txs, photoRows, shareLinks] = await Promise.all([
     band ? getSetlists(band.id) : Promise.resolve([]),
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     db().query("select amount, agency_pct, agency_assumes_expenses, payouts from concerts where id=$1", [id]).then((r) => r.rows[0] || null),
@@ -149,7 +154,9 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
       "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
       [workspaceId]
     ).then((r) => r.rows) : Promise.resolve([]),
+    canEvents && workspaceId ? getShareLinks(workspaceId, id) : Promise.resolve([]),
   ]);
+  const defaultShareLink = shareLinks.find((l) => l.isDefault && !l.revoked) || shareLinks[0] || null;
   const expenseTxs = txs.filter((t) => t.concertId === id && t.kind === "despesa");
   const summary = computePayouts(
     {
@@ -181,6 +188,8 @@ export default async function ArtistConcertDetailPage({ params }: { params: Prom
       canSetlists={perms.setlists}
       linkedNames={linkedMembers.map((m) => m.memberName)}
       today={today()}
+      canEvents={canEvents}
+      shareLink={defaultShareLink}
     />
   );
 }
