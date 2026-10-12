@@ -6,6 +6,7 @@ import { getWorkspaceBilling, groupCap } from "@/lib/billing";
 import { syncCheckoutSession } from "@/lib/stripe";
 import { getContacts, getBands, getConcerts } from "@/lib/data";
 import { getContactInteractions } from "@/lib/contacts-data";
+import { bandRoster } from "@/lib/roster";
 import { syncAllBandPeopleToContacts } from "@/app/(app)/contactes/actions";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
     // Tots els grups de l'agència (per assignar-los i per a la graella de
     // "Grups"), sense el filtre de visibilitat.
     db().query(
-      "select id, name, city, logo, logo_aspect, color1, color2, jsonb_array_length(members) + jsonb_array_length(crew) as member_count from bands where workspace_id=$1 order by name",
+      "select id, name, city, logo, logo_aspect, color1, color2, members, crew from bands where workspace_id=$1 order by name",
       [profile.workspaceId]
     ).then((r) => r.rows),
     getWorkspaceBilling(profile.workspaceId),
@@ -59,7 +60,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
       me={{ clerkUserId: profile.clerkUserId, agencyOwner: profile.agencyOwner, canCreateGroups: profile.canCreateGroups }}
       members={members}
       invitations={invitations}
-      bands={bandRows.map((b) => ({ id: b.id, name: b.name, city: b.city || "", logo: b.logo || "", logoAspect: b.logo_aspect || "1:1", color1: b.color1 || "", color2: b.color2 || "", memberCount: Number(b.member_count) || 0 }))}
+      bands={bandRows.map((b) => ({ id: b.id, name: b.name, city: b.city || "", logo: b.logo || "", logoAspect: b.logo_aspect || "1:1", color1: b.color1 || "", color2: b.color2 || "", memberCount: bandRoster({ members: b.members || [], crew: b.crew || [] }).length }))}
       billing={billing}
       groups={groups}
       billingNotice={billingNotice}

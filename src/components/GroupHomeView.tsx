@@ -16,6 +16,7 @@ import { generateJoinCodeAction } from "@/app/(app)/grups/actions";
 import { setMyAttendanceAction, leaveBandAction } from "@/app/(artist)/actions";
 import ConfirmDialog from "@/components/ConfirmDialog";
 import { memberPerms, PERM_LABELS, DEFAULT_PERMS, ALL_PERMS } from "@/lib/perms";
+import { bandRoster } from "@/lib/roster";
 import VerifiedTick from "@/components/VerifiedTick";
 import { logoBox } from "@/lib/logo";
 import type { MemberPerms, Vehicle, SocialStats, SocialPlatform } from "@/lib/types";
@@ -741,7 +742,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     // "Assistència" de la taula de Concerts) — es mostra un cop has
     // respost, en comptes dels botons.
     const attExcluded = c.convocatoriaExcluded || {};
-    const attPeople = [...band.members, ...band.crew].filter((p) => !attExcluded[p.name]);
+    const attPeople = bandRoster(band).filter((p) => !attExcluded[p.name]);
     const attTotal = attPeople.length;
     const attendanceMap = c.attendance || {};
     const attSubs = c.substitutes || {};
@@ -1124,7 +1125,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       {tab === "equip" && (<>
       {/* KPIs */}
       <div className="kpi-grid kpi-grid-4">
-        <div className="card card-centered"><div className="card-title">Integrants</div><div className="card-value">{band.members.length + band.crew.length}</div></div>
+        <div className="card card-centered"><div className="card-title">Integrants</div><div className="card-value">{bandRoster(band).length}</div></div>
         <div className="card card-centered"><div className="card-title">Concerts totals</div><div className="card-value">{total}</div></div>
         <div className="card card-centered"><div className="card-title">Pròxims bolos</div><div className="card-value">{upcoming.length}</div></div>
         <div className="card card-centered"><div className="card-title">Suplents</div><div className="card-value">{backups.length}</div></div>

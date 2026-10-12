@@ -22,6 +22,7 @@ import { uniqueTags } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { rsCompletionPercent } from "@/lib/route-sheet";
 import { memberPerms } from "@/lib/perms";
+import { bandRoster } from "@/lib/roster";
 import NewEventButton from "@/components/NewEventButton";
 import ImportConcertsModal from "@/components/ImportConcertsModal";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -235,7 +236,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // d'aquest concert no compten enlloc (ni al total).
     const kind = c.kind && KIND_META[c.kind] ? c.kind : "bolo";
     const rowBand = bands.find((b) => b.id === c.bandId);
-    const attPeople = rowBand ? [...rowBand.members, ...rowBand.crew] : [];
+    const attPeople = rowBand ? bandRoster(rowBand) : [];
     const attExcluded = c.convocatoriaExcluded || {};
     const attActive = attPeople.filter((p) => !attExcluded[p.name]);
     const attTotal = attActive.length;

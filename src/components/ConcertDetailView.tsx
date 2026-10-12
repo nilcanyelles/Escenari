@@ -829,7 +829,9 @@ export default function ConcertDetailView({
   backupRequests.forEach((r) => { if (r.status === "oberta") requestByMember[r.memberName] = r; });
 
   const members = band?.members || [];
-  const crew = band?.crew || [];
+  // Qui surti també a músics no es torna a comptar a crew (assistència,
+  // "Integrants"...) — un tècnic que també toca només compta un cop.
+  const crew = (band?.crew || []).filter((c) => !members.some((m) => normalize(m.name) === normalize(c.name)));
   // Només per mostrar a la pestanya de Convocatòria: els exclosos d'aquest
   // bolo van al final (entre ells, mateix ordre de sempre), per no haver
   // de buscar-los enmig dels convocats. No toca l'ordre de "members"/"crew"
