@@ -620,21 +620,47 @@ export default function ConcertDetailView({
   // abans de calcular res — el % de l'agència s'aplica al net) o altres (el
   // promotor, la sala... — no és cap cost del bolo).
   const agencyAssumesExpenses = concert.agencyAssumesExpenses !== false; // criteri antic per a les despeses sense "paidBy"
-  const [expenseForm, setExpenseForm] = useState<{ title: string; amount: string; payer: ExpensePayer }>({ title: "", amount: "", payer: "ambdos" });
+  const [expenseForm, setExpenseForm] = useState<{ title: string; amount: string; payer: ExpensePayer | ""; thirdPartyName: string }>({ title: "", amount: "", payer: "ambdos", thirdPartyName: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
+  const [expensePayerError, setExpensePayerError] = useState(false);
   const expenseSplit = splitExpenses(expenseList, agencyAssumesExpenses);
   // Cost real del bolo: tot menys el que paga algú altre.
   const totalExpenses = expenseSplit.agencia + expenseSplit.grup + expenseSplit.ambdos;
+  // "A càrrec de": Grup i Agència es poden marcar independentment (i
+  // combinar-se a "ambdos"); Tercers és excloent amb els altres dos — marcar
+  // l'un dessel·lecciona l'altre, en qualsevol sentit.
+  const expenseGrupChecked = expenseForm.payer === "grup" || expenseForm.payer === "ambdos";
+  const expenseAgenciaChecked = expenseForm.payer === "agencia" || expenseForm.payer === "ambdos";
+  const expenseTercerChecked = expenseForm.payer === "altre";
+  function toggleExpenseGrup() {
+    setExpensePayerError(false);
+    const nextAgencia = expenseTercerChecked ? false : expenseAgenciaChecked;
+    const nextGrup = !expenseGrupChecked;
+    setExpenseForm({ ...expenseForm, payer: nextGrup && nextAgencia ? "ambdos" : nextGrup ? "grup" : nextAgencia ? "agencia" : "" });
+  }
+  function toggleExpenseAgencia() {
+    setExpensePayerError(false);
+    const nextGrup = expenseTercerChecked ? false : expenseGrupChecked;
+    const nextAgencia = !expenseAgenciaChecked;
+    setExpenseForm({ ...expenseForm, payer: nextGrup && nextAgencia ? "ambdos" : nextGrup ? "grup" : nextAgencia ? "agencia" : "" });
+  }
+  function toggleExpenseTercer() {
+    setExpensePayerError(false);
+    setExpenseForm({ ...expenseForm, payer: expenseTercerChecked ? "" : "altre" });
+  }
   async function addExpense() {
     const amount = parseInt(expenseForm.amount, 10) || 0;
     if (!amount || !expenseForm.title.trim()) return;
+    if (!expenseForm.payer) { setExpensePayerError(true); return; }
+    setExpensePayerError(false);
     setExpenseSaving(true);
     await saveTransactionAction({
       id: null, kind: "despesa", category: expenseForm.title.trim(), amount, date: concert.date,
       concertId: concert.id, member: "", fund: "", notes: "", paidBy: expenseForm.payer,
+      payerThirdParty: expenseForm.payer === "altre" ? expenseForm.thirdPartyName.trim() : "",
     });
-    setExpenseForm({ title: "", amount: "", payer: expenseForm.payer });
+    setExpenseForm({ title: "", amount: "", payer: expenseForm.payer, thirdPartyName: "" });
     router.refresh();
     setExpenseSaving(false);
   }
@@ -2064,7 +2090,10 @@ export default function ConcertDetailView({
               const payer = expensePayer(t, agencyAssumesExpenses);
               return (
                 <div key={t.id} className="cd-payout-row cd-expense-row">
-                  <span className="cd-payout-name">{t.category}{t.notes ? " — " + t.notes : ""}</span>
+                  <span className="cd-payout-name">
+                    {t.category}{t.notes ? " — " + t.notes : ""}
+                    {payer === "altre" && t.payerThirdParty ? " — " + t.payerThirdParty : ""}
+                  </span>
                   <select
                     className="field-input compact-field cd-expense-payer" value={payer} title="Qui es fa càrrec d'aquesta despesa"
                     onChange={(e) => changeExpensePayer(t.id, e.target.value as ExpensePayer)}
@@ -2081,39 +2110,57 @@ export default function ConcertDetailView({
               <span>{formatCurrency(totalExpenses)}</span>
             </div>
             {expenseSplit.altre > 0 && (
-              <div className="t-dim" style={{ fontSize: 12 }}>+ {formatCurrency(expenseSplit.altre)} a càrrec d&apos;altres (no compten al repartiment)</div>
+              <div className="t-dim" style={{ fontSize: 12 }}>+ {formatCurrency(expenseSplit.altre)} a càrrec de tercers (no compten al repartiment)</div>
             )}
           </div>
         )}
         {expenseFormOpen ? (
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <input
-              type="text" className="field-input compact-field" style={{ width: 180 }}
-              placeholder="Benzina, dietes…" autoFocus
-              value={expenseForm.title}
-              onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
-            />
-            <input
-              type="number" min={0} className="field-input compact-field cd-payout-input" style={{ width: 100 }}
-              placeholder="import €"
-              value={expenseForm.amount}
-              onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
-            />
-            <select
-              className="field-input compact-field cd-expense-payer" value={expenseForm.payer} title="Qui es fa càrrec d'aquesta despesa"
-              onChange={(e) => setExpenseForm({ ...expenseForm, payer: e.target.value as ExpensePayer })}
-            >
-              {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>A càrrec de: {EXPENSE_PAYER_LABELS[k]}</option>)}
-            </select>
-            <button type="button" className="btn-outline" onClick={() => setExpenseFormOpen(false)}>Cancel·la</button>
-            <button type="button" className="btn-save" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>Afegeix</button>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+              <input
+                type="text" className="field-input compact-field" style={{ width: 180 }}
+                placeholder="Benzina, dietes…" autoFocus
+                value={expenseForm.title}
+                onChange={(e) => setExpenseForm({ ...expenseForm, title: e.target.value })}
+              />
+              <input
+                type="number" min={0} className="field-input compact-field cd-payout-input" style={{ width: 100 }}
+                placeholder="import €"
+                value={expenseForm.amount}
+                onChange={(e) => setExpenseForm({ ...expenseForm, amount: e.target.value })}
+              />
+              <button type="button" className="btn-outline" onClick={() => setExpenseFormOpen(false)}>Cancel·la</button>
+              <button type="button" className="btn-save" disabled={expenseSaving || !expenseForm.title.trim() || !(parseInt(expenseForm.amount, 10) || 0)} onClick={addExpense}>Afegeix</button>
+            </div>
+            <div className="cd-expense-payer-group">
+              <span className="t-dim" style={{ fontSize: 12 }}>A càrrec de:</span>
+              <label className={"cd-expense-check" + (expenseGrupChecked ? " checked" : "")}>
+                <input type="checkbox" checked={expenseGrupChecked} onChange={toggleExpenseGrup} /> Grup
+              </label>
+              <label className={"cd-expense-check" + (expenseAgenciaChecked ? " checked" : "")}>
+                <input type="checkbox" checked={expenseAgenciaChecked} onChange={toggleExpenseAgencia} /> Agència
+              </label>
+              <label className={"cd-expense-check" + (expenseTercerChecked ? " checked" : "")}>
+                <input type="checkbox" checked={expenseTercerChecked} onChange={toggleExpenseTercer} /> Tercers
+              </label>
+              <input
+                type="text" className="field-input compact-field" style={{ width: 160 }}
+                placeholder="Nom del tercer (opcional)"
+                value={expenseForm.thirdPartyName}
+                disabled={!expenseTercerChecked}
+                onChange={(e) => setExpenseForm({ ...expenseForm, thirdPartyName: e.target.value })}
+              />
+            </div>
+            {expensePayerError && (
+              <div className="field-error">Selecciona com a mínim «Grup» o «Agència», o bé «Tercers».</div>
+            )}
           </div>
         ) : (
           <button type="button" className="btn-outline" onClick={() => setExpenseFormOpen(true)}>+ Afegeix despesa</button>
         )}
         <div className="t-dim" style={{ fontSize: 12, marginTop: 10, lineHeight: 1.5 }}>
           <strong>Agència</strong>: es descompta de la seva comissió · <strong>Grup</strong>: del repartiment de músics i crew ·{" "}
-          <strong>Agència i grup</strong>: del caixet, abans de calcular res · <strong>Altres</strong>: la paga algú altre (promotor, sala…) i no compta.
+          <strong>Agència i grup</strong>: del caixet, abans de calcular res · <strong>Tercers</strong>: la paga algú altre (promotor, sala…) i no compta.
         </div>
 
         </FoldPanel>

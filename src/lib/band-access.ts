@@ -20,11 +20,18 @@ export async function requireBandAccess(bandId: string, perm?: keyof MemberPerms
   const band = (await db().query("select workspace_id, members, crew from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
 
+  // Admin de l'agència (o gestor sense restricció de visibilitat): accés
+  // total a qualsevol grup del workspace. Un gestor no-admin amb visibilitat
+  // restringida a certs grups (assignedBandIds) només hi té aquest accés
+  // total si el grup hi és — si no, cau a la comprovació de membre de grup
+  // de sota (igual que un músic qualsevol, no per ser de l'agència).
   if (profile.role === "manager" && profile.workspaceId === band.workspace_id) {
-    return {
-      profile, workspaceId: band.workspace_id, isManager: true, memberName: "",
-      perms: { ...ALL_PERMS },
-    };
+    if (profile.viewAllGroups || profile.assignedBandIds.includes(bandId)) {
+      return {
+        profile, workspaceId: band.workspace_id, isManager: true, memberName: "",
+        perms: { ...ALL_PERMS },
+      };
+    }
   }
 
   const link = (await db().query(

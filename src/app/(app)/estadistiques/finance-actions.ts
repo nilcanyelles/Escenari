@@ -18,6 +18,8 @@ export type SaveTransactionInput = {
   notes: string;
   // Qui es fa càrrec (només despeses de concert): agencia | grup | ambdos | altre.
   paidBy?: string;
+  // Nom opcional del tercer, quan paidBy==="altre".
+  payerThirdParty?: string;
 };
 
 const PAYERS = ["agencia", "grup", "ambdos", "altre"];
@@ -46,9 +48,10 @@ export async function saveTransactionAction(input: SaveTransactionInput): Promis
     const workspaceId = await resolveTransactionWorkspace(existing.concert_id);
     await pool.query(
       `update transactions set kind=$1, category=$2, amount=$3, tdate=$4, concert_id=$5, member=$6, fund=$7, notes=$8,
-         paid_by = case when $11 = '' then paid_by else $11 end
+         paid_by = case when $11 = '' then paid_by else $11 end,
+         payer_third_party = case when $12 = '' then payer_third_party else $12 end
        where id=$9 and workspace_id=$10`,
-      [input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", input.id, workspaceId, cleanPayer(input.paidBy)]
+      [input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", input.id, workspaceId, cleanPayer(input.paidBy), (input.payerThirdParty || "").trim()]
     );
     revalidatePath("/estadistiques");
     revalidatePath("/concerts");
@@ -58,9 +61,9 @@ export async function saveTransactionAction(input: SaveTransactionInput): Promis
   const workspaceId = await resolveTransactionWorkspace(input.concertId);
   const id = "tx" + Date.now();
   await pool.query(
-    `insert into transactions (id, workspace_id, kind, category, amount, tdate, concert_id, member, fund, notes, paid_by)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-    [id, workspaceId, input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", cleanPayer(input.paidBy)]
+    `insert into transactions (id, workspace_id, kind, category, amount, tdate, concert_id, member, fund, notes, paid_by, payer_third_party)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+    [id, workspaceId, input.kind, input.category, Math.round(input.amount) || 0, input.date, input.concertId, input.member || "", input.fund || "", input.notes || "", cleanPayer(input.paidBy), (input.payerThirdParty || "").trim()]
   );
   revalidatePath("/estadistiques");
   revalidatePath("/concerts");

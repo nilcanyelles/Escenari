@@ -7366,6 +7366,13 @@ button.ga-cover-hint { border: none; cursor: pointer; font-family: inherit; }
 @media (max-width: 560px) {
   .cd-expense-row, .cd-expense-total { grid-template-columns: 1fr 120px 56px 22px; gap: 6px; }
 }
+.cd-expense-payer-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.cd-expense-check {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 12.5px; cursor: pointer;
+  padding: 4px 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card-2);
+}
+.cd-expense-check input[type="checkbox"] { margin: 0; cursor: pointer; }
+.cd-expense-check.checked { border-color: var(--accent); background: color-mix(in oklch, var(--accent) 14%, transparent); color: var(--accent-text); }
 .cd-comm-breakdown { display: flex; flex-direction: column; gap: 5px; max-width: 480px; margin-top: 12px; font-size: 13px; }
 .cd-comm-breakdown > div { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; }
 .cd-comm-breakdown > div > span:last-child { text-align: right; }

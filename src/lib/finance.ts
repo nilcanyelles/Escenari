@@ -6,7 +6,7 @@ import { db } from "./db";
 // cost del bolo).
 export type ExpensePayer = "agencia" | "grup" | "ambdos" | "altre";
 export const EXPENSE_PAYER_LABELS: Record<ExpensePayer, string> = {
-  agencia: "Agència", grup: "Grup", ambdos: "Agència i grup", altre: "Altres",
+  agencia: "Agència", grup: "Grup", ambdos: "Agència i grup", altre: "Tercers",
 };
 
 export type Transaction = {
@@ -22,6 +22,8 @@ export type Transaction = {
   receiptFileId: string | null;
   // Buit a les despeses d'abans d'existir el camp (vegeu ConcertDetailView).
   paidBy?: ExpensePayer | "";
+  // Nom opcional del tercer quan paidBy==="altre" (promotor, sala…).
+  payerThirdParty?: string;
 };
 
 export const INCOME_CATEGORIES = ["Caixet", "Propines", "Marxandatge", "Subvenció", "Altres ingressos"];
@@ -52,5 +54,6 @@ export async function getTransactions(workspaceId: string): Promise<Transaction[
     notes: r.notes,
     receiptFileId: r.receipt_file_id || null,
     paidBy: (r.paid_by as ExpensePayer | "") || "",
+    payerThirdParty: r.payer_third_party || "",
   }));
 }
