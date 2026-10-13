@@ -69,6 +69,22 @@ function nextStatus(status: string, kind?: string): string {
   return cycle[(i === -1 ? 0 : i + 1) % cycle.length];
 }
 
+// Xarxa de seguretat contra el salt de l'scroll: es fixa la posició en
+// clicar qualsevol cosa dins una fila i, si en algun moment dels propers
+// ~1,2 s es mou sola (per qualsevol motiu — ancoratge de l'scroll del
+// navegador, un re-render que no hem previst...), es torna a posar on era.
+// No substitueix arreglar la causa quan la coneixem (com el remuntatge de
+// ConcertRow); és per als casos que encara ens passin per alt.
+function guardScroll() {
+  const y0 = window.scrollY;
+  let checks = 0;
+  const id = window.setInterval(() => {
+    if (window.scrollY !== y0) window.scrollTo(0, y0);
+    checks++;
+    if (checks >= 24) window.clearInterval(id);
+  }, 50);
+}
+
 // Creueta d'eliminar un concert d'una llista, amb diàleg de confirmació
 // propi (mai el del navegador). "label" és com anomenar el concert al
 // diàleg; "onDeleted" substitueix el refresc de pàgina per defecte.
@@ -282,6 +298,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         ref={(el) => { rowRefs.current[c.id] = el; }}
         className={"t-row " + colsClass + " clickable" + (isSelected ? " selected" : "") + (notConvoked ? " t-row-not-convoked" : "")}
         onClick={() => router.push(`${detailBase}/${c.id}`)}
+        onClickCapture={guardScroll}
       >
         <div className="t-dim">{formatDate(c.date)}{c.time ? <span className="cc-time"> · {c.time}</span> : ""}</div>
         <div>
@@ -299,11 +316,11 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           ) : showButtons ? (
             <span className="cd-att-controls" style={{ justifyContent: "center" }}>
               <button
-                type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" ? " active" : "")}
-                title={myAns === "yes" ? "Hi seré — toca per treure la resposta" : "Hi seré"}
+                type="button" className={"cd-att-btn cd-att-icon-btn yes" + (myAns === "yes" && !attEditingLocal ? " active" : "")}
+                title="Hi seré"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const next = myAns === "yes" ? null : "yes";
+                  const next = attEditingLocal ? "yes" : (myAns === "yes" ? null : "yes");
                   setAttOverride(next);
                   setAttEditingLocal(false);
                   setMyAttendanceAction(c.id, next);
@@ -312,11 +329,11 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
               </button>
               <button
-                type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" ? " active" : "")}
-                title={myAns === "no" ? "No hi seré — toca per treure la resposta" : "No hi seré"}
+                type="button" className={"cd-att-btn cd-att-icon-btn no" + (myAns === "no" && !attEditingLocal ? " active" : "")}
+                title="No hi seré"
                 onClick={(e) => {
                   e.stopPropagation();
-                  const next = myAns === "no" ? null : "no";
+                  const next = attEditingLocal ? "no" : (myAns === "no" ? null : "no");
                   setAttOverride(next);
                   setAttEditingLocal(false);
                   setMyAttendanceAction(c.id, next);
