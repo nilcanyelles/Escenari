@@ -319,7 +319,7 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
 // (que amb els seus gràfics GSAP i graelles triga uns instants a
 // refer-se) — això és el que feia que el canvi trigués a veure's.
 function GigAttendance({
-  concertId, isMgr, myName, myExcluded, serverAns, km, attTotal, attYesPct, attNoPct, attYes,
+  concertId, isMgr, myName, myExcluded, serverAns, km, attTotal, attYes, attNo,
   tooltipContent, onShowTooltip, onHideTooltip,
 }: {
   concertId: string;
@@ -329,9 +329,8 @@ function GigAttendance({
   serverAns: string | undefined;
   km: { label: string; color: string; bg: string };
   attTotal: number;
-  attYesPct: number;
-  attNoPct: number;
   attYes: number;
+  attNo: number;
   tooltipContent: React.ReactNode;
   onShowTooltip: (rect: DOMRect, content: React.ReactNode) => void;
   onHideTooltip: () => void;
@@ -339,6 +338,25 @@ function GigAttendance({
   const [override, setOverride] = useState<"yes" | "no" | null | undefined>(undefined);
   const [editing, setEditing] = useState(false);
   const myAns = override !== undefined ? override : serverAns;
+
+  // Si aquesta peça desapareix (p. ex. la llista es torna a ordenar/filtrar
+  // mentre el cursor hi era a sobre), evita que el tooltip es quedi "penjat"
+  // visible sense que el cursor hi sigui realment a sobre.
+  useEffect(() => onHideTooltip, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Ajusta el recompte del servidor amb la teva pròpia resposta nova
+  // (encara no reflectida al prop del servidor), per a que la barra es
+  // vegi actualitzada a l'instant en comptes d'esperar el proper refresc.
+  let adjYes = attYes;
+  let adjNo = attNo;
+  if (override !== undefined && override !== serverAns) {
+    if (serverAns === "yes") adjYes--;
+    if (serverAns === "no") adjNo--;
+    if (override === "yes") adjYes++;
+    if (override === "no") adjNo++;
+  }
+  const attYesPct = attTotal ? (adjYes / attTotal) * 100 : 0;
+  const attNoPct = attTotal ? (adjNo / attTotal) * 100 : 0;
 
   if (isMgr || !myName) {
     return <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>;
@@ -379,7 +397,7 @@ function GigAttendance({
   return (
     <div
       className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
-      onClick={(e) => { e.stopPropagation(); setEditing(true); }}
+      onClick={(e) => { e.stopPropagation(); onHideTooltip(); setEditing(true); }}
       onMouseEnter={(e) => onShowTooltip(e.currentTarget.getBoundingClientRect(), tooltipContent)}
       onMouseLeave={onHideTooltip}
     >
@@ -387,7 +405,7 @@ function GigAttendance({
         <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
         <div className="cc-att-fill" style={{ width: attNoPct + "%", background: "var(--red)" }}></div>
       </div>
-      <div className="cc-att-count">{attYes}/{attTotal}</div>
+      <div className="cc-att-count">{adjYes}/{attTotal}</div>
     </div>
   );
 }
@@ -887,8 +905,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     const attNoPlainNames = attNoNames.filter((n) => !attSubs[n]);
     const attPendingNames = attPeople.filter((p) => attendanceMap[p.name] !== "yes" && attendanceMap[p.name] !== "no").map((p) => p.name);
     const attYes = attYesNames.length;
-    const attYesPct = attTotal ? (attYes / attTotal) * 100 : 0;
-    const attNoPct = attTotal ? (attNoNames.length / attTotal) * 100 : 0;
     // Exclòs d'aquest bolo en concret, o fora de la llista d'invitats d'un
     // assaig/reunió/altre — en qualsevol cas, no hi estàs convocat.
     const myExcluded = !isMgr && !!myName && (
@@ -903,7 +919,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <span className="bento-gig-place">{c.city || c.venue || "—"}{c.venue && c.city ? ` · ${c.venue}` : ""}</span>
         <GigAttendance
           concertId={c.id} isMgr={isMgr} myName={myName} myExcluded={myExcluded} serverAns={myAns} km={km}
-          attTotal={attTotal} attYesPct={attYesPct} attNoPct={attNoPct} attYes={attYes}
+          attTotal={attTotal} attYes={attYes} attNo={attNoNames.length}
           tooltipContent={
             <>
               <div className="cc-att-tooltip-title">Assistència:</div>

@@ -285,7 +285,14 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     const attExcluded = c.convocatoriaExcluded || {};
     const attActive = attPeople.filter((p) => !attExcluded[p.name]);
     const attTotal = attActive.length;
-    const attendanceMap = c.attendance || {};
+    const myName = myNames?.[c.bandId];
+    // La teva pròpia resposta, instantània (estat local) en comptes
+    // d'esperar el proper refresc — la barra/recompte de sota també l'ha de
+    // reflectir a l'acte, no només el botó actiu.
+    const myOverride = myName && Object.prototype.hasOwnProperty.call(myAttOverrides, c.id) ? myAttOverrides[c.id] : undefined;
+    const attendanceMap = myName && myOverride !== undefined
+      ? (() => { const m = { ...(c.attendance || {}) }; if (myOverride) m[myName] = myOverride; else delete m[myName]; return m; })()
+      : (c.attendance || {});
     const attSubs = c.substitutes || {};
     const attYesNames = attActive.filter((p) => attendanceMap[p.name] === "yes").map((p) => p.name);
     const attNoNames = attActive.filter((p) => attendanceMap[p.name] === "no").map((p) => p.name);
@@ -302,8 +309,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // Ets tu qui hi és convocat (no el gestor, i no exclòs d'aquesta
     // convocatòria en concret) — llavors marques la teva pròpia assistència
     // amb tick/creu en comptes de només veure el resum de tothom.
-    const myName = myNames?.[c.bandId];
-    const myAns = myName ? (Object.prototype.hasOwnProperty.call(myAttOverrides, c.id) ? myAttOverrides[c.id] ?? undefined : attendanceMap[myName]) : undefined;
+    const myAns = myName ? attendanceMap[myName] : undefined;
     const myPerson = myName ? attPeople.find((p) => p.name === myName) : undefined;
     const myIsAdmin = myPerson ? memberPerms(myPerson).admin : false;
     // Import que surt al tooltip de "Pagat": el gestor (sempre) i els
@@ -374,7 +380,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             <div
               className="cc-att" style={iAmConvoked ? { cursor: "pointer", margin: "0 auto" } : { margin: "0 auto" }}
               title={iAmConvoked ? "Toca per canviar la teva resposta" : undefined}
-              onClick={iAmConvoked ? (e) => { e.stopPropagation(); setAttEditing((prev) => new Set(prev).add(c.id)); } : undefined}
+              onClick={iAmConvoked ? (e) => { e.stopPropagation(); setAttTooltip(null); setAttEditing((prev) => new Set(prev).add(c.id)); } : undefined}
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 setAttTooltip({
