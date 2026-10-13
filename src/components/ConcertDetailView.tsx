@@ -624,7 +624,19 @@ export default function ConcertDetailView({
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [expenseFormOpen, setExpenseFormOpen] = useState(false);
   const [expensePayerError, setExpensePayerError] = useState(false);
-  const expenseSplit = splitExpenses(expenseList, agencyAssumesExpenses);
+  // Eliminar dins la finestra emergent interceptada no sempre refà la llista
+  // amb el router.refresh() (mateix tipus de problema que ja vam veure amb
+  // l'eliminar concert) — s'amaga a l'acte en comptes de confiar-hi.
+  const [deletedExpenseIds, setDeletedExpenseIds] = useState<Set<string>>(new Set());
+  useEffect(() => {
+    setDeletedExpenseIds((prev) => {
+      const stillThere = new Set(expenseList.map((t) => t.id));
+      const next = new Set([...prev].filter((id) => stillThere.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [expenseList]);
+  const visibleExpenseList = expenseList.filter((t) => !deletedExpenseIds.has(t.id));
+  const expenseSplit = splitExpenses(visibleExpenseList, agencyAssumesExpenses);
   // Cost real del bolo: tot menys el que paga algú altre.
   const totalExpenses = expenseSplit.agencia + expenseSplit.grup + expenseSplit.ambdos;
   // "A càrrec de": Grup i Agència es poden marcar independentment (i
@@ -665,7 +677,14 @@ export default function ConcertDetailView({
     setExpenseSaving(false);
   }
   async function removeExpense(id: string) {
-    await deleteTransactionAction(id);
+    setDeletedExpenseIds((prev) => new Set(prev).add(id));
+    try {
+      await deleteTransactionAction(id);
+    } catch (e) {
+      setDeletedExpenseIds((prev) => { const n = new Set(prev); n.delete(id); return n; });
+      alert(e instanceof Error ? e.message : "No s'ha pogut eliminar la despesa");
+      return;
+    }
     router.refresh();
   }
   async function changeExpensePayer(id: string, payer: ExpensePayer) {
@@ -2083,10 +2102,10 @@ export default function ConcertDetailView({
         </FoldPanel>
 
         {/* Despeses: es resten del caixet abans de calcular el repartiment */}
-        <FoldPanel title="Despeses" summary={expenseList.length ? `${expenseList.length} · ${formatCurrency(totalExpenses)}${expenseSaving ? " · desant…" : ""}` : "Cap despesa"} defaultOpen={expenseList.length > 0}>
-        {expenseList.length > 0 && (
+        <FoldPanel title="Despeses" summary={visibleExpenseList.length ? `${visibleExpenseList.length} · ${formatCurrency(totalExpenses)}${expenseSaving ? " · desant…" : ""}` : "Cap despesa"} defaultOpen={visibleExpenseList.length > 0}>
+        {visibleExpenseList.length > 0 && (
           <div className="cd-payout-list" style={{ marginBottom: 10 }}>
-            {expenseList.map((t) => {
+            {visibleExpenseList.map((t) => {
               const payer = expensePayer(t, agencyAssumesExpenses);
               return (
                 <div key={t.id} className="cd-payout-row cd-expense-row">

@@ -136,10 +136,6 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
   const router = useRouter();
   const pathname = usePathname();
-  // Un cop respost (sí o no) a la teva pròpia convocatòria, la fila mostra
-  // el resum d'assistència en comptes dels botons — mateix comportament que
-  // "Els meus grups" (tocar-lo torna a mostrar els botons).
-  const [attEditing, setAttEditing] = useState<Set<string>>(new Set());
   // Tooltip d'assistència via portal a <body> perquè sempre surti per
   // sobre de tot (capçalera fixa, altres files...), sense dependre de cap
   // context d'apilament de la fila on es mostra.
@@ -176,25 +172,12 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const [kindsOn, setKindsOn] = useState<Record<string, boolean>>({ bolo: true, assaig: true, reunio: true, altre: true });
   const [modal, setModal] = useState<{ concertId: string } | null>(null);
   const [draftConcert, setDraftConcert] = useState<Concert | null>(null);
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, string>>({});
-  const [paidOverrides, setPaidOverrides] = useState<Record<string, boolean>>({});
-  // Resposta d'assistència pròpia: estat local instantani en comptes de
-  // router.refresh() — evita el salt de l'scroll que feia qualsevol
-  // refresc de pàgina en una taula llarga.
-  const [myAttOverrides, setMyAttOverrides] = useState<Record<string, "yes" | "no" | null>>({});
   const PAGE_SIZE = 50;
   const [upcomingVisible, setUpcomingVisible] = useState(PAGE_SIZE);
   const [pastVisible, setPastVisible] = useState(PAGE_SIZE);
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
-  const statusSaveTimers = useRef<Record<string, number>>({});
-  // Clicar "Pagat" fa router.refresh() (per agafar l'import actualitzat del
-  // tooltip) — sense això, el re-render que ve del servidor feia saltar la
-  // pàgina a dalt de tot encara que haguessis clicat una fila al final de la
-  // llista. Es desa la posició just abans de refrescar i es torna a fixar
-  // quan el prop "concerts" (ja actualitzat) arriba.
-  const scrollRestoreRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (modal?.concertId) {
@@ -207,50 +190,6 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     setUpcomingVisible(PAGE_SIZE);
     setPastVisible(PAGE_SIZE);
   }, [search, statusFilter, tagFilter, kindsOn]);
-
-  // Reconcile optimistic status overrides against the server-confirmed prop: only
-  // drop an override once `concerts` (refreshed by router.refresh() after the write)
-  // actually agrees with it. Clearing on a timer/guess instead of this causes a
-  // visible flicker back to the stale value while the refresh is still in flight.
-  useEffect(() => {
-    setStatusOverrides((prev) => {
-      if (Object.keys(prev).length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const id of Object.keys(next)) {
-        const serverConcert = concerts.find((c) => c.id === id);
-        if (serverConcert && serverConcert.status === next[id]) { delete next[id]; changed = true; }
-      }
-      return changed ? next : prev;
-    });
-    setPaidOverrides((prev) => {
-      if (Object.keys(prev).length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const id of Object.keys(next)) {
-        const serverConcert = concerts.find((c) => c.id === id);
-        if (serverConcert && serverConcert.paid === next[id]) { delete next[id]; changed = true; }
-      }
-      return changed ? next : prev;
-    });
-    setMyAttOverrides((prev) => {
-      if (Object.keys(prev).length === 0) return prev;
-      let changed = false;
-      const next = { ...prev };
-      for (const id of Object.keys(next)) {
-        const serverConcert = concerts.find((c) => c.id === id);
-        const myName = serverConcert && myNames?.[serverConcert.bandId];
-        const serverAns = myName ? (serverConcert!.attendance || {})[myName] ?? null : undefined;
-        if (serverConcert && serverAns === next[id]) { delete next[id]; changed = true; }
-      }
-      return changed ? next : prev;
-    });
-    if (scrollRestoreRef.current !== null) {
-      const y = scrollRestoreRef.current;
-      scrollRestoreRef.current = null;
-      window.scrollTo(0, y);
-    }
-  }, [concerts]);
 
   // Cerca sense distingir accents ni majúscules (Sant Adrià = sant adria).
   const searchL = normalize(search);
@@ -273,7 +212,18 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const tagOpts = uniqueTags(concerts);
 
   function ConcertRow({ c }: { c: Concert }) {
-    const displayStatus = statusOverrides[c.id] ?? c.status;
+    // Estat local de la fila (no al component pare): clicar assistència,
+    // estat o pagat no toca cap estat de ConcertsView, així que la llista
+    // sencera no es torna a renderitzar i la pàgina no salta amunt — abans
+    // aquests clics vivien a estat del pare, i com que ConcertRow està
+    // definida dins del seu cos, cada re-render en creava una versió nova
+    // (tipus de component diferent) que React desmuntava i remuntava.
+    const [statusOverride, setStatusOverride] = useState<string | undefined>(undefined);
+    const [attOverride, setAttOverride] = useState<"yes" | "no" | null | undefined>(undefined);
+    const [attEditingLocal, setAttEditingLocal] = useState(false);
+    const [paidOverride, setPaidOverride] = useState<boolean | undefined>(undefined);
+    const statusSaveTimerRef = useRef<number | undefined>(undefined);
+    const displayStatus = statusOverride ?? c.status;
     const sc = statusColors(displayStatus);
     const isSelected = modal?.concertId === c.id;
     // Assistència de músics i crew — mateix càlcul que la barra del bànner
@@ -289,9 +239,8 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // La teva pròpia resposta, instantània (estat local) en comptes
     // d'esperar el proper refresc — la barra/recompte de sota també l'ha de
     // reflectir a l'acte, no només el botó actiu.
-    const myOverride = myName && Object.prototype.hasOwnProperty.call(myAttOverrides, c.id) ? myAttOverrides[c.id] : undefined;
-    const attendanceMap = myName && myOverride !== undefined
-      ? (() => { const m = { ...(c.attendance || {}) }; if (myOverride) m[myName] = myOverride; else delete m[myName]; return m; })()
+    const attendanceMap = myName && attOverride !== undefined
+      ? (() => { const m = { ...(c.attendance || {}) }; if (attOverride) m[myName] = attOverride; else delete m[myName]; return m; })()
       : (c.attendance || {});
     const attSubs = c.substitutes || {};
     const attYesNames = attActive.filter((p) => attendanceMap[p.name] === "yes").map((p) => p.name);
@@ -315,7 +264,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // Import que surt al tooltip de "Pagat": el gestor (sempre) i els
     // membres admin del grup hi veuen el total del bolo — la resta, només
     // la seva pròpia part del repartiment.
-    const displayPaid = paidOverrides[c.id] ?? c.paid;
+    const displayPaid = paidOverride ?? c.paid;
     const paidAmount = isMgr || myIsAdmin ? c.amount : (c.payouts?.[myName || ""] ?? 0);
     // Si t'han exclòs d'aquesta convocatòria en concret: si ets admin del
     // grup, t'ho diem directament a la columna ("No convocat", sense haver
@@ -324,7 +273,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     // només llista gent convocada.
     const myIsExcluded = !isMgr && !!myName && !!attExcluded[myName];
     const iAmConvoked = !isMgr && !!myName && !attExcluded[myName];
-    const showButtons = iAmConvoked && (!myAns || attEditing.has(c.id));
+    const showButtons = iAmConvoked && (!myAns || attEditingLocal);
     // Esdeveniment on no hi estàs convocat (bolo exclòs, o assaig/reunió/
     // altre amb una llista d'invitats que no t'hi inclou) — fila atenuada.
     const notConvoked = !isMgr && !!myName && !amIConvoked(c);
@@ -342,8 +291,8 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         <div className="cc-bold">{c.city ? c.city.split(",")[0] : "—"}</div>
         <div className="cc-bold">{c.venue || "—"}</div>
         <div className="cc-bold">{c.festaEntitat || "—"}</div>
-        <div style={{ textAlign: "center" }} onClick={(e) => { if (showButtons && c.status !== "cancel·lat") e.stopPropagation(); }}>
-          {c.status === "cancel·lat" ? (
+        <div style={{ textAlign: "center" }} onClick={(e) => { if (showButtons && displayStatus !== "cancel·lat") e.stopPropagation(); }}>
+          {displayStatus === "cancel·lat" ? (
             <span className="t-dim">—</span>
           ) : myIsExcluded ? (
             myIsAdmin ? <span className="t-dim">No convocat</span> : <span className="t-dim">—</span>
@@ -355,8 +304,8 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 onClick={(e) => {
                   e.stopPropagation();
                   const next = myAns === "yes" ? null : "yes";
-                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
-                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
+                  setAttOverride(next);
+                  setAttEditingLocal(false);
                   setMyAttendanceAction(c.id, next);
                 }}
               >
@@ -368,8 +317,8 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 onClick={(e) => {
                   e.stopPropagation();
                   const next = myAns === "no" ? null : "no";
-                  setMyAttOverrides((prev) => ({ ...prev, [c.id]: next }));
-                  setAttEditing((prev) => { const n = new Set(prev); n.delete(c.id); return n; });
+                  setAttOverride(next);
+                  setAttEditingLocal(false);
                   setMyAttendanceAction(c.id, next);
                 }}
               >
@@ -380,7 +329,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
             <div
               className="cc-att" style={iAmConvoked ? { cursor: "pointer", margin: "0 auto" } : { margin: "0 auto" }}
               title={iAmConvoked ? "Toca per canviar la teva resposta" : undefined}
-              onClick={iAmConvoked ? (e) => { e.stopPropagation(); setAttTooltip(null); setAttEditing((prev) => new Set(prev).add(c.id)); } : undefined}
+              onClick={iAmConvoked ? (e) => { e.stopPropagation(); setAttTooltip(null); setAttEditingLocal(true); } : undefined}
               onMouseEnter={(e) => {
                 const rect = e.currentTarget.getBoundingClientRect();
                 setAttTooltip({
@@ -420,11 +369,10 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
               onClick={(e) => {
                 e.stopPropagation();
                 const next = nextStatus(displayStatus, kind);
-                setStatusOverrides((prev) => ({ ...prev, [c.id]: next }));
-                if (statusSaveTimers.current[c.id]) window.clearTimeout(statusSaveTimers.current[c.id]);
-                statusSaveTimers.current[c.id] = window.setTimeout(async () => {
+                setStatusOverride(next);
+                if (statusSaveTimerRef.current) window.clearTimeout(statusSaveTimerRef.current);
+                statusSaveTimerRef.current = window.setTimeout(async () => {
                   await setConcertStatusAction(c.id, next);
-                  router.refresh();
                 }, 400);
               }}>{displayStatus}</button>
           ) : (
@@ -453,10 +401,8 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
                 aria-label={displayPaid ? "Pagat" : "No pagat"}
                 onClick={async () => {
                   const next = !displayPaid;
-                  scrollRestoreRef.current = window.scrollY;
-                  setPaidOverrides((prev) => ({ ...prev, [c.id]: next }));
+                  setPaidOverride(next);
                   await setConcertPaidAction(c.id, next);
-                  router.refresh();
                 }}
               >
                 {displayPaid ? <PaidCheckIcon /> : <PaidCrossIcon />}
