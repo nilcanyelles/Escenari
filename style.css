@@ -967,7 +967,12 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .modal-close:focus-visible { outline: 2px solid oklch(0.68 0.19 290 / 0.55); outline-offset: 1px; }
 .modal-close:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .modal-form { display: flex; flex-direction: column; gap: 12px; }
-.formation-editor-panel { width: 860px; max-width: 95vw; }
+.formation-editor-panel {
+  position: fixed; inset: 0; width: 100vw; height: 100vh; max-width: none; max-height: none;
+  border-radius: 0; display: flex; flex-direction: column; overflow-y: auto;
+}
+.formation-editor-panel .studio-stage { flex: 1; min-height: 0; }
+.formation-editor-panel .studio-area { max-height: calc(100vh - 220px); }
 .formation-preferred-toggle {
   display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted);
   white-space: nowrap; cursor: pointer;
