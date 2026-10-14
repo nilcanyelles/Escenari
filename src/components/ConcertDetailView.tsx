@@ -1650,7 +1650,11 @@ export default function ConcertDetailView({
               const att = attendance[m.name];
               const req = requestByMember[m.name];
               const activeFormation = formationId ? formations.find((f) => f.id === formationId) : null;
-              const inss = instrumentsFor(m);
+              // Amb una formació activa, només es mostren els instruments
+              // d'aquesta persona que hi encaixen (als quals es pot
+              // assignar) — la resta no hi pinten res en aquest bolo.
+              const formationInstruments = activeFormation ? new Set(activeFormation.slots.map((s) => s.instrument.toLowerCase())) : null;
+              const inss = formationInstruments ? instrumentsFor(m).filter((i) => formationInstruments.has(i.toLowerCase())) : instrumentsFor(m);
               const excluded = !!convocatoriaExcluded[m.name];
               return (
                 <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
