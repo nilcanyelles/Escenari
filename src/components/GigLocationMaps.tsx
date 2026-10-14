@@ -147,13 +147,13 @@ function StreetMini({ lat, lon, accent, size, ways }: { lat: number; lon: number
     });
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(6,5,14,0.5)";
-    ctx.lineWidth = 2.2;
+    ctx.strokeStyle = "rgba(6,5,14,0.45)";
+    ctx.lineWidth = 1.3;
     ctx.stroke(path);
     ctx.strokeStyle = accent;
-    ctx.lineWidth = 1.1;
+    ctx.lineWidth = 0.6;
     ctx.shadowColor = accent;
-    ctx.shadowBlur = 3;
+    ctx.shadowBlur = 1.3;
     ctx.stroke(path);
     ctx.shadowBlur = 0;
     ctx.fillStyle = "#ffffff";
