@@ -516,6 +516,9 @@ export default function ConcertDetailView({
   // FormationAssignment, dins la pestanya Convocatòria.
   const [formationId, setFormationId] = useState<string | null>(concert.formationId || null);
   const [formationAssignments, setFormationAssignments] = useState<Record<string, string>>({ ...(concert.formationAssignments || {}) });
+  // Text que s'està escrivint a la casella de suplent d'una plaça buida,
+  // abans de confirmar-lo (en sortir del camp) — no es desa cada tecla.
+  const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({});
   // Contacte principal d'aquest concert (organitzador/promotor).
   const [contact, setContact] = useState<Concert["contact"]>({ ...(concert.contact || { email: "", name: "", phone: "", company: "" }) });
   // Còpia en directe del full de ruta (el manté RouteSheetEditor, aquí només
@@ -964,6 +967,16 @@ export default function ConcertDetailView({
     const att = { ...attendance };
     if (val === null) delete att[name]; else att[name] = val;
     setAttendance(att);
+    // Amb una formació activa, el suplent ja no es tria per persona (es
+    // tria directament a la casella buida de la plaça) — qui diu que no
+    // simplement baixa a sota, fora de la convocatòria, sense demanar-ne cap.
+    if (formationId) {
+      const excl = { ...convocatoriaExcluded };
+      if (val === "no") excl[name] = true; else delete excl[name];
+      setConvocatoriaExcluded(excl);
+      schedulePersist(cf, att, substitutes, noSubstitute, excl);
+      return;
+    }
     schedulePersist(cf, att);
   }
 
@@ -1019,6 +1032,15 @@ export default function ConcertDetailView({
       const openSlot = f.slots.find((s) => s.instrument.toLowerCase() === instrument.toLowerCase() && !next[s.id]);
       if (openSlot) next[openSlot.id] = personName;
     }
+    setFormationAssignments(next);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, next);
+  }
+  // Una plaça que es queda buida (ningú confirmat que toqui aquell
+  // instrument) es pot omplir directament amb un suplent escrit a la pròpia
+  // casella — independent dels membres del grup.
+  function setSlotSubstitute(slotId: string, name: string) {
+    const next = { ...formationAssignments };
+    if (name) next[slotId] = name; else delete next[slotId];
     setFormationAssignments(next);
     schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, next);
   }
@@ -1612,7 +1634,7 @@ export default function ConcertDetailView({
               if (!f) return null;
               return (
                 <>
-                  <div className="t-dim" style={{ fontSize: 11.5, margin: "6px 0 10px" }}>Clica l&apos;instrument il·luminat d&apos;un músic, a la llista de sota, per assignar-lo a una plaça.</div>
+                  <div className="t-dim" style={{ fontSize: 11.5, margin: "6px 0 10px" }}>Clica l&apos;instrument il·luminat d&apos;un músic per assignar-lo a una plaça — si no hi ha prou confirmats, escriu-hi un suplent directament.</div>
                   <div className="cd-formation-slots-row">
                     {f.slots.map((s) => {
                       const assignedName = formationAssignments[s.id];
@@ -1623,9 +1645,22 @@ export default function ConcertDetailView({
                               <>
                                 <img className="member-photo" src={photosByName[normalize(assignedName)] ? `/api/file/${photosByName[normalize(assignedName)]}` : personPhotoDataUri(assignedName)} alt="" />
                                 <span>{assignedName}</span>
+                                <button type="button" className="cd-formation-slot-clear" title="Buida la plaça" onClick={(e) => { e.stopPropagation(); setSlotSubstitute(s.id, ""); }}>✕</button>
                               </>
                             ) : (
-                              <span>Sense assignar</span>
+                              <input
+                                className="cd-formation-slot-input"
+                                type="text" list="cd-backups-list" placeholder="Nom del suplent…"
+                                value={slotDrafts[s.id] ?? ""}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setSlotDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                                onBlur={() => {
+                                  const v = (slotDrafts[s.id] || "").trim();
+                                  if (v) setSlotSubstitute(s.id, v);
+                                  setSlotDrafts((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
+                                }}
+                                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                              />
                             )}
                           </div>
                           <span className="cd-formation-slot-instrument">{s.instrument}</span>
