@@ -791,15 +791,25 @@ export default function ConcertDetailView({
       Object.entries(split).forEach(([n, pct]) => { out[n] = round2((pct / 100) * groupPool0); });
       return out;
     }
+    // Amb una formació concreta assignada, el repartiment predeterminat
+    // segueix qui hi ha quedat assignat a cada plaça, no tota l'assistència.
+    const initialFormation = concert.formationId ? formations.find((f) => f.id === concert.formationId) : null;
     const initialAttending: string[] = [];
-    (band?.members || []).forEach((m) => {
-      if (concert.attendance?.[m.name] === "no") {
-        const sub = concert.substitutes?.[m.name];
-        if (sub) initialAttending.push(sub);
-      } else {
-        initialAttending.push(m.name);
-      }
-    });
+    if (initialFormation) {
+      initialFormation.slots.forEach((s) => {
+        const name = concert.formationAssignments?.[s.id];
+        if (name) initialAttending.push(name);
+      });
+    } else {
+      (band?.members || []).forEach((m) => {
+        if (concert.attendance?.[m.name] === "no") {
+          const sub = concert.substitutes?.[m.name];
+          if (sub) initialAttending.push(sub);
+        } else {
+          initialAttending.push(m.name);
+        }
+      });
+    }
     const otherNames = [...initialAttending, ...(band?.crew || []).map((m) => m.name)];
     return agencyDefaultSplit(otherNames, groupPool0, sharedNet0);
   });
@@ -1173,10 +1183,20 @@ export default function ConcertDetailView({
         }
       });
     };
-    process(members);
+    // Amb una formació concreta assignada, el repartiment segueix qui hi ha
+    // quedat assignat a cada plaça (no tota l'assistència del grup).
+    const activeFormation = formationId ? formations.find((f) => f.id === formationId) : null;
+    if (activeFormation) {
+      activeFormation.slots.forEach((s) => {
+        const name = formationAssignments[s.id];
+        if (name) addEntry(name, s.instrument);
+      });
+    } else {
+      process(members);
+    }
     process(crew);
     return { order, roleLabelsByName };
-  }, [members, crew, attendance, substitutes, convocatoriaExcluded]);
+  }, [members, crew, attendance, substitutes, convocatoriaExcluded, formationId, formationAssignments, formations]);
 
   const amountNum = parseInt(cf.amount, 10) || 0;
   // Base de la comissió de l'agència: el caixet menys les despeses

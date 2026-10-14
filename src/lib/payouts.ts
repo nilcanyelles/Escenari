@@ -1,4 +1,4 @@
-import type { Band, Concert } from "./types";
+import type { Band, Concert, Formation } from "./types";
 import type { Transaction, ExpensePayer } from "./finance";
 import { normalize } from "./text";
 
@@ -47,6 +47,7 @@ export function computePayouts(
   concert: Pick<Concert, "attendance" | "substitutes"> & { amount: number; payouts?: Record<string, number>; agencyPct?: number; agencyAssumesExpenses?: boolean },
   band: Band | null,
   expenseTxs: Transaction[],
+  formation?: { formation: Formation; assignments: Record<string, string> } | null,
 ): PayoutSummary {
   const legacy = concert.agencyAssumesExpenses !== false;
   const expenses = splitExpenses(expenseTxs, legacy);
@@ -61,16 +62,25 @@ export function computePayouts(
   const payouts: Record<string, number> = { ...(concert.payouts || {}) };
   const saved = Object.keys(payouts).some((k) => k !== AGENCY_PAYOUT_NAME);
   if (!saved) {
-    // Qui hi va (o el seu substitut) + la crew: parts iguals, o els % predeterminats del grup.
+    // Amb una formació concreta assignada, qui hi entra és qui hi ha quedat
+    // assignat a cada plaça, no tota l'assistència del grup.
     const attending: string[] = [];
-    (band?.members || []).forEach((m) => {
-      if (concert.attendance?.[m.name] === "no") {
-        const sub = concert.substitutes?.[m.name];
-        if (sub) attending.push(sub);
-      } else {
-        attending.push(m.name);
-      }
-    });
+    if (formation) {
+      formation.formation.slots.forEach((s) => {
+        const name = formation.assignments[s.id];
+        if (name) attending.push(name);
+      });
+    } else {
+      // Qui hi va (o el seu substitut): parts iguals, o els % predeterminats del grup.
+      (band?.members || []).forEach((m) => {
+        if (concert.attendance?.[m.name] === "no") {
+          const sub = concert.substitutes?.[m.name];
+          if (sub) attending.push(sub);
+        } else {
+          attending.push(m.name);
+        }
+      });
+    }
     const names = [...attending, ...(band?.crew || []).map((m) => m.name)];
     const split = band?.defaultPayoutSplit;
     if (split && Object.keys(split).length) {
