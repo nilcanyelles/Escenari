@@ -11,6 +11,28 @@ import { MAP_REGIONS, type MapRegionKey } from "@/lib/map-regions";
 // de carrers real al voltant del recinte (mateixa font — Overpass — i
 // estil neó que ConcertPosterEditor). Purament decoratiu: si la
 // geocodificació falla o no hi ha prou dades, no es mostra res.
+//
+// Cau en memòria (no persisteix entre recàrregues, però sí entre canvis de
+// fila dins la mateixa sessió): com que molts bolos repeteixen el mateix
+// recinte (assajos setmanals, sales habituals...), la segona vegada que
+// apareix el mateix recinte el mapa surt a l'instant en comptes de tornar
+// a fer la volta geocodificació + Overpass.
+type Coord = { lat: number; lon: number } | null;
+type Way = { highway: string; pts: [number, number][] };
+const geocodeCache = new Map<string, Promise<Coord>>();
+const streetCache = new Map<string, Promise<Way[]>>();
+
+function cachedGeocode(q: string): Promise<Coord> {
+  let p = geocodeCache.get(q);
+  if (!p) { p = geocodePosterVenueAction(q).catch(() => null); geocodeCache.set(q, p); }
+  return p;
+}
+function cachedStreetWays(lat: number, lon: number, radius: number): Promise<Way[]> {
+  const key = lat.toFixed(3) + "," + lon.toFixed(3) + "@" + radius;
+  let p = streetCache.get(key);
+  if (!p) { p = getStreetWaysAction(lat, lon, radius).then((r) => r.ways).catch(() => []); streetCache.set(key, p); }
+  return p;
+}
 
 const SINGLE_REGION_KEYS = (Object.keys(MAP_REGIONS) as MapRegionKey[]).filter((k) => k !== "paisos_catalans" && k !== "espanya");
 
@@ -95,18 +117,12 @@ function RegionMini({ lat, lon, accent, size }: { lat: number; lon: number; acce
   return <canvas ref={ref} style={{ width: size, height: size, display: "block" }} />;
 }
 
-function StreetMini({ lat, lon, accent, size }: { lat: number; lon: number; accent: string; size: number }) {
-  const [ways, setWays] = useState<{ highway: string; pts: [number, number][] }[] | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    getStreetWaysAction(lat, lon, 450).then((r) => { if (!cancelled) setWays(r.ways); }).catch(() => { if (!cancelled) setWays([]); });
-    return () => { cancelled = true; };
-  }, [lat, lon]);
+function StreetMini({ lat, lon, accent, size, ways }: { lat: number; lon: number; accent: string; size: number; ways: Way[] }) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
     const canvas = ref.current;
     const ctx = canvas?.getContext("2d");
-    if (!canvas || !ctx || !ways) return;
+    if (!canvas || !ctx) return;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = size * dpr;
     canvas.height = size * dpr;
@@ -141,27 +157,42 @@ function StreetMini({ lat, lon, accent, size }: { lat: number; lon: number; acce
     ctx.arc(size / 2, size / 2, 3, 0, Math.PI * 2);
     ctx.fill();
   }, [ways, lat, lon, accent, size]);
-  if (ways && ways.length === 0) return null;
+  if (!ways.length) return null;
   return <canvas ref={ref} style={{ width: size, height: size, display: "block", borderRadius: "50%" }} />;
 }
 
-export default function GigLocationMap({ venue, city, accent, side, size = 108 }: {
-  venue?: string; city?: string; accent: string; side: "left" | "right"; size?: number;
+// Un únic punt d'entrada: resol la geocodificació UNA sola vegada (abans es
+// cridava per duplicat, un cop per cada mini-mapa) i mostra els dos mapes
+// (carrers a l'esquerra, comunitat autònoma a la dreta) tan bon punt hi ha
+// dades — gràcies a la cau en memòria, un recinte ja vist en aquesta sessió
+// hi apareix a l'instant.
+export default function GigLocationMaps({ venue, city, accent, size = 108 }: {
+  venue?: string; city?: string; accent: string; size?: number;
 }) {
-  const [coord, setCoord] = useState<{ lat: number; lon: number } | null>(null);
+  const q = [venue, city].filter(Boolean).join(", ");
+  const [coord, setCoord] = useState<Coord>(null);
+  const [ways, setWays] = useState<Way[] | null>(null);
   useEffect(() => {
-    const q = [venue, city].filter(Boolean).join(", ");
-    if (!q) { setCoord(null); return; }
+    setCoord(null);
+    setWays(null);
+    if (!q) return;
     let cancelled = false;
-    geocodePosterVenueAction(q).then((g) => { if (!cancelled) setCoord(g); }).catch(() => { if (!cancelled) setCoord(null); });
+    cachedGeocode(q).then((g) => {
+      if (cancelled) return;
+      setCoord(g);
+      if (g) cachedStreetWays(g.lat, g.lon, 450).then((w) => { if (!cancelled) setWays(w); });
+    });
     return () => { cancelled = true; };
-  }, [venue, city]);
+  }, [q]);
   if (!coord) return null;
   return (
-    <div className={"cd-poster-minimap cd-poster-minimap-" + side} aria-hidden="true">
-      {side === "left"
-        ? <StreetMini lat={coord.lat} lon={coord.lon} accent={accent} size={size} />
-        : <RegionMini lat={coord.lat} lon={coord.lon} accent={accent} size={size} />}
-    </div>
+    <>
+      <div className="cd-poster-minimap cd-poster-minimap-left" aria-hidden="true">
+        {ways && <StreetMini lat={coord.lat} lon={coord.lon} accent={accent} size={size} ways={ways} />}
+      </div>
+      <div className="cd-poster-minimap cd-poster-minimap-right" aria-hidden="true">
+        <RegionMini lat={coord.lat} lon={coord.lon} accent={accent} size={size} />
+      </div>
+    </>
   );
 }

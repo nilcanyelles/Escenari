@@ -272,10 +272,7 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
     <div className="cd-poster bento-next-poster" style={accentVars} onClick={(e) => e.stopPropagation()}>
       <div className="cd-poster-glow" aria-hidden="true"></div>
       {(c.venue || c.city) && (
-        <>
-          <GigLocationMap venue={c.venue} city={c.city} accent={band.color1 || "#8b7bff"} side="left" />
-          <GigLocationMap venue={c.venue} city={c.city} accent={band.color1 || "#8b7bff"} side="right" />
-        </>
+        <GigLocationMap venue={c.venue} city={c.city} accent={band.color1 || "#8b7bff"} />
       )}
       <div className="cd-poster-kicker">{c.bandName}</div>
       <div className="cd-poster-subtitle">{c.festaEntitat || (c.kind && c.kind !== "bolo" ? (c.kind === "reunio" ? "reunió" : c.kind) : "concert")}</div>
