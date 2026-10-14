@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact } from "@/lib/types";
+import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact, Formation } from "@/lib/types";
 import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, pad2, formatConcertTime, formatConcertTimePhrase } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { rsCompletionPercent, withLiveAddress, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
@@ -460,7 +460,7 @@ function agencyDefaultSplit(otherNames: string[], pool: number, agencyBasis: num
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, unavailByMember = {}, shareLinks, backupRequests, riders, setlists, riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
+  concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, unavailByMember = {}, shareLinks, backupRequests, riders, setlists, formations = [], riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
   billing, activeLinks, canUpgrade = true, base = "",
 }: {
   concert: Concert;
@@ -478,6 +478,7 @@ export default function ConcertDetailView({
   backupRequests: BackupRequest[];
   riders: Rider[];
   setlists: Setlist[];
+  formations?: Formation[];
   riderApprovals: RiderApproval[];
   clashes: string[];
   venueHistory: { date: string; amount: number; invoiceState: string | null; daysToPay: number | null }[];
@@ -511,6 +512,10 @@ export default function ConcertDetailView({
   // Membres exclosos de la convocatòria d'aquest concert (name -> true):
   // no s'eliminen del grup, es desactiven només per a aquest bolo.
   const [convocatoriaExcluded, setConvocatoriaExcluded] = useState<Record<string, boolean>>({ ...(concert.convocatoriaExcluded || {}) });
+  // Formació triada per a aquest bolo, i qui ocupa cada posició — vegeu
+  // FormationAssignment, dins la pestanya Convocatòria.
+  const [formationId, setFormationId] = useState<string | null>(concert.formationId || null);
+  const [formationAssignments, setFormationAssignments] = useState<Record<string, string>>({ ...(concert.formationAssignments || {}) });
   // Contacte principal d'aquest concert (organitzador/promotor).
   const [contact, setContact] = useState<Concert["contact"]>({ ...(concert.contact || { email: "", name: "", phone: "", company: "" }) });
   // Còpia en directe del full de ruta (el manté RouteSheetEditor, aquí només
@@ -571,6 +576,7 @@ export default function ConcertDetailView({
   const pendingSaveRef = useRef<{
     next: typeof cf; att: typeof attendance; subs: typeof substitutes; noSubs: typeof noSubstitute;
     excl: typeof convocatoriaExcluded; cont: typeof contact; subConfirmed: typeof substituteConfirmed;
+    fId: typeof formationId; fAssign: typeof formationAssignments;
   } | null>(null);
   const [dirty, setDirty] = useState(false);
   const [confirmBackOpen, setConfirmBackOpen] = useState(false);
@@ -900,8 +906,11 @@ export default function ConcertDetailView({
   // + convocatòria + suplents, tot plegat en una sola trucada quan es desi
   // de veres) i marca la pestanya com a bruta — vegeu saveNow, lligat al
   // botó "Guarda" de la capçalera.
-  function schedulePersist(next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact, subConfirmed = substituteConfirmed) {
-    pendingSaveRef.current = { next, att, subs, noSubs, excl, cont, subConfirmed };
+  function schedulePersist(
+    next: typeof cf, att = attendance, subs = substitutes, noSubs = noSubstitute, excl = convocatoriaExcluded, cont = contact, subConfirmed = substituteConfirmed,
+    fId = formationId, fAssign = formationAssignments,
+  ) {
+    pendingSaveRef.current = { next, att, subs, noSubs, excl, cont, subConfirmed, fId, fAssign };
     setDirty(true);
   }
 
@@ -919,6 +928,7 @@ export default function ConcertDetailView({
         date: p.next.date, time: p.next.time, exactTime: p.next.exactTime, venue: p.next.venue, city: p.next.city, address: p.next.address,
         festaEntitat: p.next.festaEntitat, amount: parseInt(p.next.amount, 10) || 0, status: p.next.status,
         attendance: p.att, substitutes: p.subs, substituteConfirmed: p.subConfirmed, noSubstitute: p.noSubs, convocatoriaExcluded: p.excl, contact: p.cont,
+        formationId: p.fId, formationAssignments: p.fAssign,
         canAnnounce: p.next.canAnnounce as Concert["canAnnounce"], announceAfter: p.next.announceAfter,
         ticketType: p.next.ticketType as Concert["ticketType"],
         skipDefaults: true,
@@ -986,6 +996,33 @@ export default function ConcertDetailView({
     if (excluded) excl[name] = true; else delete excl[name];
     setConvocatoriaExcluded(excl);
     schedulePersist(cf, attendance, substitutes, noSubstitute, excl);
+  }
+
+  // Un cop triada una formació, la convocatòria passa a "encaixar músics a
+  // la formació": només hi queden convocats els assignats a algun dels seus
+  // slots — la resta del grup s'exclou automàticament d'aquest bolo (es pot
+  // tornar a convocar lliurement en treure la formació).
+  function syncExcludedForFormation(assign: Record<string, string>): Record<string, boolean> {
+    const assignedNames = new Set(Object.values(assign).filter(Boolean).map((n) => normalize(n)));
+    const next: Record<string, boolean> = {};
+    members.forEach((m) => { if (!assignedNames.has(normalize(m.name))) next[m.name] = true; });
+    return next;
+  }
+  function setFormation(id: string | null) {
+    setFormationId(id);
+    const nextAssign: Record<string, string> = id ? formationAssignments : {};
+    if (!id) setFormationAssignments({});
+    const excl = id ? syncExcludedForFormation(nextAssign) : convocatoriaExcluded;
+    if (id) setConvocatoriaExcluded(excl);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, excl, contact, substituteConfirmed, id, nextAssign);
+  }
+  function setFormationAssignment(slotId: string, name: string) {
+    const next = { ...formationAssignments };
+    if (name) next[slotId] = name; else delete next[slotId];
+    setFormationAssignments(next);
+    const excl = syncExcludedForFormation(next);
+    setConvocatoriaExcluded(excl);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, excl, contact, substituteConfirmed, formationId, next);
   }
 
   function setContactField(field: keyof Concert["contact"], v: string) {
@@ -1559,6 +1596,43 @@ export default function ConcertDetailView({
             </div>
           </div>
         </div>
+        {formations.length > 0 && (
+          <div className="cd-formation-picker">
+            <label className="form-label" style={{ marginBottom: 6 }}>Formació</label>
+            <select
+              className="field-input compact-field" style={{ maxWidth: 280 }}
+              value={formationId || ""}
+              onChange={(e) => setFormation(e.target.value || null)}
+            >
+              <option value="">Sense formació (convocatòria lliure)</option>
+              {formations.map((f) => <option key={f.id} value={f.id}>{f.preferred ? "★ " : ""}{f.name}</option>)}
+            </select>
+            {formationId && (() => {
+              const f = formations.find((x) => x.id === formationId);
+              if (!f) return null;
+              return (
+                <div className="cd-formation-slots">
+                  {f.slots.map((s) => {
+                    const candidates = members.filter((m) => instrumentsFor(m).some((i) => i.toLowerCase() === s.instrument.toLowerCase()));
+                    return (
+                      <div key={s.id} className="cd-formation-slot-row">
+                        <span className="t-dim" style={{ fontSize: 12.5, minWidth: 130 }}>{s.instrument}</span>
+                        <select
+                          className="field-input compact-field"
+                          value={formationAssignments[s.id] || ""}
+                          onChange={(e) => setFormationAssignment(s.id, e.target.value)}
+                        >
+                          <option value="">— Tria algú —</option>
+                          {candidates.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                        </select>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </div>
+        )}
         {members.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest concert no té grup amb membres assignat.</div>
         ) : (

@@ -967,6 +967,13 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .modal-close:focus-visible { outline: 2px solid oklch(0.68 0.19 290 / 0.55); outline-offset: 1px; }
 .modal-close:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
 .modal-form { display: flex; flex-direction: column; gap: 12px; }
+.formation-editor-panel { width: 860px; max-width: 95vw; }
+.formation-preferred-toggle {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-muted);
+  white-space: nowrap; cursor: pointer;
+}
+.formation-preferred-toggle input { margin: 0; }
+.modal-foot { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
 .wa-share-textarea {
   background: var(--bg-deep); border: 1px solid var(--border-input); border-radius: var(--radius-sm);
   padding: 14px; font-size: 13.5px; line-height: 1.5; color: var(--text);
@@ -2351,6 +2358,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cd-subtitle { font-size: 13px; font-weight: 600; color: var(--text-dim); margin-bottom: 10px; }
 
 /* Assistència */
+.cd-formation-picker { display: flex; flex-direction: column; margin-bottom: 16px; }
+.cd-formation-slots { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid var(--border-soft); border-radius: 10px; }
+.cd-formation-slot-row { display: flex; align-items: center; gap: 10px; }
 .cd-attendance-list { display: flex; flex-direction: column; gap: 8px; }
 .cd-att-row {
   display: flex;

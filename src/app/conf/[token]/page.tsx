@@ -90,7 +90,7 @@ export default async function ConfirmPage({ params, searchParams }: {
     tags: [], status: c.status as Concert["status"], paid: !!c.paid, amount: 0,
     attendance: (c.attendance || {}) as Record<string, "yes" | "no">, substitutes: c.substitutes || {},
     substituteConfirmed: c.substitute_confirmed || {},
-    noSubstitute: {}, convocatoriaExcluded: {}, contact: { email: "", name: "", phone: "", company: "" },
+    noSubstitute: {}, convocatoriaExcluded: {}, formationId: null, formationAssignments: {}, contact: { email: "", name: "", phone: "", company: "" },
     routeSheet: c.route_sheet, kind: c.kind || "bolo", canAnnounce: "", announceAfter: "", ticketType: "",
     setlistId: c.setlist_id || null,
   }));

@@ -11,6 +11,14 @@ export type Person = { name: string; role: string; phone?: string; whatsapp?: st
 
 export type BackupPerson = { name: string; instruments: string[]; phone: string; email: string; role?: string };
 
+// Una posició dins el pla d'escenari d'una formació: a quin instrument
+// correspon i on és (percentatge dins l'àrea, mateix sistema que StageItem
+// del rider). "personName" és opcional: una formació es pot deixar sense
+// músic concret assignat (plantilla), i s'assigna músic per músic en
+// convocar un bolo concret (vegeu Concert.formationAssignments).
+export type FormationSlot = { id: string; instrument: string; x: number; y: number };
+export type Formation = { id: string; bandId: string; name: string; preferred: boolean; slots: FormationSlot[] };
+
 export type Vehicle = { type: string; brand: string; color: string; owner: string; plate: string };
 
 export type SocialLinks = { instagram?: string; youtube?: string; tiktok?: string; spotify?: string };
@@ -118,6 +126,11 @@ export type Concert = {
   // Membres exclosos de la convocatòria d'aquest concert (name -> true):
   // no s'eliminen del grup, es desactiven només per a aquest bolo.
   convocatoriaExcluded: Record<string, boolean>;
+  // Formació triada per a aquest bolo i qui ocupa cada posició (slotId ->
+  // nom de la persona) — triar-la fa que la convocatòria vagi "d'encaixar
+  // músics a la formació" en comptes d'una llista plana sense estructura.
+  formationId: string | null;
+  formationAssignments: Record<string, string>;
   // Contacte principal d'aquest concert (organitzador/promotor) — a la
   // pestanya "Informació general", diferent dels contactes del full de ruta.
   contact: { email: string; name: string; phone: string; company: string };

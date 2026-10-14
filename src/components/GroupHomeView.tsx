@@ -19,13 +19,14 @@ import { memberPerms, PERM_LABELS, DEFAULT_PERMS, ALL_PERMS } from "@/lib/perms"
 import { bandRoster } from "@/lib/roster";
 import VerifiedTick from "@/components/VerifiedTick";
 import { logoBox } from "@/lib/logo";
-import type { MemberPerms, Vehicle, SocialStats, SocialPlatform } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialStats, SocialPlatform, Formation } from "@/lib/types";
 import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, isTracked, formatNumber, formatHeroNumber } from "@/lib/social-history";
 import { normalizeRouteSheet, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import DiaTopActions from "@/components/DiaTopActions";
 import ConcertPosterEditor from "@/components/ConcertPosterEditor";
 import GigLocationMap from "@/components/GigLocationMaps";
+import FormationEditor, { formationSummary } from "@/components/FormationEditor";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SetlistEditor from "@/components/SetlistEditor";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
@@ -734,7 +735,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, formations = [], photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -746,6 +747,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   editors: BandEditor[];
   songs: Song[];
   files: BandFile[];
+  formations?: Formation[];
   photosByName?: Record<string, string>;
   igByName?: Record<string, string>;
   viewer?: "manager" | "artist";
@@ -763,6 +765,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const base = isMgr ? "" : "/artista"; // rutes de l'àrea d'artista
   const [leaveOpen, setLeaveOpen] = useState(false);
   const [leaveBusy, setLeaveBusy] = useState(false);
+  const [formationEditorOpen, setFormationEditorOpen] = useState(false);
+  const [editingFormation, setEditingFormation] = useState<Formation | null>(null);
   const can: MemberPerms = isMgr ? { ...ALL_PERMS } : (caps || { ...DEFAULT_PERMS });
   // Un membre amb el permís "Admin" veu i pot editar exactament el mateix
   // que el gestor dins d'aquest grup (equip, aparença, codi d'unió,
@@ -1606,6 +1610,39 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             })}
           </div>
         </div>
+      )}
+
+      <div className="panel">
+        <div className="panel-header-row" style={{ marginBottom: 14 }}>
+          <div className="panel-title">Formacions <span className="panel-title-count">· {formations.length} {formations.length === 1 ? "formació" : "formacions"}</span></div>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            {(isMgr || can.members) && <button type="button" className="icon-round-btn" title="Nova formació" onClick={() => { setEditingFormation(null); setFormationEditorOpen(true); }}>{ICON_PLUS}</button>}
+          </div>
+        </div>
+        {formations.length === 0 ? (
+          <div className="t-dim" style={{ fontSize: 13 }}>Encara no hi ha cap formació creada.</div>
+        ) : (
+          <div className="backup-list">
+            {formations.map((f) => (
+              <div
+                key={f.id} className="backup-row" style={{ cursor: (isMgr || can.members) ? "pointer" : "default" }}
+                onClick={() => { if (isMgr || can.members) { setEditingFormation(f); setFormationEditorOpen(true); } }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    {f.preferred && <span title="Formació de preferència">★</span>}
+                    <span className="t-strong">{f.name}</span>
+                    <span className="t-dim">· {f.slots.length} {f.slots.length === 1 ? "músic" : "músics"}</span>
+                  </div>
+                  {f.slots.length > 0 && <span className="t-dim" style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{formationSummary(f)}</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      {formationEditorOpen && (
+        <FormationEditor band={band} formation={editingFormation} onClose={() => { setFormationEditorOpen(false); router.refresh(); }} />
       )}
 
         {!isMgr && (

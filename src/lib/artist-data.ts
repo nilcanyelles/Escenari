@@ -223,6 +223,8 @@ export async function getArtistConcertsFull(clerkUserId: string, opts?: { months
     substituteConfirmed: r.substitute_confirmed || {},
     noSubstitute: r.no_substitute,
     convocatoriaExcluded: r.convocatoria_excluded || {},
+    formationId: r.formation_id || null,
+    formationAssignments: r.formation_assignments || {},
     setlistHighlights: r.setlist_highlights || {},
     contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,

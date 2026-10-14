@@ -5,6 +5,7 @@ import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getRiders, getSetlists, getBandEditors } from "@/lib/material-data";
+import { getFormations } from "@/lib/formation-data";
 import { getSongs, getBandFiles } from "@/lib/songs";
 import { getSelectedBandId } from "@/lib/band-scope";
 import { memberPerms } from "@/lib/perms";
@@ -46,7 +47,7 @@ export default async function ArtistGrupPage() {
     });
   });
 
-  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev] = await Promise.all([
+  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev, formations] = await Promise.all([
     getLinkedMembers(bandId),
     getBackupRequests(workspaceId, { bandId }),
     getRiders(bandId),
@@ -55,6 +56,7 @@ export default async function ArtistGrupPage() {
     getSongs(bandId),
     getBandFiles(bandId),
     getSocialPrevMonth(bandId, today()),
+    getFormations(bandId),
   ]);
 
   const profRows = (await db().query(
@@ -82,6 +84,7 @@ export default async function ArtistGrupPage() {
         editors={editors}
         songs={songs}
         files={files}
+        formations={formations}
         photosByName={photosByName}
         igByName={igByName}
         viewer="artist"

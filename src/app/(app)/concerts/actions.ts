@@ -43,6 +43,8 @@ export type SaveConcertInput = {
   substituteConfirmed?: Record<string, boolean>;
   noSubstitute: Record<string, boolean>;
   convocatoriaExcluded?: Record<string, boolean>;
+  formationId?: string | null;
+  formationAssignments?: Record<string, string>;
   contact?: { email: string; name: string; phone: string; company: string };
   canAnnounce?: "yes" | "no" | "";
   announceAfter?: string;
@@ -146,18 +148,19 @@ export async function saveConcertAction(data: SaveConcertInput) {
   const announceAfter = data.announceAfter || "";
   const ticketType = data.ticketType === "pagament" ? "pagament" : data.ticketType === "gratuit" ? "gratuit" : "";
   await pool.query(
-    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, substitute_confirmed, no_substitute, convocatoria_excluded, contact, can_announce, announce_after, ticket_type, workspace_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23)
+    `insert into concerts (id, date, time, exact_time, venue, city, address, festa_entitat, band_id, band_name, tags, status, amount, attendance, substitutes, substitute_confirmed, no_substitute, convocatoria_excluded, contact, can_announce, announce_after, ticket_type, workspace_id, formation_id, formation_assignments)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)
      on conflict (id) do update set
        date=$2, time=$3, exact_time=$4, venue=$5, city=$6, address=$7, festa_entitat=$8, band_id=$9, band_name=$10, tags=$11, status=$12, amount=$13,
-       attendance=$14, substitutes=$15, substitute_confirmed=$16, no_substitute=$17, convocatoria_excluded=$18, contact=$19, can_announce=$20, announce_after=$21, ticket_type=$22
+       attendance=$14, substitutes=$15, substitute_confirmed=$16, no_substitute=$17, convocatoria_excluded=$18, contact=$19, can_announce=$20, announce_after=$21, ticket_type=$22,
+       formation_id=$24, formation_assignments=$25
      where concerts.workspace_id = excluded.workspace_id`,
     [
       id, data.date, data.time, exactTime, venue, city, address, (data.festaEntitat || "").trim(),
       bandRow ? bandRow.id : null, bandRow ? bandRow.name : "", JSON.stringify(bandRow?.tags || []), data.status, Math.round(data.amount) || 0,
       JSON.stringify(data.attendance || {}), JSON.stringify(data.substitutes || {}), JSON.stringify(data.substituteConfirmed || {}), JSON.stringify(data.noSubstitute || {}),
       JSON.stringify(data.convocatoriaExcluded || {}), JSON.stringify(contact), canAnnounce, announceAfter, ticketType,
-      workspaceId,
+      workspaceId, data.formationId || null, JSON.stringify(data.formationAssignments || {}),
     ]
   );
 

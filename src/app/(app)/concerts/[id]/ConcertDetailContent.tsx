@@ -5,6 +5,7 @@ import { getLinkedMembers } from "@/lib/group-data";
 import { getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
+import { getFormations } from "@/lib/formation-data";
 import { getTransactions } from "@/lib/finance";
 import { normalize } from "@/lib/text";
 import { daysBetween, today } from "@/lib/format";
@@ -30,12 +31,13 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
   await ensureShareLinkForConcert(id, workspaceId);
-  const [linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, transactions, invoice, clashConcerts, venueHistoryConcerts, photoRows] = await Promise.all([
+  const [linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, invoice, clashConcerts, venueHistoryConcerts, photoRows] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     getShareLinks(workspaceId, id),
     getBackupRequests(workspaceId, { concertId: id }),
     band ? getRiders(band.id) : Promise.resolve([]),
     band ? getSetlists(band.id) : Promise.resolve([]),
+    band ? getFormations(band.id) : Promise.resolve([]),
     getRiderApprovals(workspaceId, id),
     getTransactions(workspaceId),
     getInvoiceForConcert(workspaceId, id),
@@ -101,6 +103,7 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
       backupRequests={backupRequests}
       riders={riders}
       setlists={setlists}
+      formations={formations}
       riderApprovals={riderApprovals}
       clashes={clashes}
       venueHistory={venueHistory}

@@ -5,6 +5,7 @@ import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
 import { getBands, getConcertById, getConcertsOnDate, getVenueHistory, getInvoiceForConcert, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
 import { getSetlists, getRiders, getRiderApprovals } from "@/lib/material-data";
+import { getFormations } from "@/lib/formation-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getTransactions } from "@/lib/finance";
@@ -55,11 +56,11 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
   if (isAdmin && workspaceId && band) {
     await ensureShareLinkForConcert(id, workspaceId);
     const [fullBands, fullConcert, companyInfo, clientDetails, contacts, billing, activeLinks,
-      linkedMembers, shareLinks, backupRequests, riders, setlists, riderApprovals, transactions, invoice, photoRows] = await Promise.all([
+      linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, invoice, photoRows] = await Promise.all([
       getBands(workspaceId), getConcertById(workspaceId, id), getCompanyInfo(workspaceId),
       getClientDetails(workspaceId), getContacts(workspaceId), getWorkspaceBilling(workspaceId), activeLinksForConcert(workspaceId, id),
       getLinkedMembers(band.id), getShareLinks(workspaceId, id), getBackupRequests(workspaceId, { concertId: id }),
-      getRiders(band.id), getSetlists(band.id), getRiderApprovals(workspaceId, id), getTransactions(workspaceId),
+      getRiders(band.id), getSetlists(band.id), getFormations(band.id), getRiderApprovals(workspaceId, id), getTransactions(workspaceId),
       getInvoiceForConcert(workspaceId, id),
       db().query(
         "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
@@ -110,6 +111,7 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
         backupRequests={backupRequests}
         riders={riders}
         setlists={setlists}
+        formations={formations}
         riderApprovals={riderApprovals}
         clashes={clashes}
         venueHistory={venueHistory}
