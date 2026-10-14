@@ -83,7 +83,7 @@ export const INSTRUMENT_CATEGORIES: InstrumentCategory[] = [
     ["Harmònica", "harmonica"], ["Melòdica", "harmonica"], ["Ocarina", "ocarina"], ["Xiulet", "whistle"],
   ]),
   cat("Percussió", "drum", [
-    ["Bateria", "drumkit"], "Bombo", "Tabal", "Tabal fondo", "Timbal", "Timbala", "Surdo", "Contrasurdo",
+    ["Bateria", "drumkit"], "Bombo", "Tabal fondo", "Tabal valencià", "Timbal de llautó", "Timbala", "Surdo", "Contrasurdo",
     ["Caixa de percussió", "drum"], ["Caixó", "handdrum"], ["Bongos", "handdrum"], ["Darbukka", "handdrum"], ["Pandero", "handdrum"],
     ["Pandereta", "tambourine"], ["Castanyoles", "castanets"], ["Maraques", "shaker"], ["Xequeré", "shaker"],
     ["Triangle", "triangle"], ["Gong", "gong"], ["Plats", "cymbal"], ["Platerets", "cymbal"], ["Címbals", "cymbal"],
