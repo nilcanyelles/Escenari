@@ -1602,7 +1602,9 @@ export default function ConcertDetailView({
               >{nudgeResult || (nudging ? "Enviant…" : "Recorda-ho als pendents")}</button>
             )}
             <div className="t-dim" style={{ fontSize: 12 }}>
-              {members.filter((m) => !convocatoriaExcluded[m.name] && attendance[m.name] === "yes").length}/{members.filter((m) => !convocatoriaExcluded[m.name]).length} confirmats
+              {members.filter((m) => !convocatoriaExcluded[m.name] && attendance[m.name] === "yes").length}/{
+                formationId ? (formations.find((f) => f.id === formationId)?.slots.length ?? members.filter((m) => !convocatoriaExcluded[m.name]).length) : members.filter((m) => !convocatoriaExcluded[m.name]).length
+              } confirmats
             </div>
           </div>
         </div>
