@@ -1794,7 +1794,7 @@ export default function ConcertDetailView({
                             ) : (
                               <input
                                 className="cd-formation-slot-input"
-                                type="text" list="cd-backups-list" placeholder="Nom del suplent…"
+                                type="text" list="cd-backups-list" placeholder="Assigna un suplent…"
                                 value={slotDrafts[s.id] ?? ""}
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => setSlotDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
