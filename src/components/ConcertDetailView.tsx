@@ -2357,7 +2357,7 @@ export default function ConcertDetailView({
           ? <PlanLock billing={billing} required="grup" compact canUpgrade={canUpgrade} title={`Has arribat als ${activeLinks.cap} enllaços actius del pla gratuït`} />
           : <button type="button" className="glow-cta" onClick={() => { setNewLinkOpen(true); setNewLinkName(contact.name); setNewLinkEmail(contact.email); }}>+ Generar enllaç</button>)}>
         <div className="t-dim" style={{ fontSize: 13, marginBottom: 14 }}>
-          L&apos;enllaç de regidor perquè l&apos;ajuntament, el promotor o la sala omplin la informació que falta ja hi és — cal generar-hi un codi d&apos;accés abans de compartir-lo.
+          Aquest enllaç serveix perquè el promotor de l&apos;esdeveniment pugui omplir les dades que falten — envia&apos;l exclusivament a gent que forma part de l&apos;organització.
           El formulari es pot editar mentre l&apos;enllaç sigui vàlid, encara que ja s&apos;hagi enviat. Es pot generar algun enllaç més amb un abast concret (només algunes seccions).
         </div>
 
