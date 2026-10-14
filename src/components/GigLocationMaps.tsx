@@ -34,6 +34,10 @@ function cachedStreetWays(lat: number, lon: number, radius: number): Promise<Way
   return p;
 }
 
+// Radi (en metres) de carrers que es demanen i es mostren al mini-mapa —
+// com més gran, més km² abraça (es dissol cap als marges, vegeu StreetMini).
+const STREET_RADIUS_M = 1400;
+
 const SINGLE_REGION_KEYS = (Object.keys(MAP_REGIONS) as MapRegionKey[]).filter((k) => k !== "paisos_catalans" && k !== "espanya");
 
 function pointInRing(lon: number, lat: number, ring: [number, number][]): boolean {
@@ -129,7 +133,7 @@ function StreetMini({ lat, lon, accent, size, ways }: { lat: number; lon: number
     ctx.scale(dpr, dpr);
     ctx.clearRect(0, 0, size, size);
     const cosLat = Math.cos((lat * Math.PI) / 180);
-    const dLatAtRadius = 450 / 111320;
+    const dLatAtRadius = STREET_RADIUS_M / 111320;
     const scale = (size / 2) / dLatAtRadius;
     function project(plon: number, plat: number): [number, number] {
       return [size / 2 + (plon - lon) * cosLat * scale, size / 2 - (plat - lat) * scale];
@@ -156,9 +160,21 @@ function StreetMini({ lat, lon, accent, size, ways }: { lat: number; lon: number
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, 3, 0, Math.PI * 2);
     ctx.fill();
+    // Es dissol cap als marges (en comptes de tallar-se en sec a una vora
+    // circular) perquè es pugui ampliar l'abast real del mapa (més km²)
+    // sense que es noti una vora dura.
+    ctx.globalCompositeOperation = "destination-in";
+    const fade = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+    fade.addColorStop(0, "rgba(255,255,255,1)");
+    fade.addColorStop(0.55, "rgba(255,255,255,0.85)");
+    fade.addColorStop(0.8, "rgba(255,255,255,0.4)");
+    fade.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = fade;
+    ctx.fillRect(0, 0, size, size);
+    ctx.globalCompositeOperation = "source-over";
   }, [ways, lat, lon, accent, size]);
   if (!ways.length) return null;
-  return <canvas ref={ref} style={{ width: size, height: size, display: "block", borderRadius: "50%" }} />;
+  return <canvas ref={ref} style={{ width: size, height: size, display: "block" }} />;
 }
 
 // Un únic punt d'entrada: resol la geocodificació UNA sola vegada (abans es
@@ -180,7 +196,7 @@ export default function GigLocationMaps({ venue, city, accent, size = 108 }: {
     cachedGeocode(q).then((g) => {
       if (cancelled) return;
       setCoord(g);
-      if (g) cachedStreetWays(g.lat, g.lon, 450).then((w) => { if (!cancelled) setWays(w); });
+      if (g) cachedStreetWays(g.lat, g.lon, STREET_RADIUS_M).then((w) => { if (!cancelled) setWays(w); });
     });
     return () => { cancelled = true; };
   }, [q]);
