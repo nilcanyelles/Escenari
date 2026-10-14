@@ -122,17 +122,17 @@ export default function FormationEditor({ band, formation, onClose }: { band: Ba
         </div>
 
         <div className="studio-stage">
-          <div className="studio-palette">
+          <div className="formation-palette">
             <div className="t-dim" style={{ fontSize: 12, marginBottom: 6 }}>Arrossega un instrument al pla</div>
-            <div className="studio-items">
+            <div className="formation-palette-items">
               {palette.map((inst) => (
                 <button
-                  key={inst} type="button" className="studio-item" title={`${inst} — arrossega o fes clic per afegir`}
+                  key={inst} type="button" className="formation-palette-item" title={`${inst} — arrossega o fes clic per afegir`}
                   draggable
                   onDragStart={(e) => { e.dataTransfer.setData("text/formation-instrument", inst); e.dataTransfer.effectAllowed = "copy"; }}
                   onClick={() => addSlot(inst)}
                 >
-                  <InstrumentIcon name={inst} icon={instrumentIconKey(inst)} size={28} />
+                  <InstrumentIcon name={inst} icon={instrumentIconKey(inst)} size={30} />
                   <span>{inst}</span>
                 </button>
               ))}

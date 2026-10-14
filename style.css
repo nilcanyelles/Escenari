@@ -3475,6 +3475,24 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .studio-item:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
 .studio-item:active { cursor: grabbing; }
 
+/* Paleta d'instruments de l'editor de formacions: a diferència de
+   .studio-palette (pensada per anar costat a costat amb .studio-cats),
+   aquesta s'apila verticalment (text + graella de requadres + botó
+   d'afegir-ne de nous). */
+.formation-palette {
+  width: 320px; flex-shrink: 0; display: flex; flex-direction: column;
+  background: var(--bg-card); border: 1px solid var(--border-soft); border-radius: var(--radius);
+  padding: 12px; max-height: 78vh; overflow-y: auto;
+}
+.formation-palette-items { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.formation-palette-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 1px solid var(--border-soft); background: var(--bg-card-2); border-radius: 10px;
+  padding: 10px 6px 8px; cursor: grab; font-family: inherit; color: var(--text-muted);
+  font-size: 10.5px; text-align: center; transition: border-color 0.15s, transform 0.1s;
+}
+.formation-palette-item:hover { border-color: var(--accent); color: var(--text); transform: translateY(-1px); }
+.formation-palette-item:active { cursor: grabbing; }
 .studio-canvas-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
 .studio-stage-controls {
   display: flex;
