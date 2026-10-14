@@ -134,6 +134,9 @@ export type Concert = {
   // músics a la formació" en comptes d'una llista plana sense estructura.
   formationId: string | null;
   formationAssignments: Record<string, string>;
+  // Factura adjuntada a mà (PDF) — vegeu el bloc "Client" de Despeses i
+  // facturació: no es genera, només es penja.
+  clientInvoiceFileId: string | null;
   // Contacte principal d'aquest concert (organitzador/promotor) — a la
   // pestanya "Informació general", diferent dels contactes del full de ruta.
   contact: { email: string; name: string; phone: string; company: string };

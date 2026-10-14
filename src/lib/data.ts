@@ -75,6 +75,7 @@ function mapConcertRow(r: any): Concert {
     convocatoriaExcluded: r.convocatoria_excluded || {},
     formationId: r.formation_id || null,
     formationAssignments: r.formation_assignments || {},
+    clientInvoiceFileId: r.client_invoice_file_id || null,
     setlistHighlights: r.setlist_highlights || {},
     contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,
@@ -150,6 +151,23 @@ export async function getVenueHistory(workspaceId: string, venue: string, exclud
     : `select * from concerts where workspace_id=$1 and lower(venue)=lower($2) and id<>$3 and status<>'cancel·lat'
        order by date desc limit $4`;
   const params = opts?.bandId ? [workspaceId, venueKey, excludeId, limit, opts.bandId] : [workspaceId, venueKey, excludeId, limit];
+  const { rows } = await db().query(sql, params);
+  return rows.map(mapConcertRow);
+}
+
+// Historial de bolos amb el mateix client (empresa del contacte), per al
+// bloc "Client" de Despeses i facturació — a diferència de getVenueHistory,
+// SÍ inclou els cancel·lats (es mostren amb la seva etiqueta, no s'amaguen).
+export async function getClientHistory(workspaceId: string, company: string, excludeId: string, opts?: { bandId?: string; limit?: number }): Promise<Concert[]> {
+  const key = company.trim();
+  if (!key) return [];
+  const limit = opts?.limit ?? 10;
+  const sql = opts?.bandId
+    ? `select * from concerts where workspace_id=$1 and lower(contact->>'company')=lower($2) and id<>$3 and band_id=$5
+       order by date desc limit $4`
+    : `select * from concerts where workspace_id=$1 and lower(contact->>'company')=lower($2) and id<>$3
+       order by date desc limit $4`;
+  const params = opts?.bandId ? [workspaceId, key, excludeId, limit, opts.bandId] : [workspaceId, key, excludeId, limit];
   const { rows } = await db().query(sql, params);
   return rows.map(mapConcertRow);
 }

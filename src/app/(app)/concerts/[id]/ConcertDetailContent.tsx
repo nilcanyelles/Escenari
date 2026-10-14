@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import ConcertDetailView from "@/components/ConcertDetailView";
-import { getBands, getConcertById, getConcertsOnDate, getVenueHistory, getInvoiceForConcert, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
+import { getBands, getConcertById, getConcertsOnDate, getClientHistory, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
 import { getLinkedMembers } from "@/lib/group-data";
 import { getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
@@ -8,7 +8,7 @@ import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
 import { getFormations } from "@/lib/formation-data";
 import { getTransactions } from "@/lib/finance";
 import { normalize } from "@/lib/text";
-import { daysBetween, today } from "@/lib/format";
+import { today } from "@/lib/format";
 import { emailConfigured } from "@/lib/email";
 import { requireManager } from "@/lib/current-user";
 import { getWorkspaceBilling, activeLinksForConcert } from "@/lib/billing";
@@ -31,7 +31,7 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
   await ensureShareLinkForConcert(id, workspaceId);
-  const [linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, invoice, clashConcerts, venueHistoryConcerts, photoRows] = await Promise.all([
+  const [linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, clashConcerts, clientHistoryConcerts, photoRows] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     getShareLinks(workspaceId, id),
     getBackupRequests(workspaceId, { concertId: id }),
@@ -40,9 +40,8 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
     band ? getFormations(band.id) : Promise.resolve([]),
     getRiderApprovals(workspaceId, id),
     getTransactions(workspaceId),
-    getInvoiceForConcert(workspaceId, id),
     concert.status !== "cancel·lat" ? getConcertsOnDate(workspaceId, concert.date, id) : Promise.resolve([]),
-    getVenueHistory(workspaceId, concert.venue, id),
+    getClientHistory(workspaceId, concert.contact?.company || "", id),
     (async () => {
       const { db } = await import("@/lib/db");
       return (await db().query(
@@ -76,24 +75,15 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
     });
   }
 
-  const venueHistory = await Promise.all(
-    venueHistoryConcerts.map(async (c) => {
-      const inv = await getInvoiceForConcert(workspaceId, c.id);
-      return {
-        date: c.date,
-        amount: c.amount,
-        invoiceState: inv?.state || null,
-        daysToPay: inv && inv.state === "pagada" ? Math.max(0, daysBetween(inv.issueDate, inv.dueDate)) : null,
-      };
-    })
-  );
+  const clientHistory = clientHistoryConcerts.map((c) => ({
+    date: c.date, city: c.city || c.venue || "—", amount: c.amount, status: c.status, paid: c.paid,
+  }));
 
   return (
     <ConcertDetailView
       concert={concert}
       band={band}
       bands={bands}
-      invoice={invoice}
       companyInfo={companyInfo}
       clientDetails={clientDetails}
       contacts={contacts}
@@ -106,7 +96,7 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
       formations={formations}
       riderApprovals={riderApprovals}
       clashes={clashes}
-      venueHistory={venueHistory}
+      clientHistory={clientHistory}
       concertExpenses={concertExpenses}
       emailReady={emailConfigured()}
       photosByName={photosByName}

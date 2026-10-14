@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Dropdown from "@/components/Dropdown";
-import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact, Formation } from "@/lib/types";
+import type { Band, Concert, CompanyInfo, ClientDetails, Contact, Formation } from "@/lib/types";
 import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, pad2, formatConcertTime, formatConcertTimePhrase } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
 import { instrumentIconKey } from "@/lib/instruments";
@@ -18,10 +18,7 @@ import { setConcertMaterialAction, sendRiderApprovalAction, acceptCounterRiderAc
 import { sendApprovalEmailAction } from "@/app/a/actions";
 import SpecularButton from "@/components/SpecularButton";
 import { shareLinkStatus, shareLinkCodeStatus } from "@/lib/share-data";
-import { saveConcertAction, savePayoutsAction, setInvoiceStateAction, setConcertKindAction, nudgeAttendanceAction, setAgencyPctAction, repeatConcertAction, deleteConcertAction } from "@/app/(app)/concerts/actions";
-import { editInvoiceAction, sendInvoiceReminderAction } from "@/app/(app)/facturacio/actions";
-import { computeInvoiceTotals } from "@/lib/invoice-utils";
-import { generateInvoiceAction } from "@/app/(app)/facturacio/actions";
+import { saveConcertAction, savePayoutsAction, setConcertKindAction, nudgeAttendanceAction, setAgencyPctAction, repeatConcertAction, deleteConcertAction, uploadClientInvoiceAction, removeClientInvoiceAction } from "@/app/(app)/concerts/actions";
 import { upsertClientDetailsAction } from "@/app/(app)/base-de-dades/actions";
 import { createShareLinkAction, revokeShareLinkAction, sendShareLinkEmailAction, setShareLinkCodeAction, clearShareLinkCodeAction, updateShareLinkRecipientAction, type CodeValidity } from "@/app/(app)/concerts/share-actions";
 import { ALL_SHARE_SECTIONS, SHARE_SECTION_LABELS, SHARE_SECTION_ICON_TITLE, shareSectionsLabel, type ShareSection } from "@/lib/share-sections";
@@ -38,7 +35,6 @@ import ContractPanel from "@/components/ContractPanel";
 import PlanLock from "@/components/PlanLock";
 import type { BillingInfo } from "@/lib/plans";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
-import InvoicePreview from "@/components/InvoicePreview";
 import ConcertPosterModal from "@/components/ConcertPosterModal";
 import InlineDatePicker from "@/components/InlineDatePicker";
 import VenueSearchField, { resolvePlaceToVenueFields } from "@/components/VenueSearchField";
@@ -536,13 +532,12 @@ function BackupSuggestInput({ value, backups, placeholder, onCommit }: { value: 
 }
 
 export default function ConcertDetailView({
-  concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, unavailByMember = {}, shareLinks, backupRequests, riders, setlists, formations = [], riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
+  concert, band, bands, companyInfo, clientDetails, contacts = [], linkedMembers, unavailByMember = {}, shareLinks, backupRequests, riders, setlists, formations = [], riderApprovals, clashes, clientHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
   billing, activeLinks, canUpgrade = true, base = "",
 }: {
   concert: Concert;
   band: Band | null;
   bands: Band[];
-  invoice: Invoice | null;
   companyInfo: CompanyInfo;
   clientDetails: Record<string, ClientDetails>;
   contacts?: Contact[];
@@ -557,7 +552,7 @@ export default function ConcertDetailView({
   formations?: Formation[];
   riderApprovals: RiderApproval[];
   clashes: string[];
-  venueHistory: { date: string; amount: number; invoiceState: string | null; daysToPay: number | null }[];
+  clientHistory: { date: string; city: string; amount: number; status: string; paid: boolean }[];
   concertExpenses: Transaction[];
   emailReady: boolean;
   photosByName?: Record<string, string>; // nom normalitzat → id de fitxer de foto
@@ -642,10 +637,8 @@ export default function ConcertDetailView({
     if (created > 0) router.refresh();
   }
   const [rsPreviewOpen, setRsPreviewOpen] = useState(false);
-  const [invoicePreviewOpen, setInvoicePreviewOpen] = useState(false);
   const [posterOpen, setPosterOpen] = useState(false);
   const [tab, setTab] = useState<"info" | "assistencia" | "ruta" | "facturacio">("info");
-  const [generating, setGenerating] = useState(false);
   // Res no es desa sol: cada canvi (informació, assistència, convocatòria,
   // suplents) només queda apuntat aquí fins que es clica "Guarda" — vegeu
   // schedulePersist/saveNow.
@@ -1343,23 +1336,11 @@ export default function ConcertDetailView({
     setEditedPayoutNames(newEdited);
   }
   // ---- Facturació ----
-  const [invEditOpen, setInvEditOpen] = useState(false);
-  const [invEdit, setInvEdit] = useState({ base: "", iva: "21", irpf: "0", deposit: "0" });
-  const [reminderEmail, setReminderEmail] = useState("");
-  const [reminding, setReminding] = useState(false);
-  const [reminderStatus, setReminderStatus] = useState<string | null>(null);
-  const invTotals = invoice ? computeInvoiceTotals(invoice.baseAmount, invoice.ivaRate, invoice.irpfRate) : { iva: 0, irpf: 0, total: 0 };
-  const daysOut = invoice ? Math.max(0, Math.round((new Date(today).getTime() - new Date(invoice.issueDate).getTime()) / 86400000)) : 0;
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
+  const [removingInvoice, setRemovingInvoice] = useState(false);
   const clientKey = concert.venue;
   const cd = clientDetails[clientKey] || { clientName: clientKey, cif: "", nom: "", address: "" };
   const [clientForm, setClientForm] = useState({ nom: cd.nom, cif: cd.cif, address: cd.address });
-
-  async function handleGenerateInvoice() {
-    setGenerating(true);
-    await generateInvoiceAction(concert.id);
-    router.refresh();
-    setGenerating(false);
-  }
 
   function linkUrl(id: string): string {
     return `${window.location.origin}/f/${id}`;
@@ -2152,176 +2133,69 @@ export default function ConcertDetailView({
       {/* Facturació: cada bloc és un desplegable amb el resum a la capçalera */}
       {tab === "facturacio" && (
       <div className="cd-stack" id="cd-facturacio">
-        <FoldPanel title="Client i factura" summary={invoice ? `${invoice.id} · ${invoice.state}` : "Sense factura"} defaultOpen>
+        <FoldPanel title="Client" summary={concert.contact?.company || "Sense client"} defaultOpen>
         <div className="cd-fact-grid">
           <div className="cd-fact-col">
-            <div className="cd-subtitle">Dades del client</div>
             <div className="cd-field">
-              <label className="form-label">Client (sala / entitat)</label>
-              <input className="field-input form-field" value={clientKey} disabled title="El client és la ubicació del concert" />
+              <label className="form-label">Client</label>
+              <input className="field-input form-field" placeholder="Empresa del contacte"
+                value={contact.company} onChange={(e) => setContactField("company", e.target.value)} />
             </div>
-            <div className="cd-field">
-              <label className="form-label">Raó social</label>
-              <input className="field-input form-field" value={clientForm.nom}
-                onChange={(e) => setClientForm((p) => ({ ...p, nom: e.target.value }))}
-                onBlur={async () => { await upsertClientDetailsAction(clientKey, "nom", clientForm.nom, concert.id); router.refresh(); }} />
+            <div className="cd-margin-row">
+              <span className="t-dim">Total a pagar</span>
+              <span className="t-strong">{formatCurrency(amountNum)}</span>
             </div>
-            <div className="cd-field">
-              <label className="form-label">CIF</label>
-              <input className="field-input form-field" value={clientForm.cif}
-                onChange={(e) => setClientForm((p) => ({ ...p, cif: e.target.value }))}
-                onBlur={async () => { await upsertClientDetailsAction(clientKey, "cif", clientForm.cif, concert.id); router.refresh(); }} />
-            </div>
-            <div className="cd-field">
-              <label className="form-label">Adreça</label>
-              <input className="field-input form-field" value={clientForm.address}
-                onChange={(e) => setClientForm((p) => ({ ...p, address: e.target.value }))}
-                onBlur={async () => { await upsertClientDetailsAction(clientKey, "address", clientForm.address, concert.id); router.refresh(); }} />
-            </div>
+
+            {clientHistory.length > 0 && (
+              <div className="cd-history">
+                <div className="cd-subtitle" style={{ marginTop: 14 }}>Historial del client</div>
+                {clientHistory.map((h, i) => {
+                  const label = h.status === "cancel·lat" ? "cancel·lat" : h.paid ? "pagat" : "pendent de pagar";
+                  const colorStatus = h.status === "cancel·lat" ? "vençuda" : h.paid ? "pagada" : "pendent";
+                  return (
+                    <div key={i} className="cd-history-row">
+                      <span className="t-dim">{formatDate(h.date)}</span>
+                      <span>{h.city}</span>
+                      <span className="badge" style={{ background: statusColors(colorStatus).bg, color: statusColors(colorStatus).color }}>{label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="cd-fact-col">
             <div className="cd-subtitle">Factura</div>
-            {invoice ? (
+            {concert.clientInvoiceFileId ? (
               <div className="cd-invoice-card">
-                <div className="cd-invoice-head">
-                  <button type="button" className="link-btn t-strong" onClick={() => setInvoicePreviewOpen(true)}>{invoice.id}</button>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    {invoice.state !== "pagada" && (
-                      <span className={"t-dim" + (daysOut > 30 ? " fin-neg" : "")} style={{ fontSize: 11.5 }} title="Dies des de l'emissió">
-                        {daysOut} dies
-                      </span>
-                    )}
-                    <Dropdown
-                      className="field-input compact-field"
-                      value={invoice.state}
-                      onChange={async (e) => { await setInvoiceStateAction(invoice.id, e.target.value as "pagada" | "pendent" | "vençuda"); router.refresh(); }}
-                    >
-                      <option value="pendent">pendent</option>
-                      <option value="pagada">pagada</option>
-                      <option value="vençuda">vençuda</option>
-                    </Dropdown>
-                  </div>
-                </div>
-
-                {invEditOpen ? (
-                  <div className="cd-invoice-edit">
-                    <label>Base<input type="number" className="field-input compact-field" value={invEdit.base} onChange={(e) => setInvEdit({ ...invEdit, base: e.target.value })} /></label>
-                    <label>IVA %<Dropdown className="field-input compact-field" value={invEdit.iva} onChange={(e) => setInvEdit({ ...invEdit, iva: e.target.value })}><option>21</option><option>10</option><option>0</option></Dropdown></label>
-                    <label>IRPF %<Dropdown className="field-input compact-field" value={invEdit.irpf} onChange={(e) => setInvEdit({ ...invEdit, irpf: e.target.value })}><option>0</option><option>7</option><option>15</option></Dropdown></label>
-                    <label>Bestreta<input type="number" className="field-input compact-field" value={invEdit.deposit} onChange={(e) => setInvEdit({ ...invEdit, deposit: e.target.value })} /></label>
-                    <div style={{ display: "flex", gap: 8, gridColumn: "1 / -1" }}>
-                      <button type="button" className="btn-outline" onClick={() => setInvEditOpen(false)}>Cancel·la</button>
-                      <button type="button" className="btn-save" onClick={async () => {
-                        await editInvoiceAction({
-                          id: invoice.id, client: invoice.client, issueDate: invoice.issueDate, dueDate: invoice.dueDate,
-                          baseAmount: parseInt(invEdit.base, 10) || 0, ivaRate: parseFloat(invEdit.iva) || 0,
-                          irpfRate: parseFloat(invEdit.irpf) || 0, depositAmount: parseInt(invEdit.deposit, 10) || 0,
-                          depositPaid: invoice.depositPaid,
-                        });
-                        setInvEditOpen(false);
-                        router.refresh();
-                      }}>Desa</button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="cd-invoice-rows">
-                    <div><span className="t-dim">Base imposable</span><span>{formatCurrency(invoice.baseAmount)}</span></div>
-                    <div><span className="t-dim">IVA {invoice.ivaRate}%</span><span>{formatCurrency(invTotals.iva)}</span></div>
-                    {invoice.irpfRate > 0 && <div><span className="t-dim">Retenció IRPF {invoice.irpfRate}%</span><span className="fin-neg">−{formatCurrency(invTotals.irpf)}</span></div>}
-                    <div className="t-strong"><span>Total</span><span>{formatCurrency(invoice.amount)}</span></div>
-                    {invoice.depositAmount > 0 && (
-                      <>
-                        <div>
-                          <span className="t-dim">Bestreta</span>
-                          <span>
-                            {formatCurrency(invoice.depositAmount)}{" "}
-                            <button type="button" className="link-btn" style={{ fontSize: 11 }}
-                              onClick={async () => {
-                                await editInvoiceAction({
-                                  id: invoice.id, client: invoice.client, issueDate: invoice.issueDate, dueDate: invoice.dueDate,
-                                  baseAmount: invoice.baseAmount, ivaRate: invoice.ivaRate, irpfRate: invoice.irpfRate,
-                                  depositAmount: invoice.depositAmount, depositPaid: !invoice.depositPaid,
-                                });
-                                router.refresh();
-                              }}
-                            >{invoice.depositPaid ? "cobrada ✓" : "marca cobrada"}</button>
-                          </span>
-                        </div>
-                        <div><span className="t-dim">Resta pendent</span><span>{formatCurrency(invoice.amount - (invoice.depositPaid ? invoice.depositAmount : 0))}</span></div>
-                      </>
-                    )}
-                  </div>
-                )}
-
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                  <button type="button" className="btn-outline" onClick={() => setInvoicePreviewOpen(true)}>Visualitza / PDF</button>
-                  {!invEditOpen && <button type="button" className="btn-outline" onClick={() => {
-                    setInvEdit({ base: String(invoice.baseAmount), iva: String(invoice.ivaRate), irpf: String(invoice.irpfRate), deposit: String(invoice.depositAmount) });
-                    setInvEditOpen(true);
-                  }}>Edita</button>}
+                  <a className="btn-outline" href={`/api/file/${concert.clientInvoiceFileId}`} target="_blank" rel="noreferrer">Obre la factura (PDF)</a>
+                  <button type="button" className="btn-outline" disabled={removingInvoice}
+                    onClick={async () => {
+                      setRemovingInvoice(true);
+                      await removeClientInvoiceAction(concert.id);
+                      router.refresh();
+                      setRemovingInvoice(false);
+                    }}>{removingInvoice ? "Traient…" : "Treu la factura"}</button>
                 </div>
-
-                {invoice.state !== "pagada" && (
-                  <div className="cd-reminder-row">
-                    <input className="field-input compact-field" type="email" placeholder="correu del client…" value={reminderEmail} onChange={(e) => setReminderEmail(e.target.value)} style={{ flex: 1, minWidth: 160 }} />
-                    <button
-                      type="button" className="btn-outline" disabled={!emailReady || !reminderEmail || reminding}
-                      title={emailReady ? "Envia un recordatori amb el detall de la factura" : "Configura RESEND_API_KEY per enviar correus"}
-                      onClick={async () => {
-                        setReminding(true);
-                        const res = await sendInvoiceReminderAction(invoice.id, reminderEmail);
-                        setReminderStatus(res.ok ? "enviat ✓" : res.error || "error");
-                        setReminding(false);
-                      }}
-                    >{reminderStatus || (reminding ? "Enviant…" : "Recordatori de cobrament")}</button>
-                  </div>
-                )}
               </div>
             ) : (
-              <div className="cd-invoice-card">
-                <div className="cd-invoice-rows">
-                  <div><span className="t-dim">Base imposable</span><span>{formatCurrency(amountNum)}</span></div>
-                  <div><span className="t-dim">IVA {companyInfo.ivaRate}%</span><span>{formatCurrency(Math.round((amountNum * companyInfo.ivaRate) / 100))}</span></div>
-                  {companyInfo.irpfRate > 0 && <div><span className="t-dim">Retenció IRPF {companyInfo.irpfRate}%</span><span className="fin-neg">−{formatCurrency(Math.round((amountNum * companyInfo.irpfRate) / 100))}</span></div>}
-                  <div className="t-strong"><span>Total factura</span><span>{formatCurrency(computeInvoiceTotals(amountNum, companyInfo.ivaRate, companyInfo.irpfRate).total)}</span></div>
-                </div>
-                {!billing.caps.invoices ? (
-                  <PlanLock billing={billing} feature="invoices" canUpgrade={canUpgrade} title="Factures amb numeració, IVA i recordatoris" description="Genera la factura d'aquest bolo amb un clic i porta el balanç al dia amb el pla Grup." />
-                ) : cf.status === "confirmat" ? (
-                  <button type="button" className="btn-save" disabled={generating} onClick={handleGenerateInvoice}>
-                    {generating ? "Generant…" : "Genera la factura automàtica"}
-                  </button>
-                ) : (
-                  <div className="t-dim" style={{ fontSize: 12 }}>Confirma el concert per generar la factura.</div>
-                )}
-              </div>
-            )}
-
-            {totalExpenses > 0 && (
-              <div className="cd-margin-row">
-                <span className="t-dim">Marge net del bolo</span>
-                <span>
-                  {formatCurrency(amountNum)} − {formatCurrency(totalExpenses)} despeses ={" "}
-                  <strong className={amountNum - totalExpenses >= 0 ? "fin-pos" : "fin-neg"}>{formatCurrency(amountNum - totalExpenses)}</strong>
-                </span>
-              </div>
-            )}
-
-            {venueHistory.length > 0 && (
-              <div className="cd-history">
-                <div className="cd-subtitle" style={{ marginTop: 14 }}>Historial amb {clientKey}</div>
-                {venueHistory.map((h, i) => (
-                  <div key={i} className="cd-history-row">
-                    <span className="t-dim">{formatDate(h.date)}</span>
-                    <span>{formatCurrency(h.amount)}</span>
-                    <span className={"badge"} style={h.invoiceState ? { background: statusColors(h.invoiceState).bg, color: statusColors(h.invoiceState).color } : {}}>
-                      {h.invoiceState || "sense factura"}
-                    </span>
-                    {h.daysToPay !== null && <span className="t-dim" style={{ fontSize: 11 }}>{h.daysToPay}d termini</span>}
-                  </div>
-                ))}
-              </div>
+              <label className="btn-outline" style={{ display: "inline-block", cursor: uploadingInvoice ? "default" : "pointer" }}>
+                {uploadingInvoice ? "Pujant…" : "+ Afegeix una factura (PDF)"}
+                <input type="file" accept="application/pdf" disabled={uploadingInvoice} style={{ display: "none" }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    e.target.value = "";
+                    if (!file) return;
+                    setUploadingInvoice(true);
+                    const fd = new FormData();
+                    fd.append("concertId", concert.id);
+                    fd.append("file", file);
+                    await uploadClientInvoiceAction(fd);
+                    router.refresh();
+                    setUploadingInvoice(false);
+                  }} />
+              </label>
             )}
           </div>
         </div>
@@ -2564,7 +2438,29 @@ export default function ConcertDetailView({
             </div>
           </div>
           {billing.caps.contracts ? (
-            <ContractPanel concert={liveConcert} companyInfo={companyInfo} client={{ name: clientKey, nom: clientForm.nom, cif: clientForm.cif, address: clientForm.address }} emailReady={emailReady} />
+            <>
+              <div className="cd-fact-grid" style={{ marginBottom: 14 }}>
+                <div className="cd-field">
+                  <label className="form-label">Raó social del client</label>
+                  <input className="field-input form-field" value={clientForm.nom}
+                    onChange={(e) => setClientForm((p) => ({ ...p, nom: e.target.value }))}
+                    onBlur={async () => { await upsertClientDetailsAction(clientKey, "nom", clientForm.nom, concert.id); router.refresh(); }} />
+                </div>
+                <div className="cd-field">
+                  <label className="form-label">CIF</label>
+                  <input className="field-input form-field" value={clientForm.cif}
+                    onChange={(e) => setClientForm((p) => ({ ...p, cif: e.target.value }))}
+                    onBlur={async () => { await upsertClientDetailsAction(clientKey, "cif", clientForm.cif, concert.id); router.refresh(); }} />
+                </div>
+                <div className="cd-field">
+                  <label className="form-label">Adreça</label>
+                  <input className="field-input form-field" value={clientForm.address}
+                    onChange={(e) => setClientForm((p) => ({ ...p, address: e.target.value }))}
+                    onBlur={async () => { await upsertClientDetailsAction(clientKey, "address", clientForm.address, concert.id); router.refresh(); }} />
+                </div>
+              </div>
+              <ContractPanel concert={liveConcert} companyInfo={companyInfo} client={{ name: clientKey, nom: clientForm.nom, cif: clientForm.cif, address: clientForm.address }} emailReady={emailReady} />
+            </>
           ) : (
             <PlanLock billing={billing} feature="contracts" canUpgrade={canUpgrade} title="Contracte d'actuació amb les dades del bolo" description="Clàusules ja redactades, PDF i enllaç per enviar al client. Inclòs al pla Grup." />
           )}
@@ -2832,9 +2728,6 @@ export default function ConcertDetailView({
 
       {rsPreviewOpen && (
         <RouteSheetPreview concert={concert} onClose={() => setRsPreviewOpen(false)} onEdit={() => setRsPreviewOpen(false)} />
-      )}
-      {invoicePreviewOpen && invoice && (
-        <InvoicePreview invoice={invoice} concert={concert} companyInfo={companyInfo} onClose={() => setInvoicePreviewOpen(false)} />
       )}
       {posterOpen && (
         <ConcertPosterModal concert={liveConcert} band={band} onClose={() => setPosterOpen(false)} />

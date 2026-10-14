@@ -11,6 +11,7 @@ import { googlePlacesAutocomplete, googlePlaceDetails, photonSearch, photonRever
 import type { ImportedConcert } from "@/lib/concert-import";
 import { geocodeCitiesCached, normalizeForMatch } from "@/lib/geocode";
 import { autoCreateShareLinkForConcert } from "@/app/(app)/concerts/share-actions";
+import { uploadFileBlob } from "@/lib/blob-storage";
 
 // Utilitats de cerca/geocodificació (Photon, Google Places, Overpass): no
 // toquen cap dada d'un workspace concret, són pura consulta a serveis
@@ -932,4 +933,33 @@ export async function setSetlistHighlightsAction(concertId: string, highlights: 
   );
   revalidatePath(`/concerts/${concertId}`);
   revalidatePath(`/concerts/${concertId}/dia`);
+}
+
+// Factura del client adjuntada a mà (PDF) — bloc "Client" de Despeses i
+// facturació: no es genera, només es penja i es pot tornar a treure.
+export async function uploadClientInvoiceAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
+  const concertId = String(formData.get("concertId") || "");
+  const file = formData.get("file") as File | null;
+  if (!concertId || !file) return { ok: false, error: "Falta el fitxer" };
+  const { workspaceId, profile } = await requireConcertAccess(concertId, "admin");
+  if (file.size > 15 * 1024 * 1024) return { ok: false, error: "Màxim 15 MB" };
+  const buf = Buffer.from(await file.arrayBuffer());
+  const id = "fl" + Date.now() + Math.floor(Math.random() * 1000);
+  const mime = file.type || "application/pdf";
+  const blobUrl = await uploadFileBlob("files/" + id, buf, mime);
+  await db().query(
+    "insert into files (id, workspace_id, band_id, song_id, name, mime, size, data, uploaded_by, blob_url) values ($1,$2,null,null,$3,$4,$5,null,$6,$7)",
+    [id, workspaceId, file.name || "factura.pdf", mime, file.size, profile.name || "", blobUrl]
+  );
+  await db().query("update concerts set client_invoice_file_id=$1 where id=$2 and workspace_id=$3", [id, concertId, workspaceId]);
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath("/artista");
+  return { ok: true };
+}
+
+export async function removeClientInvoiceAction(concertId: string): Promise<void> {
+  const { workspaceId } = await requireConcertAccess(concertId, "admin");
+  await db().query("update concerts set client_invoice_file_id=null where id=$1 and workspace_id=$2", [concertId, workspaceId]);
+  revalidatePath(`/concerts/${concertId}`);
+  revalidatePath("/artista");
 }

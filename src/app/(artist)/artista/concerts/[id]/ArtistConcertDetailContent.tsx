@@ -3,7 +3,7 @@ import ArtistConcertDetail from "@/components/ArtistConcertDetail";
 import ConcertDetailView from "@/components/ConcertDetailView";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
-import { getBands, getConcertById, getConcertsOnDate, getVenueHistory, getInvoiceForConcert, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
+import { getBands, getConcertById, getConcertsOnDate, getClientHistory, getCompanyInfo, getClientDetails, getContacts } from "@/lib/data";
 import { getSetlists, getRiders, getRiderApprovals } from "@/lib/material-data";
 import { getFormations } from "@/lib/formation-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
@@ -11,7 +11,7 @@ import { getShareLinks } from "@/lib/share-data";
 import { getTransactions } from "@/lib/finance";
 import { memberPerms } from "@/lib/perms";
 import { computePayouts, myPayout } from "@/lib/payouts";
-import { today, daysBetween } from "@/lib/format";
+import { today } from "@/lib/format";
 import { normalize } from "@/lib/text";
 import { emailConfigured } from "@/lib/email";
 import { getWorkspaceBilling, activeLinksForConcert } from "@/lib/billing";
@@ -56,12 +56,11 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
   if (isAdmin && workspaceId && band) {
     await ensureShareLinkForConcert(id, workspaceId);
     const [fullBands, fullConcert, companyInfo, clientDetails, contacts, billing, activeLinks,
-      linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, invoice, photoRows] = await Promise.all([
+      linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, photoRows] = await Promise.all([
       getBands(workspaceId), getConcertById(workspaceId, id), getCompanyInfo(workspaceId),
       getClientDetails(workspaceId), getContacts(workspaceId), getWorkspaceBilling(workspaceId), activeLinksForConcert(workspaceId, id),
       getLinkedMembers(band.id), getShareLinks(workspaceId, id), getBackupRequests(workspaceId, { concertId: id }),
       getRiders(band.id), getSetlists(band.id), getFormations(band.id), getRiderApprovals(workspaceId, id), getTransactions(workspaceId),
-      getInvoiceForConcert(workspaceId, id),
       db().query(
         "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
         [workspaceId]
@@ -85,23 +84,16 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
       });
     }
 
-    const venueHistoryConcerts = await getVenueHistory(workspaceId, fullConcert.venue, id, { bandId: fullConcert.bandId });
-    const venueHistory = await Promise.all(
-      venueHistoryConcerts.map(async (c) => {
-        const inv = await getInvoiceForConcert(workspaceId, c.id);
-        return {
-          date: c.date, amount: c.amount, invoiceState: inv?.state || null,
-          daysToPay: inv && inv.state === "pagada" ? Math.max(0, daysBetween(inv.issueDate, inv.dueDate)) : null,
-        };
-      })
-    );
+    const clientHistoryConcerts = await getClientHistory(workspaceId, fullConcert.contact?.company || "", id, { bandId: fullConcert.bandId });
+    const clientHistory = clientHistoryConcerts.map((c) => ({
+      date: c.date, city: c.city || c.venue || "—", amount: c.amount, status: c.status, paid: c.paid,
+    }));
 
     return (
       <ConcertDetailView
         concert={fullConcert}
         band={band}
         bands={[band]}
-        invoice={invoice}
         companyInfo={companyInfo}
         clientDetails={clientDetails}
         contacts={contacts}
@@ -114,7 +106,7 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
         formations={formations}
         riderApprovals={riderApprovals}
         clashes={clashes}
-        venueHistory={venueHistory}
+        clientHistory={clientHistory}
         concertExpenses={concertExpenses}
         emailReady={emailConfigured()}
         photosByName={photosByName}

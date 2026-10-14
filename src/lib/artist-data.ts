@@ -225,6 +225,7 @@ export async function getArtistConcertsFull(clerkUserId: string, opts?: { months
     convocatoriaExcluded: r.convocatoria_excluded || {},
     formationId: r.formation_id || null,
     formationAssignments: r.formation_assignments || {},
+    clientInvoiceFileId: r.client_invoice_file_id || null,
     setlistHighlights: r.setlist_highlights || {},
     contact: normalizeContact(r.contact),
     routeSheet: r.route_sheet,
