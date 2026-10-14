@@ -36,7 +36,11 @@ function cachedStreetWays(lat: number, lon: number, radius: number): Promise<Way
 
 // Radi (en metres) de carrers que es demanen i es mostren al mini-mapa —
 // com més gran, més km² abraça (es dissol cap als marges, vegeu StreetMini).
-const STREET_RADIUS_M = 1400;
+const STREET_RADIUS_M = 1900;
+// Mateix criteri que ConcertPosterEditor per distingir avingudes/passeigs
+// dels carrers petits — les grans es dissolen més tard (arriben més lluny
+// abans d'apagar-se del tot), fent que el cercle no quedi perfecte.
+const isMajorWay = (w: { highway: string }) => /^(motorway|trunk|primary|secondary|pedestrian|living_street)/.test(w.highway);
 
 const SINGLE_REGION_KEYS = (Object.keys(MAP_REGIONS) as MapRegionKey[]).filter((k) => k !== "paisos_catalans" && k !== "espanya");
 
@@ -138,40 +142,63 @@ function StreetMini({ lat, lon, accent, size, ways }: { lat: number; lon: number
     function project(plon: number, plat: number): [number, number] {
       return [size / 2 + (plon - lon) * cosLat * scale, size / 2 - (plat - lat) * scale];
     }
-    const path = new Path2D();
-    ways.forEach((w) => {
-      w.pts.forEach(([plon, plat], i) => {
-        const [x, y] = project(plon, plat);
-        if (i === 0) path.moveTo(x, y); else path.lineTo(x, y);
+    function pathFor(list: Way[]): Path2D {
+      const p = new Path2D();
+      list.forEach((w) => {
+        w.pts.forEach(([plon, plat], i) => {
+          const [x, y] = project(plon, plat);
+          if (i === 0) p.moveTo(x, y); else p.lineTo(x, y);
+        });
       });
-    });
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    ctx.strokeStyle = "rgba(6,5,14,0.45)";
-    ctx.lineWidth = 1.3;
-    ctx.stroke(path);
-    ctx.strokeStyle = accent;
-    ctx.lineWidth = 0.6;
-    ctx.shadowColor = accent;
-    ctx.shadowBlur = 1.3;
-    ctx.stroke(path);
-    ctx.shadowBlur = 0;
+      return p;
+    }
+    function drawLayer(path: Path2D): HTMLCanvasElement {
+      const c = document.createElement("canvas");
+      c.width = size * dpr; c.height = size * dpr;
+      const lctx = c.getContext("2d");
+      if (lctx) {
+        lctx.scale(dpr, dpr);
+        lctx.lineCap = "round";
+        lctx.lineJoin = "round";
+        lctx.strokeStyle = "rgba(6,5,14,0.45)";
+        lctx.lineWidth = 1.3;
+        lctx.stroke(path);
+        lctx.strokeStyle = accent;
+        lctx.lineWidth = 0.6;
+        lctx.shadowColor = accent;
+        lctx.shadowBlur = 1.3;
+        lctx.stroke(path);
+      }
+      return c;
+    }
+    // Les avingudes i passeigs (mateix criteri que l'story d'Instagram) es
+    // dissolen en un radi més gran que els carrers petits — arriben més
+    // lluny abans d'apagar-se del tot — perquè la vora del mapa no quedi un
+    // cercle perfecte, sinó que en segueixi la forma real de la ciutat. Cada
+    // capa es dissol en el seu propi canvas (no sobre el principal), perquè
+    // la màscara d'una no torni a atenuar l'altra, ja fosa, que ja hi hagi.
+    function fadeLayer(img: HTMLCanvasElement, outerFrac: number): HTMLCanvasElement {
+      const lctx = img.getContext("2d");
+      if (!lctx) return img;
+      lctx.globalCompositeOperation = "destination-in";
+      const fade = lctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, (size / 2) * outerFrac);
+      fade.addColorStop(0, "rgba(255,255,255,1)");
+      fade.addColorStop(0.6, "rgba(255,255,255,0.85)");
+      fade.addColorStop(0.85, "rgba(255,255,255,0.4)");
+      fade.addColorStop(1, "rgba(255,255,255,0)");
+      lctx.fillStyle = fade;
+      lctx.fillRect(0, 0, size, size);
+      lctx.globalCompositeOperation = "source-over";
+      return img;
+    }
+    const minorImg = fadeLayer(drawLayer(pathFor(ways.filter((w) => !isMajorWay(w)))), 0.82);
+    const majorImg = fadeLayer(drawLayer(pathFor(ways.filter(isMajorWay))), 1.08);
+    ctx.drawImage(minorImg, 0, 0, size, size);
+    ctx.drawImage(majorImg, 0, 0, size, size);
     ctx.fillStyle = "#ffffff";
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, 3, 0, Math.PI * 2);
     ctx.fill();
-    // Es dissol cap als marges (en comptes de tallar-se en sec a una vora
-    // circular) perquè es pugui ampliar l'abast real del mapa (més km²)
-    // sense que es noti una vora dura.
-    ctx.globalCompositeOperation = "destination-in";
-    const fade = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-    fade.addColorStop(0, "rgba(255,255,255,1)");
-    fade.addColorStop(0.55, "rgba(255,255,255,0.85)");
-    fade.addColorStop(0.8, "rgba(255,255,255,0.4)");
-    fade.addColorStop(1, "rgba(255,255,255,0)");
-    ctx.fillStyle = fade;
-    ctx.fillRect(0, 0, size, size);
-    ctx.globalCompositeOperation = "source-over";
   }, [ways, lat, lon, accent, size]);
   if (!ways.length) return null;
   return <canvas ref={ref} style={{ width: size, height: size, display: "block" }} />;
