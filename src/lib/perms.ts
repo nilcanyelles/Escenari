@@ -14,6 +14,7 @@ export const DEFAULT_PERMS: MemberPerms = {
   removeMembers: false,
   perms: false,
   admin: false,
+  contacts: false,
 };
 
 // Tot permès — el gestor del workspace, i qualsevol membre marcat "Admin".
@@ -27,6 +28,7 @@ export const ALL_PERMS: MemberPerms = {
   removeMembers: true,
   perms: true,
   admin: true,
+  contacts: true,
 };
 
 export const PERM_LABELS: { key: keyof MemberPerms; label: string }[] = [
@@ -37,6 +39,7 @@ export const PERM_LABELS: { key: keyof MemberPerms; label: string }[] = [
   { key: "removeMembers", label: "Treure gent" },
   { key: "events", label: "Editar esdeveniments" },
   { key: "seeAllEvents", label: "Veure tots els esdeveniments" },
+  { key: "contacts", label: "Contactes" },
   { key: "perms", label: "Permisos" },
   { key: "admin", label: "Admin" },
 ];

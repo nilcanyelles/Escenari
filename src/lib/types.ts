@@ -5,6 +5,9 @@ export type MemberPerms = {
   songs: boolean; riders: boolean; setlists: boolean; members: boolean; events: boolean;
   seeAllEvents: boolean;
   removeMembers: boolean; perms: boolean; admin: boolean;
+  // Accedeix a la llista de contactes de l'agència (full de ruta, informació
+  // general del bolo, pàgina pròpia de Contactes) — vegeu memberPerms.
+  contacts: boolean;
 };
 
 export type Person = { name: string; role: string; phone?: string; whatsapp?: string; email?: string; instruments?: string[]; perms?: Partial<MemberPerms> };

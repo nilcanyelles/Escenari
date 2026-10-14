@@ -1316,6 +1316,14 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "equip" && (<>
+      {can.contacts && (
+        <div className="panel" style={{ marginBottom: 16 }}>
+          <div className="panel-header-row">
+            <div className="panel-title">Contactes de l&apos;agència</div>
+            <Link href={`${base}/contactes`} className="btn-outline">Veure contactes</Link>
+          </div>
+        </div>
+      )}
       {/* Membres */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
