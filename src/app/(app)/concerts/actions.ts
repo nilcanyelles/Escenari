@@ -59,6 +59,19 @@ function revalidateAll() {
   revalidatePath("/artista");
 }
 
+// Com revalidateAll(), però sense "/concerts": per a accions molt clicades
+// des de la pròpia taula d'esdeveniments (canviar l'estat, marcar pagat) que
+// ja s'actualitzen a l'instant amb estat local — revalidar "/concerts" hi
+// força Next a refer la pàgina sencera tot sol (sense cap router.refresh()
+// explícit), desmuntant totes les files i saltant l'scroll amunt.
+function revalidateAllButConcerts() {
+  revalidatePath("/resum");
+  revalidatePath("/calendari");
+  revalidatePath("/base-de-dades");
+  revalidatePath("/grups");
+  revalidatePath("/artista");
+}
+
 // Sense caràcters ambigus (0/O, 1/I/L).
 const CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
 function generateJoinCode(): string {
@@ -505,13 +518,13 @@ export async function setConcertStatusAction(id: string, status: string) {
   // crear-ne un o eliminar-lo.
   const { workspaceId } = await requireConcertAccess(id, "events");
   await db().query("update concerts set status=$1 where id=$2 and workspace_id=$3", [status, id, workspaceId]);
-  revalidateAll();
+  revalidateAllButConcerts();
 }
 
 export async function setConcertPaidAction(id: string, paid: boolean) {
   const { workspaceId } = await requireConcertAccess(id, "admin");
   await db().query("update concerts set paid=$1 where id=$2 and workspace_id=$3", [paid, id, workspaceId]);
-  revalidateAll();
+  revalidateAllButConcerts();
 }
 
 export async function deleteConcertAction(id: string) {

@@ -320,7 +320,8 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
 // refer-se) — això és el que feia que el canvi trigués a veure's.
 function GigAttendance({
   concertId, isMgr, myName, myExcluded, serverAns, km, attTotal, attYes, attNo,
-  tooltipContent, onShowTooltip, onHideTooltip,
+  attYesNames, attNoPlainNames, attNoSubNames, attPendingNames, attSubs,
+  onShowTooltip, onHideTooltip,
 }: {
   concertId: string;
   isMgr: boolean;
@@ -331,12 +332,18 @@ function GigAttendance({
   attTotal: number;
   attYes: number;
   attNo: number;
-  tooltipContent: React.ReactNode;
+  attYesNames: string[];
+  attNoPlainNames: string[];
+  attNoSubNames: string[];
+  attPendingNames: string[];
+  attSubs: Record<string, string>;
   onShowTooltip: (rect: DOMRect, content: React.ReactNode) => void;
   onHideTooltip: () => void;
 }) {
   const [override, setOverride] = useState<"yes" | "no" | null | undefined>(undefined);
   const [editing, setEditing] = useState(false);
+  const [hovering, setHovering] = useState(false);
+  const barRef = useRef<HTMLDivElement | null>(null);
   const myAns = override !== undefined ? override : serverAns;
 
   // Si aquesta peça desapareix (p. ex. la llista es torna a ordenar/filtrar
@@ -358,6 +365,55 @@ function GigAttendance({
   const attYesPct = attTotal ? (adjYes / attTotal) * 100 : 0;
   const attNoPct = attTotal ? (adjNo / attTotal) * 100 : 0;
 
+  // La llista de noms del tooltip, també ajustada amb la teva pròpia
+  // resposta nova — així, si el tornes a obrir (o ja l'estaves passant per
+  // sobre quan has triat), es veu a l'instant a on apareixes tu, sense
+  // esperar el proper refresc del servidor.
+  let tipYes = attYesNames, tipNoPlain = attNoPlainNames, tipNoSub = attNoSubNames, tipPending = attPendingNames;
+  if (override !== undefined && override !== serverAns && myName) {
+    tipYes = tipYes.filter((n) => n !== myName);
+    tipNoPlain = tipNoPlain.filter((n) => n !== myName);
+    tipNoSub = tipNoSub.filter((n) => n !== myName);
+    tipPending = tipPending.filter((n) => n !== myName);
+    if (override === "yes") tipYes = [...tipYes, myName];
+    else if (override === "no") { if (attSubs[myName]) tipNoSub = [...tipNoSub, myName]; else tipNoPlain = [...tipNoPlain, myName]; }
+    else tipPending = [...tipPending, myName];
+  }
+  function tooltipContent() {
+    return (
+      <>
+        <div className="cc-att-tooltip-title">Assistència:</div>
+        <div className="cc-att-tooltip-list">
+          {tipYes.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
+          {tipNoPlain.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
+          {tipNoSub.map((n) => (
+            <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
+              ✕ {n} → {attSubs[n]}
+            </span>
+          ))}
+          {tipPending.map((n) => (
+            <span key={n} className="cd-att-bubble pending">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
+                <path d="M5 22h14"></path><path d="M5 2h14"></path>
+                <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
+                <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
+              </svg>
+              {n}
+            </span>
+          ))}
+        </div>
+      </>
+    );
+  }
+  // Si el tooltip ja era obert (o acabes de confirmar amb el cursor
+  // encara a sobre), el torna a mostrar amb el contingut ja actualitzat en
+  // comptes d'esperar un nou "mouseenter" (que no sempre arriba si el
+  // cursor no es mou, p. ex. en clicar Hi seré/No hi seré).
+  useEffect(() => {
+    if (hovering && barRef.current) onShowTooltip(barRef.current.getBoundingClientRect(), tooltipContent());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hovering, override, serverAns]);
+
   if (isMgr || !myName) {
     return <span className="badge" style={{ marginLeft: "auto", background: km.bg, color: km.color }}>{km.label}</span>;
   }
@@ -374,6 +430,7 @@ function GigAttendance({
             const next = myAns === "yes" ? null : "yes";
             setOverride(next);
             setEditing(false);
+            setHovering(true);
             setMyAttendanceAction(concertId, next);
           }}
         >
@@ -386,6 +443,7 @@ function GigAttendance({
             const next = myAns === "no" ? null : "no";
             setOverride(next);
             setEditing(false);
+            setHovering(true);
             setMyAttendanceAction(concertId, next);
           }}
         >
@@ -396,10 +454,11 @@ function GigAttendance({
   }
   return (
     <div
+      ref={barRef}
       className="cc-att bento-gig-att" style={{ cursor: "pointer" }} title="Toca per canviar la teva resposta"
-      onClick={(e) => { e.stopPropagation(); onHideTooltip(); setEditing(true); }}
-      onMouseEnter={(e) => onShowTooltip(e.currentTarget.getBoundingClientRect(), tooltipContent)}
-      onMouseLeave={onHideTooltip}
+      onClick={(e) => { e.stopPropagation(); setHovering(false); onHideTooltip(); setEditing(true); }}
+      onMouseEnter={(e) => { setHovering(true); onShowTooltip(e.currentTarget.getBoundingClientRect(), tooltipContent()); }}
+      onMouseLeave={() => { setHovering(false); onHideTooltip(); }}
     >
       <div className="cc-att-track">
         <div className="cc-att-fill" style={{ width: attYesPct + "%", background: "oklch(0.72 0.15 155)" }}></div>
@@ -920,30 +979,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <GigAttendance
           concertId={c.id} isMgr={isMgr} myName={myName} myExcluded={myExcluded} serverAns={myAns} km={km}
           attTotal={attTotal} attYes={attYes} attNo={attNoNames.length}
-          tooltipContent={
-            <>
-              <div className="cc-att-tooltip-title">Assistència:</div>
-              <div className="cc-att-tooltip-list">
-                {attYesNames.map((n) => <span key={n} className="cd-att-bubble yes">✓ {n}</span>)}
-                {attNoPlainNames.map((n) => <span key={n} className="cd-att-bubble no">✕ {n}</span>)}
-                {attNoSubNames.map((n) => (
-                  <span key={n} className="cd-att-bubble" style={{ background: "oklch(0.7 0.14 230 / 0.16)", color: "oklch(0.76 0.13 230)" }}>
-                    ✕ {n} → {attSubs[n]}
-                  </span>
-                ))}
-                {attPendingNames.map((n) => (
-                  <span key={n} className="cd-att-bubble pending">
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" style={{ verticalAlign: "-1px", flex: "none" }}>
-                      <path d="M5 22h14"></path><path d="M5 2h14"></path>
-                      <path d="M17 22v-4.172a2 2 0 0 0-.586-1.414L12 12l-4.414 4.414A2 2 0 0 0 7 17.828V22"></path>
-                      <path d="M7 2v4.172a2 2 0 0 0 .586 1.414L12 12l4.414-4.414A2 2 0 0 0 17 6.172V2"></path>
-                    </svg>
-                    {n}
-                  </span>
-                ))}
-              </div>
-            </>
-          }
+          attYesNames={attYesNames} attNoPlainNames={attNoPlainNames} attNoSubNames={attNoSubNames} attPendingNames={attPendingNames} attSubs={attSubs}
           onShowTooltip={(rect, content) => setAttTooltip({ rect, content })}
           onHideTooltip={() => setAttTooltip(null)}
         />

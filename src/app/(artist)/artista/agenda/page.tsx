@@ -1,4 +1,5 @@
 import CalendariView from "@/components/CalendariView";
+import ArtistAgendaShareButton from "./ShareButton";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull, getFeedToken } from "@/lib/artist-data";
 import { getSelectedBandId } from "@/lib/band-scope";
@@ -44,16 +45,19 @@ export default async function ArtistAgendaPage() {
   const allowBoloSomewhere = eligible.some((b) => permsFor(b).admin);
 
   return (
-    <CalendariView
-      bands={bands}
-      concerts={scoped}
-      selectedBandId={bandId}
-      icsToken={feedToken}
-      canCreate={canCreateSomewhere}
-      allowBolo={allowBoloSomewhere}
-      detailBase="/artista/concerts"
-      unavailability={unavailability}
-      today={today()}
-    />
+    <div>
+      <ArtistAgendaShareButton bands={bands} concerts={scoped} today={today()} />
+      <CalendariView
+        bands={bands}
+        concerts={scoped}
+        selectedBandId={bandId}
+        icsToken={feedToken}
+        canCreate={canCreateSomewhere}
+        allowBolo={allowBoloSomewhere}
+        detailBase="/artista/concerts"
+        unavailability={unavailability}
+        today={today()}
+      />
+    </div>
   );
 }

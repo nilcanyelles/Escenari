@@ -18,6 +18,19 @@ function revalidateArtist() {
   revalidatePath("/grups");
 }
 
+// Com revalidateArtist(), però sense "/concerts": confirmar la teva pròpia
+// assistència des de la taula d'esdeveniments ja s'actualitza a l'instant
+// amb estat local — revalidar "/concerts" fa que Next refaci la pàgina tot
+// sol (sense cap router.refresh() explícit), desmuntant la fila on encara
+// hi podies estar editant la resposta i saltant l'scroll amunt.
+function revalidateArtistButConcerts() {
+  revalidatePath("/artista");
+  revalidatePath("/els-meus-grups");
+  revalidatePath("/resum");
+  revalidatePath("/calendari");
+  revalidatePath("/grups");
+}
+
 // Alta d'un artista en un grup: fila a band_members + entrada al jsonb de
 // members (o crew) del grup. Si `claimName` coincideix amb un membre creat a
 // mà, la persona el "reclama": mateixa identitat, mateix historial.
@@ -252,7 +265,7 @@ export async function setMyAttendanceAction(concertId: string, value: "yes" | "n
       [membership.member_name, concertId, value]
     );
   }
-  revalidateArtist();
+  revalidateArtistButConcerts();
 }
 
 // L'artista que no pot venir proposa un suplent de la llista del grup.
