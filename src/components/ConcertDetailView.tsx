@@ -1746,10 +1746,10 @@ export default function ConcertDetailView({
         )}
 
         {formations.length > 0 && (
-          <div className="cd-formation-picker">
+          <div className="cd-formation-picker" style={{ marginTop: 28 }}>
+            <div className="panel-title" style={{ marginBottom: 12 }}>Formació</div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
               <div className="cd-field" style={{ maxWidth: 280 }}>
-                <label className="form-label">Formació</label>
                 <select
                   className="field-input form-field"
                   value={formationId || ""}
