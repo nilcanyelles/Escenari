@@ -1756,11 +1756,11 @@ export default function ConcertDetailView({
 
         {formations.length > 0 && (
           <div className="cd-formation-picker">
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-              <div>
-                <label className="form-label" style={{ marginBottom: 6 }}>Formació</label>
+            <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
+              <div className="cd-field" style={{ maxWidth: 280 }}>
+                <label className="form-label">Formació</label>
                 <select
-                  className="field-input compact-field" style={{ maxWidth: 280 }}
+                  className="field-input form-field"
                   value={formationId || ""}
                   onChange={(e) => setFormation(e.target.value || null)}
                 >
