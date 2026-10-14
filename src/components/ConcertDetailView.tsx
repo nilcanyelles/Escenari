@@ -461,6 +461,79 @@ function agencyDefaultSplit(otherNames: string[], pool: number, agencyBasis: num
   return out;
 }
 
+// Desplegable propi (no un <select> natiu) perquè el menú surti sempre just
+// a sota de la casella i amb la seva mateixa amplada — el navegador decideix
+// això tot sol en un <select> natiu i no es pot forçar amb CSS.
+function FormationSelect({ value, formations, onChange }: { value: string; formations: Formation[]; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+  const current = formations.find((f) => f.id === value);
+  return (
+    <div ref={ref} className="cd-dropdown">
+      <button type="button" className="field-input form-field cd-dropdown-trigger" onClick={() => setOpen((v) => !v)}>
+        <span>{current ? (current.preferred ? "★ " : "") + current.name : "Sense formació (convocatòria lliure)"}</span>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+      </button>
+      {open && (
+        <div className="cd-dropdown-menu">
+          <button type="button" className="cd-dropdown-item" onClick={() => { onChange(""); setOpen(false); }}>Sense formació (convocatòria lliure)</button>
+          {formations.map((f) => (
+            <button key={f.id} type="button" className="cd-dropdown-item" onClick={() => { onChange(f.id); setOpen(false); }}>
+              {f.preferred ? "★ " : ""}{f.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Mateixa idea per a la casella de suplent: escriure hi filtra la llista de
+// confiança del grup, i la tria surt sempre a sota, amb l'amplada de la
+// casella — no el "datalist" natiu, que cada navegador el posiciona com vol.
+function BackupSuggestInput({ value, backups, placeholder, onCommit }: { value: string; backups: { name: string }[]; placeholder: string; onCommit: (v: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(value);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => setText(value), [value]);
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); }
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, []);
+  const filtered = backups.filter((b) => normalize(b.name).includes(normalize(text)));
+  return (
+    <div ref={ref} className="cd-dropdown">
+      <input
+        className="cd-formation-slot-input"
+        value={text} placeholder={placeholder}
+        onFocus={() => setOpen(true)}
+        onClick={(e) => { e.stopPropagation(); setOpen(true); }}
+        onChange={(e) => { setText(e.target.value); setOpen(true); }}
+        onBlur={() => { onCommit(text.trim()); setOpen(false); }}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+      />
+      {open && filtered.length > 0 && (
+        <div className="cd-dropdown-menu">
+          {filtered.map((b) => (
+            <button
+              key={b.name} type="button" className="cd-dropdown-item"
+              onMouseDown={(e) => { e.preventDefault(); setText(b.name); onCommit(b.name); setOpen(false); }}
+            >
+              {b.name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function ConcertDetailView({
   concert, band, bands, invoice, companyInfo, clientDetails, contacts = [], linkedMembers, unavailByMember = {}, shareLinks, backupRequests, riders, setlists, formations = [], riderApprovals, clashes, venueHistory, concertExpenses: expenseList, emailReady, photosByName = {}, today, managerName,
   billing, activeLinks, canUpgrade = true, base = "",
@@ -518,9 +591,6 @@ export default function ConcertDetailView({
   // FormationAssignment, dins la pestanya Convocatòria.
   const [formationId, setFormationId] = useState<string | null>(concert.formationId || null);
   const [formationAssignments, setFormationAssignments] = useState<Record<string, string>>({ ...(concert.formationAssignments || {}) });
-  // Text que s'està escrivint a la casella de suplent d'una plaça buida,
-  // abans de confirmar-lo (en sortir del camp) — no es desa cada tecla.
-  const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({});
   // Contacte principal d'aquest concert (organitzador/promotor).
   const [contact, setContact] = useState<Concert["contact"]>({ ...(concert.contact || { email: "", name: "", phone: "", company: "" }) });
   // Còpia en directe del full de ruta (el manté RouteSheetEditor, aquí només
@@ -1749,15 +1819,8 @@ export default function ConcertDetailView({
           <div className="cd-formation-picker" style={{ marginTop: 28 }}>
             <div className="panel-title" style={{ marginBottom: 12 }}>Formació</div>
             <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
-              <div className="cd-field" style={{ maxWidth: 280 }}>
-                <select
-                  className="field-input form-field"
-                  value={formationId || ""}
-                  onChange={(e) => setFormation(e.target.value || null)}
-                >
-                  <option value="">Sense formació (convocatòria lliure)</option>
-                  {formations.map((f) => <option key={f.id} value={f.id}>{f.preferred ? "★ " : ""}{f.name}</option>)}
-                </select>
+              <div className="cd-field" style={{ maxWidth: 280, width: "100%" }}>
+                <FormationSelect value={formationId || ""} formations={formations} onChange={(id) => setFormation(id || null)} />
               </div>
               <button
                 type="button" className="btn-outline" style={{ alignSelf: "flex-end" }}
@@ -1792,18 +1855,9 @@ export default function ConcertDetailView({
                                 <button type="button" className="cd-formation-slot-clear" title="Buida la plaça" onClick={(e) => { e.stopPropagation(); setSlotSubstitute(s.id, ""); }}>✕</button>
                               </>
                             ) : (
-                              <input
-                                className="cd-formation-slot-input"
-                                type="text" list="cd-backups-list" placeholder="Assigna un suplent…"
-                                value={slotDrafts[s.id] ?? ""}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => setSlotDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                                onBlur={() => {
-                                  const v = (slotDrafts[s.id] || "").trim();
-                                  if (v) setSlotSubstitute(s.id, v);
-                                  setSlotDrafts((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
-                                }}
-                                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                              <BackupSuggestInput
+                                value="" backups={backups} placeholder="Assigna un suplent…"
+                                onCommit={(v) => { if (v) setSlotSubstitute(s.id, v); }}
                               />
                             )}
                           </div>
