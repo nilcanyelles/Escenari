@@ -998,32 +998,42 @@ export default function ConcertDetailView({
     schedulePersist(cf, attendance, substitutes, noSubstitute, excl);
   }
 
-  // Un cop triada una formació, la convocatòria passa a "encaixar músics a
-  // la formació": només hi queden convocats els assignats a algun dels seus
-  // slots — la resta del grup s'exclou automàticament d'aquest bolo (es pot
-  // tornar a convocar lliurement en treure la formació).
-  function syncExcludedForFormation(assign: Record<string, string>): Record<string, boolean> {
-    const assignedNames = new Set(Object.values(assign).filter(Boolean).map((n) => normalize(n)));
-    const next: Record<string, boolean> = {};
-    members.forEach((m) => { if (!assignedNames.has(normalize(m.name))) next[m.name] = true; });
+  // Un cop triada una formació, cada slot s'omple sol amb qui ja ha
+  // confirmat assistència ("Sí") i toca aquell instrument — mai cal triar
+  // músics a mà: canviar qui ha confirmat ja mou l'assignació. Si dues
+  // persones confirmades toquen el mateix instrument, s'assigna la primera
+  // (per ordre de la llista de membres) i la resta queden sense slot.
+  function autoAssignFormation(f: Formation, att: typeof attendance): Record<string, string> {
+    const used = new Set<string>();
+    const next: Record<string, string> = {};
+    f.slots.forEach((s) => {
+      const person = members.find((m) =>
+        att[m.name] === "yes" && !used.has(normalize(m.name)) && instrumentsFor(m).some((i) => i.toLowerCase() === s.instrument.toLowerCase())
+      );
+      if (person) { next[s.id] = person.name; used.add(normalize(person.name)); }
+    });
     return next;
   }
   function setFormation(id: string | null) {
     setFormationId(id);
-    const nextAssign: Record<string, string> = id ? formationAssignments : {};
-    if (!id) setFormationAssignments({});
-    const excl = id ? syncExcludedForFormation(nextAssign) : convocatoriaExcluded;
-    if (id) setConvocatoriaExcluded(excl);
-    schedulePersist(cf, attendance, substitutes, noSubstitute, excl, contact, substituteConfirmed, id, nextAssign);
+    const f = id ? formations.find((x) => x.id === id) : null;
+    const nextAssign = f ? autoAssignFormation(f, attendance) : {};
+    setFormationAssignments(nextAssign);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, id, nextAssign);
   }
-  function setFormationAssignment(slotId: string, name: string) {
-    const next = { ...formationAssignments };
-    if (name) next[slotId] = name; else delete next[slotId];
+  // Recalcula l'assignació automàticament cada cop que canvia qui ha
+  // confirmat — sense això, només es refaria en triar la formació i es
+  // quedaria desactualitzada si algú confirma després.
+  useEffect(() => {
+    if (!formationId) return;
+    const f = formations.find((x) => x.id === formationId);
+    if (!f) return;
+    const next = autoAssignFormation(f, attendance);
+    if (JSON.stringify(next) === JSON.stringify(formationAssignments)) return;
     setFormationAssignments(next);
-    const excl = syncExcludedForFormation(next);
-    setConvocatoriaExcluded(excl);
-    schedulePersist(cf, attendance, substitutes, noSubstitute, excl, contact, substituteConfirmed, formationId, next);
-  }
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attendance, formationId, formations]);
 
   function setContactField(field: keyof Concert["contact"], v: string) {
     const next = { ...contact, [field]: v };
@@ -1612,19 +1622,13 @@ export default function ConcertDetailView({
               if (!f) return null;
               return (
                 <div className="cd-formation-slots">
+                  <div className="t-dim" style={{ fontSize: 11.5, marginBottom: 2 }}>S&apos;omple sol amb qui ja ha confirmat &quot;Sí&quot; i toca cada instrument.</div>
                   {f.slots.map((s) => {
-                    const candidates = members.filter((m) => instrumentsFor(m).some((i) => i.toLowerCase() === s.instrument.toLowerCase()));
+                    const who = formationAssignments[s.id];
                     return (
                       <div key={s.id} className="cd-formation-slot-row">
                         <span className="t-dim" style={{ fontSize: 12.5, minWidth: 130 }}>{s.instrument}</span>
-                        <select
-                          className="field-input compact-field"
-                          value={formationAssignments[s.id] || ""}
-                          onChange={(e) => setFormationAssignment(s.id, e.target.value)}
-                        >
-                          <option value="">— Tria algú —</option>
-                          {candidates.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                        </select>
+                        <span style={who ? undefined : { color: "var(--text-fainter)" }}>{who || "— ningú confirmat encara —"}</span>
                       </div>
                     );
                   })}
