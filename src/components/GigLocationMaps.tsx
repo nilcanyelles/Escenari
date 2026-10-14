@@ -36,7 +36,7 @@ function cachedStreetWays(lat: number, lon: number, radius: number): Promise<Way
 
 // Radi (en metres) de carrers que es demanen i es mostren al mini-mapa —
 // com més gran, més km² abraça (es dissol cap als marges, vegeu StreetMini).
-const STREET_RADIUS_M = 1900;
+const STREET_RADIUS_M = 350;
 // Mateix criteri que ConcertPosterEditor per distingir avingudes/passeigs
 // dels carrers petits — les grans es dissolen més tard (arriben més lluny
 // abans d'apagar-se del tot), fent que el cercle no quedi perfecte.
