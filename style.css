@@ -6054,6 +6054,13 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 /* ============ Pòster del concert (capçalera de la fitxa) ============ */
 .cd-poster {
   position: relative;
+  /* Context d'apilament propi i permanent — sense això, el z-index negatiu
+     dels mini-mapes de ubicació només quedava contingut darrere del text
+     MENTRE durava l'animació d'entrada (bentoNextPosterIn, que aplica
+     transform), i en acabar-se (transform tornant al valor base, sense
+     animation-fill-mode) s'escapava a l'apilament del pare i desapareixia
+     darrere d'altres elements. */
+  z-index: 0;
   border-radius: 22px;
   border: 1px solid var(--border-soft);
   background:
