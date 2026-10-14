@@ -6,6 +6,8 @@ import Link from "next/link";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact, Formation } from "@/lib/types";
 import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, pad2, formatConcertTime, formatConcertTimePhrase } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
+import { instrumentIconKey } from "@/lib/instruments";
+import { InstrumentIcon } from "@/components/InstrumentPicker";
 import { rsCompletionPercent, withLiveAddress, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
 import { normalize } from "@/lib/text";
 import type { LinkedMember, BackupRequest } from "@/lib/group-data";
@@ -519,6 +521,10 @@ export default function ConcertDetailView({
   // Text que s'està escrivint a la casella de suplent d'una plaça buida,
   // abans de confirmar-lo (en sortir del camp) — no es desa cada tecla.
   const [slotDrafts, setSlotDrafts] = useState<Record<string, string>>({});
+  // Assignació automàtica (activable amb el botó del costat del desplegable
+  // de formació): mentre estigui activada, qui confirma assistència es
+  // col·loca sol a la plaça del seu instrument.
+  const [autoAssign, setAutoAssign] = useState(false);
   // Contacte principal d'aquest concert (organitzador/promotor).
   const [contact, setContact] = useState<Concert["contact"]>({ ...(concert.contact || { email: "", name: "", phone: "", company: "" }) });
   // Còpia en directe del full de ruta (el manté RouteSheetEditor, aquí només
@@ -1013,11 +1019,28 @@ export default function ConcertDetailView({
 
   // Triar una formació nova sempre comença sense ningú assignat — qui toca
   // cada plaça es tria a mà, clicant l'instrument il·luminat a la llista de
-  // músics de sota (vegeu assignSlot).
+  // músics de sota (vegeu assignSlot), llevat que l'assignació automàtica
+  // estigui activada (vegeu autoAssign més avall).
   function setFormation(id: string | null) {
     setFormationId(id);
-    setFormationAssignments({});
-    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, id, {});
+    const f = id ? formations.find((x) => x.id === id) : null;
+    const next = autoAssign && f ? autoAssignFormation(f, attendance) : {};
+    setFormationAssignments(next);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, id, next);
+  }
+  // Omple cada plaça amb qui ja ha confirmat ("Sí") i toca aquell
+  // instrument — si dues persones confirmades el toquen, la primera (per
+  // ordre de la llista) se'n queda la plaça i la resta en queden fora.
+  function autoAssignFormation(f: Formation, att: typeof attendance): Record<string, string> {
+    const used = new Set<string>();
+    const next: Record<string, string> = {};
+    f.slots.forEach((s) => {
+      const person = members.find((m) =>
+        att[m.name] === "yes" && !used.has(normalize(m.name)) && instrumentsFor(m).some((i) => i.toLowerCase() === s.instrument.toLowerCase())
+      );
+      if (person) { next[s.id] = person.name; used.add(normalize(person.name)); }
+    });
+    return next;
   }
   // Clicar l'instrument il·luminat d'un músic l'assigna a la primera plaça
   // lliure d'aquell instrument (traient-lo abans de qualsevol altra plaça
@@ -1044,6 +1067,19 @@ export default function ConcertDetailView({
     setFormationAssignments(next);
     schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, next);
   }
+  // Amb l'assignació automàtica activada, recalcula cada cop que canvia qui
+  // ha confirmat — així no cal tornar a prémer el botó si algú confirma
+  // més tard.
+  useEffect(() => {
+    if (!autoAssign || !formationId) return;
+    const f = formations.find((x) => x.id === formationId);
+    if (!f) return;
+    const next = autoAssignFormation(f, attendance);
+    if (JSON.stringify(next) === JSON.stringify(formationAssignments)) return;
+    setFormationAssignments(next);
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoAssign, attendance, formationId, formations]);
 
   function setContactField(field: keyof Concert["contact"], v: string) {
     const next = { ...contact, [field]: v };
@@ -1618,61 +1654,6 @@ export default function ConcertDetailView({
             </div>
           </div>
         </div>
-        {formations.length > 0 && (
-          <div className="cd-formation-picker">
-            <label className="form-label" style={{ marginBottom: 6 }}>Formació</label>
-            <select
-              className="field-input compact-field" style={{ maxWidth: 280 }}
-              value={formationId || ""}
-              onChange={(e) => setFormation(e.target.value || null)}
-            >
-              <option value="">Sense formació (convocatòria lliure)</option>
-              {formations.map((f) => <option key={f.id} value={f.id}>{f.preferred ? "★ " : ""}{f.name}</option>)}
-            </select>
-            {formationId && (() => {
-              const f = formations.find((x) => x.id === formationId);
-              if (!f) return null;
-              return (
-                <>
-                  <div className="t-dim" style={{ fontSize: 11.5, margin: "6px 0 10px" }}>Clica l&apos;instrument il·luminat d&apos;un músic per assignar-lo a una plaça — si no hi ha prou confirmats, escriu-hi un suplent directament.</div>
-                  <div className="cd-formation-slots-row">
-                    {f.slots.map((s) => {
-                      const assignedName = formationAssignments[s.id];
-                      return (
-                        <div key={s.id} className="cd-formation-slot-card">
-                          <div className={"cd-formation-slot-namebox" + (assignedName ? "" : " empty")}>
-                            {assignedName ? (
-                              <>
-                                <img className="member-photo" src={photosByName[normalize(assignedName)] ? `/api/file/${photosByName[normalize(assignedName)]}` : personPhotoDataUri(assignedName)} alt="" />
-                                <span>{assignedName}</span>
-                                <button type="button" className="cd-formation-slot-clear" title="Buida la plaça" onClick={(e) => { e.stopPropagation(); setSlotSubstitute(s.id, ""); }}>✕</button>
-                              </>
-                            ) : (
-                              <input
-                                className="cd-formation-slot-input"
-                                type="text" list="cd-backups-list" placeholder="Nom del suplent…"
-                                value={slotDrafts[s.id] ?? ""}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) => setSlotDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                                onBlur={() => {
-                                  const v = (slotDrafts[s.id] || "").trim();
-                                  if (v) setSlotSubstitute(s.id, v);
-                                  setSlotDrafts((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
-                                }}
-                                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
-                              />
-                            )}
-                          </div>
-                          <span className="cd-formation-slot-instrument">{s.instrument}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              );
-            })()}
-          </div>
-        )}
         {members.length === 0 ? (
           <div className="t-dim" style={{ fontSize: 13 }}>Aquest concert no té grup amb membres assignat.</div>
         ) : (
@@ -1697,7 +1678,7 @@ export default function ConcertDetailView({
                         const icon = instrumentIconFor(ins);
                         const isMine = !!activeFormation && activeFormation.slots.some((s) => s.instrument.toLowerCase() === ins.toLowerCase() && normalize(formationAssignments[s.id] || "") === normalize(m.name));
                         const hasOpen = !!activeFormation && activeFormation.slots.some((s) => s.instrument.toLowerCase() === ins.toLowerCase() && !formationAssignments[s.id]);
-                        const clickable = isMine || hasOpen;
+                        const clickable = !autoAssign && (isMine || hasOpen);
                         return (
                           <span
                             key={ins}
@@ -1770,6 +1751,90 @@ export default function ConcertDetailView({
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {formations.length > 0 && (
+          <div className="cd-formation-picker">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+              <div>
+                <label className="form-label" style={{ marginBottom: 6 }}>Formació</label>
+                <select
+                  className="field-input compact-field" style={{ maxWidth: 280 }}
+                  value={formationId || ""}
+                  onChange={(e) => setFormation(e.target.value || null)}
+                >
+                  <option value="">Sense formació (convocatòria lliure)</option>
+                  {formations.map((f) => <option key={f.id} value={f.id}>{f.preferred ? "★ " : ""}{f.name}</option>)}
+                </select>
+              </div>
+              <button
+                type="button" className={"btn-outline" + (autoAssign ? " active" : "")} style={{ alignSelf: "flex-end" }}
+                onClick={() => {
+                  const next = !autoAssign;
+                  setAutoAssign(next);
+                  const f = next && formationId ? formations.find((x) => x.id === formationId) : null;
+                  if (f) {
+                    const assign = autoAssignFormation(f, attendance);
+                    setFormationAssignments(assign);
+                    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, assign);
+                  }
+                }}
+              >
+                {autoAssign ? "✓ " : ""}Assignació automàtica
+              </button>
+            </div>
+            {formationId && (() => {
+              const f = formations.find((x) => x.id === formationId);
+              if (!f) return null;
+              return (
+                <>
+                  <div className="t-dim" style={{ fontSize: 11.5, margin: "6px 0 10px" }}>
+                    {autoAssign
+                      ? "Es col·loca sol qui confirma “Sí”, segons l'instrument que toca."
+                      : "Clica l'instrument il·luminat d'un músic per assignar-lo a una plaça — si no hi ha prou confirmats, escriu-hi un suplent directament."}
+                  </div>
+                  <div className="cd-formation-slots-row">
+                    {f.slots.map((s) => {
+                      const assignedName = formationAssignments[s.id];
+                      return (
+                        <div key={s.id} className="cd-formation-slot-card">
+                          <span className="cd-formation-slot-instrument">
+                            <InstrumentIcon name={s.instrument} icon={instrumentIconKey(s.instrument)} size={18} />
+                            {s.instrument}
+                          </span>
+                          <div className={"cd-formation-slot-namebox" + (assignedName ? "" : " empty")}>
+                            {assignedName ? (
+                              <>
+                                <img className="member-photo" src={photosByName[normalize(assignedName)] ? `/api/file/${photosByName[normalize(assignedName)]}` : personPhotoDataUri(assignedName)} alt="" />
+                                <span>{assignedName}</span>
+                                {!autoAssign && <button type="button" className="cd-formation-slot-clear" title="Buida la plaça" onClick={(e) => { e.stopPropagation(); setSlotSubstitute(s.id, ""); }}>✕</button>}
+                              </>
+                            ) : autoAssign ? (
+                              <span>Ningú confirmat encara</span>
+                            ) : (
+                              <input
+                                className="cd-formation-slot-input"
+                                type="text" list="cd-backups-list" placeholder="Nom del suplent…"
+                                value={slotDrafts[s.id] ?? ""}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => setSlotDrafts((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                                onBlur={() => {
+                                  const v = (slotDrafts[s.id] || "").trim();
+                                  if (v) setSlotSubstitute(s.id, v);
+                                  setSlotDrafts((prev) => { const n = { ...prev }; delete n[s.id]; return n; });
+                                }}
+                                onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
 
