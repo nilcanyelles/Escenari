@@ -1665,7 +1665,7 @@ export default function ConcertDetailView({
                       {linked && <VerifiedTick size={13} title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`} />}
                     </div>
                     <div className="member-instruments">
-                      {(activeFormation ? inss : inss.slice(0, 3)).map((ins) => {
+                      {inss.map((ins) => {
                         const icon = instrumentIconFor(ins);
                         const isMine = !!activeFormation && activeFormation.slots.some((s) => s.instrument.toLowerCase() === ins.toLowerCase() && normalize(formationAssignments[s.id] || "") === normalize(m.name));
                         const hasOpen = !!activeFormation && activeFormation.slots.some((s) => s.instrument.toLowerCase() === ins.toLowerCase() && !formationAssignments[s.id]);
