@@ -1619,24 +1619,9 @@ export default function ConcertDetailView({
               <option value="">Sense formació (convocatòria lliure)</option>
               {formations.map((f) => <option key={f.id} value={f.id}>{f.preferred ? "★ " : ""}{f.name}</option>)}
             </select>
-            {formationId && (() => {
-              const f = formations.find((x) => x.id === formationId);
-              if (!f) return null;
-              return (
-                <div className="cd-formation-slots">
-                  <div className="t-dim" style={{ fontSize: 11.5, marginBottom: 2 }}>S&apos;omple sol amb qui ja ha confirmat &quot;Sí&quot; i toca cada instrument.</div>
-                  {f.slots.map((s) => {
-                    const who = formationAssignments[s.id];
-                    return (
-                      <div key={s.id} className="cd-formation-slot-row">
-                        <span className="t-dim" style={{ fontSize: 12.5, minWidth: 130 }}>{s.instrument}</span>
-                        <span style={who ? undefined : { color: "var(--text-fainter)" }}>{who || "— ningú confirmat encara —"}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })()}
+            {formationId && (
+              <div className="t-dim" style={{ fontSize: 11.5, marginTop: 6 }}>S&apos;assigna sol a qui ja ha confirmat &quot;Sí&quot; i toca cada instrument — vegeu-ho a sota, a la llista.</div>
+            )}
           </div>
         )}
         {members.length === 0 ? (
@@ -1647,7 +1632,12 @@ export default function ConcertDetailView({
               const linked = linkedByName[m.name];
               const att = attendance[m.name];
               const req = requestByMember[m.name];
-              const inss = instrumentsFor(m);
+              // Si hi ha una formació triada i aquesta persona hi té una
+              // posició assignada, només es mostra l'instrument que tocarà
+              // en aquest bolo concret (no la seva llista sencera).
+              const activeFormation = formationId ? formations.find((f) => f.id === formationId) : null;
+              const mySlot = activeFormation?.slots.find((s) => normalize(formationAssignments[s.id] || "") === normalize(m.name));
+              const inss = mySlot ? [mySlot.instrument] : instrumentsFor(m);
               const excluded = !!convocatoriaExcluded[m.name];
               return (
                 <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
