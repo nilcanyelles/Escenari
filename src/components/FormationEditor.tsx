@@ -108,7 +108,7 @@ export default function FormationEditor({ band, formation, onClose }: { band: Ba
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal wide formation-editor-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="modal formation-editor-panel" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <input
             className="field-input compact-field" style={{ fontWeight: 700, fontSize: 16, flex: 1 }}
