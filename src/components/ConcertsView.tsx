@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import Dropdown from "@/components/Dropdown";
 import { useRouter, usePathname } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
 import { formatDate, statusColors, isConcertOver, formatCurrency } from "@/lib/format";
@@ -517,17 +518,17 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
       <div className="glow-blooms" aria-hidden="true"></div>
       <div className="filter-bar concerts-filterbar">
         <input className="input search" type="text" placeholder="Cercar grup, sala, ciutat…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+        <Dropdown className="input" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
           <option value="tots">Tots els estats</option>
           <option value="confirmat">Confirmat</option>
           <option value="reservat">Reservat</option>
           <option value="pendent">Pendent</option>
           <option value="cancel·lat">Cancel·lat</option>
-        </select>
-        <select className="input" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
+        </Dropdown>
+        <Dropdown className="input" value={tagFilter} onChange={(e) => setTagFilter(e.target.value)}>
           <option value="tots">Totes les etiquetes</option>
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+        </Dropdown>
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
         {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />}
       </div>

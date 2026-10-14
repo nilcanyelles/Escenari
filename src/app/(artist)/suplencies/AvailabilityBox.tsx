@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { setSubsAvailabilityAction, setSubsPrefsAction } from "../actions";
 import InstrumentPicker from "@/components/InstrumentPicker";
+import Dropdown from "@/components/Dropdown";
 
 export type SubsPrefs = { maxKm: number; homeCity: string; anyInstrument: boolean; instruments: string[] };
 const KM_OPTIONS = [0, 25, 50, 100, 150, 250];
@@ -66,9 +67,9 @@ export default function AvailabilityBox({ open, visible, prefs: initialPrefs, pr
           <div className="subs-prefs-row">
             <label className="subs-prefs-field">
               <span className="form-label">Distància màxima</span>
-              <select className="field-input compact-field" value={prefs.maxKm} onChange={(e) => setPrefs({ ...prefs, maxKm: parseInt(e.target.value, 10) || 0 })}>
-                {KM_OPTIONS.map((k) => <option key={k} value={k}>{k === 0 ? "Qualsevol distància" : `Fins a ${k} km`}</option>)}
-              </select>
+              <Dropdown className="field-input compact-field" value={String(prefs.maxKm)} onChange={(e) => setPrefs({ ...prefs, maxKm: parseInt(e.target.value, 10) || 0 })}>
+                {KM_OPTIONS.map((k) => <option key={k} value={String(k)}>{k === 0 ? "Qualsevol distància" : `Fins a ${k} km`}</option>)}
+              </Dropdown>
             </label>
             <label className="subs-prefs-field">
               <span className="form-label">Des d&apos;on (la teva població)</span>

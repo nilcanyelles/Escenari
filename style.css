@@ -2416,6 +2416,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   font-size: 14px; color: var(--text); cursor: pointer;
 }
 .cd-dropdown-item:hover { background: var(--bg-card-2); }
+.cd-dropdown-item.active { color: var(--accent-text); font-weight: 600; }
+.cd-dropdown-item:disabled { opacity: 0.4; cursor: default; }
+.cd-dropdown-trigger:disabled { opacity: 0.55; cursor: default; }
 .cd-attendance-list { display: flex; flex-direction: column; gap: 8px; }
 .cd-att-row {
   display: flex;

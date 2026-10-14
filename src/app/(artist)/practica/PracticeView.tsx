@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PracticeGoal, PracticeEntry } from "@/lib/practice";
 import { addDays, formatDate } from "@/lib/format";
 import { addPracticeGoalAction, deletePracticeGoalAction, logPracticeAction, deletePracticeEntryAction } from "../practice-actions";
+import Dropdown from "@/components/Dropdown";
 
 function fmtMin(min: number): string {
   if (min >= 60) return Math.floor(min / 60) + "h " + String(min % 60).padStart(2, "0") + "'";
@@ -52,10 +53,10 @@ export default function PracticeView({ goals, entries, today }: { goals: Practic
       <div className="panel">
         <div className="panel-title" style={{ marginBottom: 12 }}>Registra una sessió</div>
         <div className="fin-form-grid">
-          <select className="field-input compact-field" value={log.goalId} onChange={(e) => setLog({ ...log, goalId: e.target.value })}>
+          <Dropdown className="field-input compact-field" value={log.goalId} onChange={(e) => setLog({ ...log, goalId: e.target.value })}>
             <option value="">Sense objectiu concret</option>
             {goals.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
+          </Dropdown>
           <input className="field-input compact-field" type="date" value={log.date} onChange={(e) => setLog({ ...log, date: e.target.value })} />
           <input className="field-input compact-field" type="number" placeholder="Minuts" value={log.minutes} onChange={(e) => setLog({ ...log, minutes: e.target.value })} />
           <input className="field-input compact-field" placeholder="Notes" value={log.notes} onChange={(e) => setLog({ ...log, notes: e.target.value })} />

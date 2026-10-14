@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import Dropdown from "@/components/Dropdown";
 import type { Band, Concert, Invoice, CompanyInfo, ClientDetails, Contact, Formation } from "@/lib/types";
 import { formatCurrency, formatDate, formatDateFull, formatDateLong, capitalize, statusColors, pad2, formatConcertTime, formatConcertTimePhrase } from "@/lib/format";
 import { bandColor, personPhotoDataUri, instrumentsFor, instrumentIconFor } from "@/lib/tags";
@@ -1651,12 +1652,12 @@ export default function ConcertDetailView({
                 <div className="cd-time-pair-col">
                   <label className="form-label">Es repeteix</label>
                   <div className="cd-time-pair-col-body">
-                    <select className="field-input form-field" value={repeatFreq} onChange={(e) => setRepeatFreq(e.target.value as typeof repeatFreq)}>
+                    <Dropdown className="field-input form-field" value={repeatFreq} onChange={(e) => setRepeatFreq(e.target.value as typeof repeatFreq)}>
                       <option value="cap">No es repeteix</option>
                       <option value="setmanal">Cada setmana</option>
                       <option value="quinzenal">Cada 2 setmanes</option>
                       <option value="mensual">Cada mes</option>
-                    </select>
+                    </Dropdown>
                   </div>
                 </div>
                 {/* Sempre muntada (només s'amaga) perquè triar una freqüència
@@ -2119,7 +2120,7 @@ export default function ConcertDetailView({
           </div>
           <div className="cd-material-col">
             <div className="cd-subtitle">Setlist del bolo</div>
-            <select
+            <Dropdown
               className="field-input form-field"
               value={setlistId}
               onChange={async (e) => {
@@ -2131,7 +2132,7 @@ export default function ConcertDetailView({
             >
               <option value="">— Cap setlist assignada —</option>
               {setlists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            </Dropdown>
             {selectedSetlist ? (
               <div className="cd-material-actions">
                 <button type="button" className="btn-outline" onClick={() => window.open(`/m/${selectedSetlist.publicToken}`, "_blank")}>Obre / PDF</button>
@@ -2191,7 +2192,7 @@ export default function ConcertDetailView({
                         {daysOut} dies
                       </span>
                     )}
-                    <select
+                    <Dropdown
                       className="field-input compact-field"
                       value={invoice.state}
                       onChange={async (e) => { await setInvoiceStateAction(invoice.id, e.target.value as "pagada" | "pendent" | "vençuda"); router.refresh(); }}
@@ -2199,15 +2200,15 @@ export default function ConcertDetailView({
                       <option value="pendent">pendent</option>
                       <option value="pagada">pagada</option>
                       <option value="vençuda">vençuda</option>
-                    </select>
+                    </Dropdown>
                   </div>
                 </div>
 
                 {invEditOpen ? (
                   <div className="cd-invoice-edit">
                     <label>Base<input type="number" className="field-input compact-field" value={invEdit.base} onChange={(e) => setInvEdit({ ...invEdit, base: e.target.value })} /></label>
-                    <label>IVA %<select className="field-input compact-field" value={invEdit.iva} onChange={(e) => setInvEdit({ ...invEdit, iva: e.target.value })}><option>21</option><option>10</option><option>0</option></select></label>
-                    <label>IRPF %<select className="field-input compact-field" value={invEdit.irpf} onChange={(e) => setInvEdit({ ...invEdit, irpf: e.target.value })}><option>0</option><option>7</option><option>15</option></select></label>
+                    <label>IVA %<Dropdown className="field-input compact-field" value={invEdit.iva} onChange={(e) => setInvEdit({ ...invEdit, iva: e.target.value })}><option>21</option><option>10</option><option>0</option></Dropdown></label>
+                    <label>IRPF %<Dropdown className="field-input compact-field" value={invEdit.irpf} onChange={(e) => setInvEdit({ ...invEdit, irpf: e.target.value })}><option>0</option><option>7</option><option>15</option></Dropdown></label>
                     <label>Bestreta<input type="number" className="field-input compact-field" value={invEdit.deposit} onChange={(e) => setInvEdit({ ...invEdit, deposit: e.target.value })} /></label>
                     <div style={{ display: "flex", gap: 8, gridColumn: "1 / -1" }}>
                       <button type="button" className="btn-outline" onClick={() => setInvEditOpen(false)}>Cancel·la</button>
@@ -2339,12 +2340,12 @@ export default function ConcertDetailView({
                     {t.category}{t.notes ? " — " + t.notes : ""}
                     {payer === "altre" && t.payerThirdParty ? " — " + t.payerThirdParty : ""}
                   </span>
-                  <select
+                  <Dropdown
                     className="field-input compact-field cd-expense-payer" value={payer} title="Qui es fa càrrec d'aquesta despesa"
                     onChange={(e) => changeExpensePayer(t.id, e.target.value as ExpensePayer)}
                   >
                     {EXPENSE_PAYER_KEYS.map((k) => <option key={k} value={k}>{EXPENSE_PAYER_LABELS[k]}</option>)}
-                  </select>
+                  </Dropdown>
                   <span className={"cd-expense-amount" + (payer === "altre" ? " t-dim" : "")}>{formatCurrency(t.amount)}</span>
                   <button type="button" className="row-delete-btn" title="Elimina la despesa" onClick={() => removeExpense(t.id)}>✕</button>
                 </div>
@@ -2614,9 +2615,9 @@ export default function ConcertDetailView({
               </div>
               <div className="cd-field">
                 <label className="form-label">Validesa del codi</label>
-                <select className="field-input form-field" value={newLinkCodeValidity} onChange={(e) => setNewLinkCodeValidity(e.target.value as CodeValidity)}>
+                <Dropdown className="field-input form-field" value={newLinkCodeValidity} onChange={(e) => setNewLinkCodeValidity(e.target.value as CodeValidity)}>
                   {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
-                </select>
+                </Dropdown>
               </div>
             </div>
             <div style={{ display: "flex", gap: 10 }}>
@@ -2682,9 +2683,9 @@ export default function ConcertDetailView({
                             {codeMenuId === l.id && (
                               <span className="cd-code-menu">
                                 <span className="t-dim" style={{ fontSize: 12 }}>Validesa:</span>
-                                <select className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
+                                <Dropdown className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
                                   {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
-                                </select>
+                                </Dropdown>
                                 <button type="button" className="btn-save" disabled={savingCode} onClick={() => saveCode(l.id)}>{savingCode ? "Generant…" : "Confirma"}</button>
                               </span>
                             )}
@@ -2706,9 +2707,9 @@ export default function ConcertDetailView({
                           )}
                           {codeMenuId === l.id && (
                             <span className="cd-code-menu">
-                              <select className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
+                              <Dropdown className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
                                 {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
-                              </select>
+                              </Dropdown>
                               <button type="button" className="btn-save" disabled={savingCode} onClick={() => saveCode(l.id)}>{savingCode ? "Generant…" : "Confirma"}</button>
                             </span>
                           )}
@@ -2802,9 +2803,9 @@ export default function ConcertDetailView({
               <p style={{ margin: "0 0 12px" }}>Abans de compartir, genera un codi de seguretat.</p>
               <span className="cd-code-menu" style={{ justifyContent: "center" }}>
                 <span className="t-dim" style={{ fontSize: 12 }}>Validesa:</span>
-                <select className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
+                <Dropdown className="field-input compact-field" value={codeValidity} onChange={(e) => setCodeValidity(e.target.value as CodeValidity)}>
                   {(["7", "14", "30", "90", "event"] as CodeValidity[]).map((v) => <option key={v} value={v}>{codeValidityLabels[v]}</option>)}
-                </select>
+                </Dropdown>
               </span>
             </>
           }

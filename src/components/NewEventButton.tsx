@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import Dropdown from "@/components/Dropdown";
 import { useRouter } from "next/navigation";
 import type { Band } from "@/lib/types";
 import { saveConcertAction, createEventAction } from "@/app/(app)/concerts/actions";
@@ -250,19 +251,19 @@ export default function NewEventButton({ bands, selectedBandId = "", allowBolo =
               <div style={{ display: "grid", gridTemplateColumns: freq === "cap" ? "1fr" : "1fr 1fr", gap: 10 }}>
                 <div>
                   <label className="form-label">Es repeteix</label>
-                  <select className="field-input form-field" value={freq} onChange={(e) => setFreq(e.target.value as typeof freq)}>
+                  <Dropdown className="field-input form-field" value={freq} onChange={(e) => setFreq(e.target.value as typeof freq)}>
                     <option value="cap">No es repeteix</option>
                     <option value="setmanal">Cada setmana</option>
                     <option value="quinzenal">Cada dues setmanes</option>
                     <option value="mensual">Cada mes</option>
-                  </select>
+                  </Dropdown>
                 </div>
                 {freq !== "cap" && (
                   <div>
                     <label className="form-label">Quantes vegades</label>
-                    <select className="field-input form-field" value={count} onChange={(e) => setCount(parseInt(e.target.value, 10))}>
-                      {[2, 3, 4, 6, 8, 10, 12, 20, 26].map((n) => <option key={n} value={n}>×{n}</option>)}
-                    </select>
+                    <Dropdown className="field-input form-field" value={String(count)} onChange={(e) => setCount(parseInt(e.target.value, 10))}>
+                      {[2, 3, 4, 6, 8, 10, 12, 20, 26].map((n) => <option key={n} value={String(n)}>×{n}</option>)}
+                    </Dropdown>
                   </div>
                 )}
               </div>

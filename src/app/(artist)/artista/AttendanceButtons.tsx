@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { setMyAttendanceAction, suggestSubstituteAction, publishBackupSearchAction } from "../actions";
+import Dropdown from "@/components/Dropdown";
 
 export default function AttendanceButtons({
   concertId,
@@ -52,7 +53,7 @@ export default function AttendanceButtons({
       {value === "no" && (
         <div className="attendance-no-options">
           {backups.length > 0 && (
-            <select
+            <Dropdown
               className="field-input compact-field"
               value={substitute}
               onChange={(e) => {
@@ -65,7 +66,7 @@ export default function AttendanceButtons({
               {backups.map((b) => (
                 <option key={b.name} value={b.name}>{b.name}{b.instruments.length ? ` (${b.instruments.join(", ")})` : ""}</option>
               ))}
-            </select>
+            </Dropdown>
           )}
           {!substitute && (
             published ? (

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Band, Concert, Contact } from "@/lib/types";
 import type { Setlist } from "@/lib/material-types";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
+import Dropdown from "@/components/Dropdown";
 import { saveConcertAction, setConvocatoriaAction } from "@/app/(app)/concerts/actions";
 import { setShareLinkCodeAction, clearShareLinkCodeAction } from "@/app/(app)/concerts/share-actions";
 import type { ShareLink } from "@/lib/share-data";
@@ -221,7 +222,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
         <div className="panel cd-section">
           <div className="panel-title cd-section-title">Setlist</div>
           {canSetlists && (
-            <select
+            <Dropdown
               className="field-input compact-field" style={{ maxWidth: 360 }}
               value={setlistId}
               onChange={async (e) => {
@@ -233,7 +234,7 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
             >
               <option value="">— Cap setlist assignada —</option>
               {setlists.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+            </Dropdown>
           )}
           {selectedSetlist ? (
             <div className="cd-material-actions" style={{ marginTop: canSetlists ? 10 : 0, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>

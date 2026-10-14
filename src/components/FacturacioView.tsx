@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type { Concert, Invoice, CompanyInfo } from "@/lib/types";
 import { formatCurrency, formatDate, statusColors } from "@/lib/format";
 import { generateInvoiceAction, saveCompanyInfoAction } from "@/app/(app)/facturacio/actions";
+import Dropdown from "@/components/Dropdown";
 import InvoicePreview from "@/components/InvoicePreview";
 import PlanLock from "@/components/PlanLock";
 import type { BillingInfo } from "@/lib/plans";
@@ -73,27 +74,27 @@ export default function FacturacioView({ concerts, invoices, companyInfo, billin
           </div>
           <div style={{ display: "flex", flexDirection: "column", width: 110 }}>
             <label className="form-label">IVA %</label>
-            <select className="field-input form-field compact-field" value={company.ivaRate} onChange={(e) => { const v = parseFloat(e.target.value); setCompany((p) => ({ ...p, ivaRate: v })); }} onBlur={saveCompany}>
-              <option value={21}>21</option><option value={10}>10</option><option value={0}>0</option>
-            </select>
+            <Dropdown className="field-input form-field compact-field" value={String(company.ivaRate)} onChange={(e) => { const v = parseFloat(e.target.value); setCompany((p) => ({ ...p, ivaRate: v })); }} onBlur={saveCompany}>
+              <option value="21">21</option><option value="10">10</option><option value="0">0</option>
+            </Dropdown>
           </div>
           <div style={{ display: "flex", flexDirection: "column", width: 110 }}>
             <label className="form-label">IRPF %</label>
-            <select className="field-input form-field compact-field" value={company.irpfRate} onChange={(e) => { const v = parseFloat(e.target.value); setCompany((p) => ({ ...p, irpfRate: v })); }} onBlur={saveCompany}>
-              <option value={0}>0</option><option value={7}>7</option><option value={15}>15</option>
-            </select>
+            <Dropdown className="field-input form-field compact-field" value={String(company.irpfRate)} onChange={(e) => { const v = parseFloat(e.target.value); setCompany((p) => ({ ...p, irpfRate: v })); }} onBlur={saveCompany}>
+              <option value="0">0</option><option value="7">7</option><option value="15">15</option>
+            </Dropdown>
           </div>
         </div>
         {companySaving && <div className="t-dim" style={{ fontSize: 11, marginTop: 6 }}>Desant…</div>}
       </div>
 
       <div className="filter-bar">
-        <select className="input" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
+        <Dropdown className="input" value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}>
           <option value="tots">Tots els estats</option>
           <option value="pagada">Pagada</option>
           <option value="pendent">Pendent</option>
           <option value="vençuda">Vençuda</option>
-        </select>
+        </Dropdown>
         <div className="spacer"></div>
         {invoicesLocked && billing
           ? <PlanLock billing={billing} feature="invoices" compact canUpgrade={canUpgrade} title="Factures amb numeració, IVA i recordatoris de cobrament" />
@@ -139,11 +140,11 @@ export default function FacturacioView({ concerts, invoices, companyInfo, billin
               <div className="modal-form">
                 <div>
                   <label className="form-label">Concert sense facturar</label>
-                  <select className="field-input form-field" value={currentGenId} onChange={(e) => setGenConcertId(e.target.value)}>
+                  <Dropdown className="field-input form-field" value={currentGenId} onChange={(e) => setGenConcertId(e.target.value)}>
                     {unbilled.map((c) => (
                       <option key={c.id} value={c.id}>{c.bandName} — {formatDate(c.date)} ({c.venue})</option>
                     ))}
-                  </select>
+                  </Dropdown>
                 </div>
                 <div className="invoice-preview">
                   <span style={{ color: "var(--text-faint)" }}>Import (amb IVA)</span>

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { candidateInstruments, type SubCandidate } from "@/lib/subs";
+import Dropdown from "@/components/Dropdown";
 import { personPhotoDataUri, instrumentIconFor } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { formatDate } from "@/lib/format";
@@ -64,14 +65,14 @@ export default function SubsBoardView({ candidates, bands, today, billing, canUp
       ) : (<>
       <div className="filter-bar subs-filterbar">
         <input className="input search" type="text" placeholder="Cerca per nom, instrument o grup…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="input" value={instrument} onChange={(e) => setInstrument(e.target.value)}>
+        <Dropdown className="input" value={instrument} onChange={(e) => setInstrument(e.target.value)}>
           <option value="">Tots els instruments</option>
           {instruments.map((i) => <option key={i} value={i}>{i}</option>)}
-        </select>
+        </Dropdown>
         {bands.length > 1 && (
-          <select className="input" value={targetBand} onChange={(e) => setTargetBand(e.target.value)} title="Grup on afegir els suplents">
+          <Dropdown className="input" value={targetBand} onChange={(e) => setTargetBand(e.target.value)} title="Grup on afegir els suplents">
             {bands.map((b) => <option key={b.id} value={b.id}>Afegir a: {b.name}</option>)}
-          </select>
+          </Dropdown>
         )}
       </div>
 

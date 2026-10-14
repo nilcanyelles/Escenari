@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Dropdown from "@/components/Dropdown";
 import type { Band, Concert, Invoice } from "@/lib/types";
 import { formatCurrency, formatDate, today } from "@/lib/format";
 import { INCOME_CATEGORIES, EXPENSE_CATEGORIES, type Transaction } from "@/lib/finance";
@@ -153,20 +154,20 @@ export default function FinancePanel({ transactions, bands, concerts, invoices =
               <button className={"stats-tab" + (form.kind === "despesa" ? " active" : "")} onClick={() => setForm({ ...form, kind: "despesa", category: EXPENSE_CATEGORIES[0] })}>Despesa</button>
             </div>
             <div className="fin-form-grid">
-              <select className="field-input compact-field" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+              <Dropdown className="field-input compact-field" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
                 {cats.map((c) => <option key={c}>{c}</option>)}
-              </select>
+              </Dropdown>
               <input className="field-input compact-field" type="number" placeholder="Import €" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
               <input className="field-input compact-field" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
-              <select className="field-input compact-field" value={form.concertId} onChange={(e) => setForm({ ...form, concertId: e.target.value })}>
+              <Dropdown className="field-input compact-field" value={form.concertId} onChange={(e) => setForm({ ...form, concertId: e.target.value })}>
                 <option value="">Sense concert</option>
                 {concerts.slice(0, 60).map((c) => <option key={c.id} value={c.id}>{formatDate(c.date)} · {c.city || c.venue}</option>)}
-              </select>
+              </Dropdown>
               {form.kind === "despesa" && form.category === "Pagament a músic" && (
-                <select className="field-input compact-field" value={form.member} onChange={(e) => setForm({ ...form, member: e.target.value })}>
+                <Dropdown className="field-input compact-field" value={form.member} onChange={(e) => setForm({ ...form, member: e.target.value })}>
                   <option value="">A quin músic?</option>
                   {memberNames.map((n) => <option key={n}>{n}</option>)}
-                </select>
+                </Dropdown>
               )}
               <input className="field-input compact-field" placeholder="Fons (opcional): Disc nou…" value={form.fund} onChange={(e) => setForm({ ...form, fund: e.target.value })} />
               <input className="field-input compact-field" placeholder="Notes" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />

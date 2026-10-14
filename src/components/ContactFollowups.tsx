@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Contact } from "@/lib/types";
+import Dropdown from "@/components/Dropdown";
 import type { ContactInteraction } from "@/lib/contacts-data";
 import { formatDate, today } from "@/lib/format";
 import { addInteractionAction, markInteractionDoneAction, deleteInteractionAction } from "@/app/(app)/contactes/actions";
@@ -33,10 +34,10 @@ export default function ContactFollowups({ contacts, interactions }: { contacts:
       <div className="panel-header-row" style={{ marginBottom: 10 }}>
         <div className="panel-title">Seguiments</div>
         <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-          <select className="field-input compact-field" value={historyFor} onChange={(e) => setHistoryFor(e.target.value)}>
+          <Dropdown className="field-input compact-field" value={historyFor} onChange={(e) => setHistoryFor(e.target.value)}>
             <option value="">Historial d&apos;un contacte…</option>
             {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+          </Dropdown>
           {!formOpen && <button type="button" className="btn-outline" onClick={() => setFormOpen(true)}>+ Registra interacció</button>}
         </div>
       </div>
@@ -44,10 +45,10 @@ export default function ContactFollowups({ contacts, interactions }: { contacts:
       {formOpen && (
         <div className="fin-form" style={{ marginBottom: 14 }}>
           <div className="fin-form-grid">
-            <select className="field-input compact-field" value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })}>
+            <Dropdown className="field-input compact-field" value={form.contactId} onChange={(e) => setForm({ ...form, contactId: e.target.value })}>
               <option value="">Amb qui?</option>
               {contacts.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
+            </Dropdown>
             <input className="field-input compact-field" type="date" value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
             <input className="field-input compact-field" placeholder="Què heu parlat? (trucada, correu…)" value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} style={{ gridColumn: "span 2" }} />
             <input className="field-input compact-field" type="date" title="Data del proper seguiment" value={form.nextDate} onChange={(e) => setForm({ ...form, nextDate: e.target.value })} />

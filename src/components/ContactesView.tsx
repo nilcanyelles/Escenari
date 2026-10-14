@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { Band, Contact, ContactKind } from "@/lib/types";
 import { deleteContactAction } from "@/app/(app)/contactes/actions";
+import Dropdown from "@/components/Dropdown";
 import { splitInstruments } from "@/lib/tags";
 import { instrumentIconKey } from "@/lib/instruments";
 import { InstrumentIcon } from "@/components/InstrumentPicker";
@@ -133,12 +134,12 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
       <ContactFollowups contacts={contacts} interactions={interactions} />
       <div className="filter-bar contactes-filterbar">
         <input className="input search" type="text" placeholder="Cerca nom, instrument, tipus, grup, empresa, telèfon, correu…" value={search} onChange={(e) => setSearch(e.target.value)} />
-        <select className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as "tots" | ContactKind)}>
+        <Dropdown className="input" value={kindFilter} onChange={(e) => setKindFilter(e.target.value as "tots" | ContactKind)}>
           <option value="tots">Tots els contactes</option>
           <option value="grup">Músics i crew</option>
           <option value="ruta">Full de ruta</option>
           <option value="empresa">Empreses</option>
-        </select>
+        </Dropdown>
         <button className="glow-cta" onClick={() => setCreating(true)}>+ Nou contacte</button>
       </div>
 

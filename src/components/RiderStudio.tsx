@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import BackLink from "@/components/BackLink";
+import Dropdown from "@/components/Dropdown";
 import type { RiderContent, StageItem } from "@/lib/material-types";
 import type { Person, Contact } from "@/lib/types";
 import { STAGE_LIBRARY, StageItemSvg, stageKindDef, isInstrumentKind } from "@/lib/stage-svg";
@@ -568,9 +569,9 @@ export default function RiderStudio({
                   <span className="setlist-num">{i + 1}</span>
                 </div>
                 <input className="field-input compact-field" placeholder="Veu, bateria, tots…" value={row.who} onChange={(e) => set("monitors", content.monitors.map((x, j) => j === i ? { ...x, who: e.target.value } : x))} />
-                <select className="field-input compact-field" value={row.kind} onChange={(e) => set("monitors", content.monitors.map((x, j) => j === i ? { ...x, kind: e.target.value } : x))}>
+                <Dropdown className="field-input compact-field" value={row.kind} onChange={(e) => set("monitors", content.monitors.map((x, j) => j === i ? { ...x, kind: e.target.value } : x))}>
                   <option>Cunya</option><option>In-ear</option><option>Side-fill</option><option>Drum-fill</option>
-                </select>
+                </Dropdown>
                 <input className="field-input compact-field" placeholder="Més veu, poc bombo…" value={row.notes} onChange={(e) => set("monitors", content.monitors.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))} />
                 <button type="button" className="row-delete-btn" onClick={() => set("monitors", content.monitors.filter((_, j) => j !== i))}>✕</button>
               </div>
@@ -595,10 +596,10 @@ export default function RiderStudio({
                 <span className="setlist-num">{i + 1}</span>
               </div>
               <input className="field-input compact-field" placeholder="Bateria completa, ampli de baix…" value={row.item} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, item: e.target.value } : x))} />
-              <select className="field-input compact-field" value={row.providedBy} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, providedBy: e.target.value as "grup" | "organitzacio" } : x))}>
+              <Dropdown className="field-input compact-field" value={row.providedBy} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, providedBy: e.target.value as "grup" | "organitzacio" } : x))}>
                 <option value="organitzacio">Organització</option>
                 <option value="grup">El grup</option>
-              </select>
+              </Dropdown>
               <input className="field-input compact-field" value={row.notes} onChange={(e) => set("backline", content.backline.map((x, j) => j === i ? { ...x, notes: e.target.value } : x))} />
               <button type="button" className="row-delete-btn" onClick={() => set("backline", content.backline.filter((_, j) => j !== i))}>✕</button>
             </div>
