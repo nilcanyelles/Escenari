@@ -2400,7 +2400,9 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .cd-formation-slot-input::placeholder { color: var(--text-fainter); }
 /* Desplegable propi (Formació, suplent d'una plaça): el menú surt sempre
    just a sota de la casella, amb la seva mateixa amplada. */
-.cd-dropdown { position: relative; width: 100%; }
+.cd-dropdown { position: relative; display: inline-block; }
+.cd-dropdown:has(.field-input),
+.cd-dropdown:has(.form-field) { width: 100%; }
 .cd-dropdown-trigger {
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   text-align: left; cursor: pointer; width: 100%;
