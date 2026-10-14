@@ -6070,6 +6070,18 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   overflow: hidden;
   background: radial-gradient(60% 45% at 50% 0%, oklch(1 0 0 / 0.07), transparent 70%);
 }
+/* Mini-mapes decoratius del banner del proper esdeveniment: a l'esquerra el
+   mapa de carrers del recinte, a la dreta la silueta de la comunitat
+   autònoma amb una xinxeta — sempre darrere del text (ordre al DOM). */
+.cd-poster-minimap {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  pointer-events: none; opacity: 0.8; z-index: -1;
+}
+.cd-poster-minimap-left { left: 14px; }
+.cd-poster-minimap-right { right: 14px; }
+@media (max-width: 680px) {
+  .cd-poster-minimap { display: none; }
+}
 .cd-poster-kicker {
   font-size: 12px;
   letter-spacing: 0.28em;

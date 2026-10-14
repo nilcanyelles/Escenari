@@ -25,6 +25,7 @@ import { normalizeRouteSheet, withLiveConcertStart, type RouteSheet } from "@/li
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
 import DiaTopActions from "@/components/DiaTopActions";
 import ConcertPosterEditor from "@/components/ConcertPosterEditor";
+import GigLocationMap from "@/components/GigLocationMaps";
 import { RidersPanel, SetlistsPanel } from "@/components/MaterialPanels";
 import SetlistEditor from "@/components/SetlistEditor";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
@@ -270,6 +271,12 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
   return (
     <div className="cd-poster bento-next-poster" style={accentVars} onClick={(e) => e.stopPropagation()}>
       <div className="cd-poster-glow" aria-hidden="true"></div>
+      {(c.venue || c.city) && (
+        <>
+          <GigLocationMap venue={c.venue} city={c.city} accent={band.color1 || "#8b7bff"} side="left" />
+          <GigLocationMap venue={c.venue} city={c.city} accent={band.color1 || "#8b7bff"} side="right" />
+        </>
+      )}
       <div className="cd-poster-kicker">{c.bandName}</div>
       <div className="cd-poster-subtitle">{c.festaEntitat || (c.kind && c.kind !== "bolo" ? (c.kind === "reunio" ? "reunió" : c.kind) : "concert")}</div>
       {isBolo ? (
