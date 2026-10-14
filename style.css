@@ -2183,6 +2183,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   white-space: nowrap;
 }
 .member-instrument-chip img { width: 13px; height: 13px; object-fit: contain; }
+/* Il·luminats quan hi ha una formació activa: "slot-open" és una plaça
+   lliure d'aquest instrument (clicable per assignar-s'hi), "slot-assigned"
+   és la plaça que ja ocupa aquesta persona (clicable per treure-se'n). */
+.member-instrument-chip.slot-open { background: color-mix(in oklch, var(--accent) 22%, transparent); color: var(--accent-text); border: 1px solid color-mix(in oklch, var(--accent) 45%, transparent); }
+.member-instrument-chip.slot-assigned { background: oklch(0.72 0.15 155 / 0.2); color: oklch(0.8 0.14 155); border: 1px solid oklch(0.72 0.15 155 / 0.5); }
 .member-count { font-size: 11px; color: var(--text-faint); }
 /* Avís a la Convocatòria: aquest membre s'ha marcat "no disponible" al seu
    perfil personal (vegeu src/lib/unavailability.ts) el mateix dia. */
@@ -2367,8 +2372,19 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 
 /* Assistència */
 .cd-formation-picker { display: flex; flex-direction: column; margin-bottom: 16px; }
-.cd-formation-slots { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; padding: 10px; border: 1px solid var(--border-soft); border-radius: 10px; }
-.cd-formation-slot-row { display: flex; align-items: center; gap: 10px; }
+.cd-formation-slots-row { display: flex; flex-direction: column; gap: 8px; }
+.cd-formation-slot-card { display: flex; align-items: center; gap: 10px; }
+.cd-formation-slot-namebox {
+  display: flex; align-items: center; gap: 8px; min-width: 180px;
+  border: 1px solid var(--border-soft); border-radius: 10px; padding: 6px 12px;
+  font-size: 13px; font-weight: 600; background: var(--bg-card-2);
+}
+.cd-formation-slot-namebox img { width: 26px; height: 26px; border-radius: 50%; object-fit: cover; }
+.cd-formation-slot-namebox.empty {
+  border-style: dashed; border-color: var(--border); background: transparent;
+  color: var(--text-fainter); font-weight: 400;
+}
+.cd-formation-slot-instrument { font-size: 12.5px; color: var(--text-muted); }
 .cd-attendance-list { display: flex; flex-direction: column; gap: 8px; }
 .cd-att-row {
   display: flex;

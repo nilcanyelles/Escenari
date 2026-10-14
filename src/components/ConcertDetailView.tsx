@@ -998,42 +998,30 @@ export default function ConcertDetailView({
     schedulePersist(cf, attendance, substitutes, noSubstitute, excl);
   }
 
-  // Un cop triada una formació, cada slot s'omple sol amb qui ja ha
-  // confirmat assistència ("Sí") i toca aquell instrument — mai cal triar
-  // músics a mà: canviar qui ha confirmat ja mou l'assignació. Si dues
-  // persones confirmades toquen el mateix instrument, s'assigna la primera
-  // (per ordre de la llista de membres) i la resta queden sense slot.
-  function autoAssignFormation(f: Formation, att: typeof attendance): Record<string, string> {
-    const used = new Set<string>();
-    const next: Record<string, string> = {};
-    f.slots.forEach((s) => {
-      const person = members.find((m) =>
-        att[m.name] === "yes" && !used.has(normalize(m.name)) && instrumentsFor(m).some((i) => i.toLowerCase() === s.instrument.toLowerCase())
-      );
-      if (person) { next[s.id] = person.name; used.add(normalize(person.name)); }
-    });
-    return next;
-  }
+  // Triar una formació nova sempre comença sense ningú assignat — qui toca
+  // cada plaça es tria a mà, clicant l'instrument il·luminat a la llista de
+  // músics de sota (vegeu assignSlot).
   function setFormation(id: string | null) {
     setFormationId(id);
-    const f = id ? formations.find((x) => x.id === id) : null;
-    const nextAssign = f ? autoAssignFormation(f, attendance) : {};
-    setFormationAssignments(nextAssign);
-    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, id, nextAssign);
+    setFormationAssignments({});
+    schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, id, {});
   }
-  // Recalcula l'assignació automàticament cada cop que canvia qui ha
-  // confirmat — sense això, només es refaria en triar la formació i es
-  // quedaria desactualitzada si algú confirma després.
-  useEffect(() => {
-    if (!formationId) return;
-    const f = formations.find((x) => x.id === formationId);
+  // Clicar l'instrument il·luminat d'un músic l'assigna a la primera plaça
+  // lliure d'aquell instrument (traient-lo abans de qualsevol altra plaça
+  // que ja tingués) — tornar a clicar-lo el treu de la formació.
+  function assignSlot(instrument: string, personName: string) {
+    const f = formationId ? formations.find((x) => x.id === formationId) : null;
     if (!f) return;
-    const next = autoAssignFormation(f, attendance);
-    if (JSON.stringify(next) === JSON.stringify(formationAssignments)) return;
+    const next = { ...formationAssignments };
+    Object.keys(next).forEach((slotId) => { if (normalize(next[slotId]) === normalize(personName)) delete next[slotId]; });
+    const already = f.slots.some((s) => normalize(formationAssignments[s.id] || "") === normalize(personName) && s.instrument.toLowerCase() === instrument.toLowerCase());
+    if (!already) {
+      const openSlot = f.slots.find((s) => s.instrument.toLowerCase() === instrument.toLowerCase() && !next[s.id]);
+      if (openSlot) next[openSlot.id] = personName;
+    }
     setFormationAssignments(next);
     schedulePersist(cf, attendance, substitutes, noSubstitute, convocatoriaExcluded, contact, substituteConfirmed, formationId, next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attendance, formationId, formations]);
+  }
 
   function setContactField(field: keyof Concert["contact"], v: string) {
     const next = { ...contact, [field]: v };
@@ -1619,9 +1607,35 @@ export default function ConcertDetailView({
               <option value="">Sense formació (convocatòria lliure)</option>
               {formations.map((f) => <option key={f.id} value={f.id}>{f.preferred ? "★ " : ""}{f.name}</option>)}
             </select>
-            {formationId && (
-              <div className="t-dim" style={{ fontSize: 11.5, marginTop: 6 }}>S&apos;assigna sol a qui ja ha confirmat &quot;Sí&quot; i toca cada instrument — vegeu-ho a sota, a la llista.</div>
-            )}
+            {formationId && (() => {
+              const f = formations.find((x) => x.id === formationId);
+              if (!f) return null;
+              return (
+                <>
+                  <div className="t-dim" style={{ fontSize: 11.5, margin: "6px 0 10px" }}>Clica l&apos;instrument il·luminat d&apos;un músic, a la llista de sota, per assignar-lo a una plaça.</div>
+                  <div className="cd-formation-slots-row">
+                    {f.slots.map((s) => {
+                      const assignedName = formationAssignments[s.id];
+                      return (
+                        <div key={s.id} className="cd-formation-slot-card">
+                          <div className={"cd-formation-slot-namebox" + (assignedName ? "" : " empty")}>
+                            {assignedName ? (
+                              <>
+                                <img className="member-photo" src={photosByName[normalize(assignedName)] ? `/api/file/${photosByName[normalize(assignedName)]}` : personPhotoDataUri(assignedName)} alt="" />
+                                <span>{assignedName}</span>
+                              </>
+                            ) : (
+                              <span>Sense assignar</span>
+                            )}
+                          </div>
+                          <span className="cd-formation-slot-instrument">{s.instrument}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              );
+            })()}
           </div>
         )}
         {members.length === 0 ? (
@@ -1632,12 +1646,8 @@ export default function ConcertDetailView({
               const linked = linkedByName[m.name];
               const att = attendance[m.name];
               const req = requestByMember[m.name];
-              // Si hi ha una formació triada i aquesta persona hi té una
-              // posició assignada, només es mostra l'instrument que tocarà
-              // en aquest bolo concret (no la seva llista sencera).
               const activeFormation = formationId ? formations.find((f) => f.id === formationId) : null;
-              const mySlot = activeFormation?.slots.find((s) => normalize(formationAssignments[s.id] || "") === normalize(m.name));
-              const inss = mySlot ? [mySlot.instrument] : instrumentsFor(m);
+              const inss = instrumentsFor(m);
               const excluded = !!convocatoriaExcluded[m.name];
               return (
                 <div key={m.name} className={"cd-att-row" + (att === "no" ? " att-no" : att === "yes" ? " att-yes" : "") + (excluded ? " att-excluded" : "")}>
@@ -1648,9 +1658,22 @@ export default function ConcertDetailView({
                       {linked && <VerifiedTick size={13} title={`Usuari d'Escenari: ${linked.email} — pot confirmar des de la seva app`} />}
                     </div>
                     <div className="member-instruments">
-                      {inss.slice(0, 3).map((ins) => {
+                      {(activeFormation ? inss : inss.slice(0, 3)).map((ins) => {
                         const icon = instrumentIconFor(ins);
-                        return <span key={ins} className="member-instrument-chip">{icon && <img src={icon} alt="" />}{ins}</span>;
+                        const isMine = !!activeFormation && activeFormation.slots.some((s) => s.instrument.toLowerCase() === ins.toLowerCase() && normalize(formationAssignments[s.id] || "") === normalize(m.name));
+                        const hasOpen = !!activeFormation && activeFormation.slots.some((s) => s.instrument.toLowerCase() === ins.toLowerCase() && !formationAssignments[s.id]);
+                        const clickable = isMine || hasOpen;
+                        return (
+                          <span
+                            key={ins}
+                            className={"member-instrument-chip" + (isMine ? " slot-assigned" : hasOpen ? " slot-open" : "")}
+                            onClick={clickable ? (e) => { e.stopPropagation(); assignSlot(ins, m.name); } : undefined}
+                            style={clickable ? { cursor: "pointer" } : undefined}
+                            title={isMine ? "Clica per treure-la d'aquesta plaça" : hasOpen ? "Clica per assignar-la a aquesta plaça" : undefined}
+                          >
+                            {icon && <img src={icon} alt="" />}{ins}
+                          </span>
+                        );
                       })}
                     </div>
                     {!excluded && unavailByMember[m.name] && (
