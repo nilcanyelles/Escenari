@@ -36,20 +36,11 @@ import { InstagramIcon, YoutubeIcon, TiktokIcon, SpotifyIcon } from "@/component
 import { KIND_META, KIND_ORDER } from "@/components/CalendariView";
 
 import BentoGrid, { type BentoCard } from "@/components/BentoGrid";
-import ChromaGrid, { type ChromaItem } from "@/components/ChromaGrid";
 import { normalize } from "@/lib/text";
 import { bandColor } from "@/lib/tags";
 import type { Person } from "@/lib/types";
 import { openPersonProfileAction } from "@/app/p/profile-actions";
 
-// Icones de línia (mateix estil que la fitxa de perfil pública) per als
-// botons de contacte ràpid de les targetes "chroma" — abans eren emojis.
-const ICON_PHONE = (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"></path></svg>
-);
-const ICON_WHATSAPP = (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"></path></svg>
-);
 // Icones per als botons rodons de capçalera de l'equip (edita, afegeix) —
 // sols icona, sense text, amb el títol com a tooltip. ICON_MAIL i
 // ICON_CHECK ja existeixen més avall per a altres usos.
@@ -74,9 +65,6 @@ function TrashIcon() {
 }
 const ICON_MAIL = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="m22 6-10 7L2 6"></path></svg>
-);
-const ICON_INSTAGRAM = (
-  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
 );
 const ICON_LINK = (
   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.3" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
@@ -474,50 +462,6 @@ function GigAttendance({
   );
 }
 
-function TeamRow({ people, renderItem, cardWidth, radius, visibleCount = 4, onAdd, addLabel }: {
-  people: Person[];
-  renderItem: (p: Person) => ChromaItem;
-  cardWidth: number;
-  radius: number;
-  visibleCount?: number;
-  // Targeta "+" al final de la pàgina actual, per crear algú nou sense
-  // sortir de la graella.
-  onAdd?: () => void;
-  addLabel?: string;
-}) {
-  const [start, setStart] = useState(0);
-  const [dir, setDir] = useState<"next" | "prev">("next");
-  const maxStart = Math.max(0, people.length - visibleCount);
-  const s = Math.min(start, maxStart);
-  const pageItems = people.slice(s, s + visibleCount);
-  const canNav = people.length > visibleCount;
-  const gridItems: ChromaItem[] = pageItems.map(renderItem);
-  if (onAdd) gridItems.push({ image: "", title: addLabel || "Afegeix", subtitle: "", isAddTile: true, onClick: onAdd });
-  return (
-    <div className="bento-chroma-row">
-      {canNav && (
-        <button
-          type="button"
-          className="bento-chroma-nav-btn"
-          disabled={s === 0}
-          onClick={() => { setDir("prev"); setStart((p) => Math.max(0, p - 1)); }}
-        >‹</button>
-      )}
-      <div className={"bento-chroma bento-chroma-slide-" + dir} key={s}>
-        <ChromaGrid className="chroma-compact" items={gridItems} columns={visibleCount} cardWidth={cardWidth} radius={radius} />
-      </div>
-      {canNav && (
-        <button
-          type="button"
-          className="bento-chroma-nav-btn"
-          disabled={s >= maxStart}
-          onClick={() => { setDir("next"); setStart((p) => Math.min(maxStart, p + 1)); }}
-        >›</button>
-      )}
-    </div>
-  );
-}
-
 // Fila de permisos que el gestor commuta a la targeta de cada membre: què
 // pot crear (cançons, riders, setlists), si pot afegir gent i esdeveniments.
 function PermsRow({ bandId, member }: { bandId: string; member: Person }) {
@@ -542,65 +486,52 @@ function PermsRow({ bandId, member }: { bandId: string; member: Person }) {
   );
 }
 
-// Targetes "chroma" per a l'equip: colors del grup, nom, instrument (o
-// càrrec, si és de l'equip tècnic) i @ estil Instagram; el clic obre la
-// pàgina de perfil del músic.
-function personChromaItem(
-  p: Person,
-  band: Band,
-  onOpen: (name: string) => void,
-  photosByName: Record<string, string>,
-  igByName: Record<string, string>,
-  linked: boolean,
-  onInvite?: (name: string) => void,
-  footer?: React.ReactNode,
-  copiedEmailKey?: string | null,
-  onCopyEmail?: (key: string, email: string) => void,
-): ChromaItem {
-  const realIg = igByName[normalize(p.name)] || "";
-  const handle = "@" + (realIg || normalize(p.name).replace(/\s+/g, ""));
-  const inss = instrumentsFor(p);
+// Fila d'una persona de l'equip (músic o crew), mateix format que els
+// suplents: foto, nom, instrument(s) o càrrec — el clic obre el perfil.
+function TeamMemberRow({ person, kind, band, onOpen, photosByName, linked, onInvite, editing, onEditClick, onRemoveClick }: {
+  person: Person;
+  kind: "member" | "crew";
+  band: Band;
+  onOpen: (name: string) => void;
+  photosByName: Record<string, string>;
+  linked: boolean;
+  onInvite?: (name: string) => void;
+  editing: boolean;
+  onEditClick: () => void;
+  onRemoveClick: () => void;
+}) {
+  const inss = instrumentsFor(person);
   const c1 = band.color1 || bandColor(band.id).color;
   const c2 = band.color2 || bandColor(band.id + "x").color;
-  const photoId = photosByName[normalize(p.name)];
-
-  // Trucar, WhatsApp i correu sempre visibles; sense dades, porten al perfil
-  // (on el gestor o el músic poden afegir-les).
-  const missing = (what: string) => () => {
-    alert(`${p.name} encara no té ${what} desat — afegeix-lo des del seu perfil (Edita el perfil).`);
-    onOpen(p.name);
-  };
-  const actions: ChromaItem["actions"] = [
-    p.phone
-      ? { icon: ICON_PHONE, title: `Truca ${p.name}`, href: `tel:${p.phone.replace(/\s/g, "")}` }
-      : { icon: ICON_PHONE, title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
-    (p.whatsapp || p.phone)
-      ? { icon: ICON_WHATSAPP, title: "WhatsApp", href: `https://wa.me/${(p.whatsapp || p.phone || "").replace(/[^\d]/g, "")}` }
-      : { icon: ICON_WHATSAPP, title: "Sense telèfon — afegeix-lo al perfil", onClick: missing("el telèfon") },
-    p.email
-      ? {
-          icon: copiedEmailKey === p.name ? ICON_CHECK : ICON_MAIL,
-          title: copiedEmailKey === p.name ? "Correu copiat" : `Copia el correu — ${p.email}`,
-          onClick: () => onCopyEmail?.(p.name, p.email!),
-        }
-      : { icon: ICON_MAIL, title: "Sense correu — afegeix-lo al perfil", onClick: missing("el correu") },
-    { icon: ICON_INSTAGRAM, title: `Instagram ${handle}`, href: `https://instagram.com/${handle.slice(1)}` },
-  ];
-  if (!linked && onInvite) actions.push({ icon: ICON_LINK, title: "Convida a reclamar aquest perfil", onClick: () => onInvite(p.name) });
-
-  return {
-    image: photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(p.name, c1, c2),
-    title: p.name,
-    verified: linked,
-    subtitle: inss.length ? inss.slice(0, 2).join(", ") : p.role || "—",
-    subtitleIcon: inss.length ? instrumentIconFor(inss[0]) : null,
-    handle,
-    borderColor: c1,
-    gradient: `linear-gradient(150deg, ${c1}, ${c2})`,
-    onClick: () => onOpen(p.name),
-    actions,
-    footer,
-  };
+  const photoId = photosByName[normalize(person.name)];
+  return (
+    <div className="backup-row">
+      <button type="button" className="backup-row-click" onClick={() => (editing ? onEditClick() : onOpen(person.name))}>
+        <img
+          className="member-photo backup-photo"
+          src={photoId ? `/api/file/${photoId}` : personPhotoDataUriColored(person.name, c1, c2)}
+          alt=""
+        />
+        <div className="backup-row-main">
+          <div className="member-name">{person.name}{linked && <VerifiedTick size={12} />}</div>
+          {kind === "member"
+            ? (inss.length > 0 ? <InstrumentChips items={inss} /> : <span className="badge sm">Músic</span>)
+            : <span className="badge sm">{person.role || "Crew"}</span>}
+        </div>
+      </button>
+      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+        {person.phone && <span className="t-dim" style={{ fontSize: 12 }}>{person.phone}</span>}
+        {!linked && onInvite && (
+          <button type="button" className="row-delete-btn" title="Convida a reclamar aquest perfil" onClick={() => onInvite(person.name)}>{ICON_LINK}</button>
+        )}
+        {editing && (
+          <button type="button" className="row-delete-btn" title="Elimina" onClick={onRemoveClick}>
+            <TrashIcon />
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Pestanya Permisos (gestor): taula amb tothom del grup a les files i cada
@@ -780,40 +711,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const initialTabParam = searchParams.get("tab");
   const initialTab = initialTabParam === "equip" || initialTabParam === "cancons" || initialTabParam === "documents" || initialTabParam === "permisos" ? initialTabParam : "inici";
   const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "documents" | "permisos">(initialTab);
-  // En passar el ratolí per una targeta petita de la previsualització, es
-  // mostra literalment la targeta grossa (la mateixa que a la pestanya
-  // Equip) flotant per sobre — a través d'un portal a <body>, perquè cap
-  // altre element de la pàgina la pugui tapar mai.
-  const [hoveredTeam, setHoveredTeam] = useState<{ person: Person; rect: DOMRect } | null>(null);
   // Tooltip d'assistència d'una fila: via portal a <body> perquè el
   // "transform" que posa el hover de la targeta (.magic-bento-card) no el
   // deixi tapat per la targeta veïna (context d'apilament nou).
   const [attTooltip, setAttTooltip] = useState<{ rect: DOMRect; content: React.ReactNode } | null>(null);
-  // Petit marge abans de tancar-la de veres: com que la targeta flotant no
-  // ocupa exactament el mateix espai que la petita, en moure el ratolí de
-  // l'una a l'altra hi hauria un instant sense cap de les dues sota el
-  // punter que la tancaria de seguida — s'espera un moment per si l'altra
-  // banda ja l'ha reobert abans de fer-ho.
-  const hoverCloseTimer = useRef<number | null>(null);
-  function scheduleHoverClose(name: string) {
-    if (hoverCloseTimer.current) window.clearTimeout(hoverCloseTimer.current);
-    hoverCloseTimer.current = window.setTimeout(() => {
-      setHoveredTeam((h) => (h?.person.name === name ? null : h));
-    }, 150);
-  }
-  function cancelHoverClose() {
-    if (hoverCloseTimer.current) { window.clearTimeout(hoverCloseTimer.current); hoverCloseTimer.current = null; }
-  }
-  // La targeta grossa només s'obre si el ratolí s'hi queda mig segon a
-  // sobre — evita que aparegui sense voler en passar-hi per damunt.
-  const hoverOpenTimer = useRef<number | null>(null);
-  function scheduleHoverOpen(person: Person, rect: DOMRect) {
-    if (hoverOpenTimer.current) window.clearTimeout(hoverOpenTimer.current);
-    hoverOpenTimer.current = window.setTimeout(() => { setHoveredTeam({ person, rect }); }, 500);
-  }
-  function cancelHoverOpen() {
-    if (hoverOpenTimer.current) { window.clearTimeout(hoverOpenTimer.current); hoverOpenTimer.current = null; }
-  }
   // Xarxes socials (Inici): només lectura — es connecten i s'editen des de
   // la pàgina de xarxes del grup (/grup/xarxes), i el cron diari les manté
   // al dia.
@@ -848,8 +749,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const [teamStep, setTeamStep] = useState<"choose" | "remove">("choose");
   const [teamBusy, setTeamBusy] = useState(false);
   function openTeamTarget(person: Person, kind: "member" | "crew") {
-    cancelHoverOpen();
-    setHoveredTeam(null);
     setTeamTarget({ person, kind });
     setTeamStep("choose");
   }
@@ -857,8 +756,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // edició va directa al missatge d'eliminar, sense passar per la tria
   // "treu / passa a suplent" (aquesta encara hi és clicant la targeta).
   function openTeamRemove(person: Person, kind: "member" | "crew") {
-    cancelHoverOpen();
-    setHoveredTeam(null);
     setTeamTarget({ person, kind });
     setTeamStep("remove");
   }
@@ -901,13 +798,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
     const code = await generateJoinCodeAction(band.id);
     if (code) setLocalJoinCode(code);
     setCodeBusy(false);
-  }
-  const [copiedEmailKey, setCopiedEmailKey] = useState<string | null>(null);
-  function copyEmail(key: string, email: string) {
-    navigator.clipboard.writeText(email).then(() => {
-      setCopiedEmailKey(key);
-      window.setTimeout(() => setCopiedEmailKey((k) => (k === key ? null : k)), 1500);
-    });
   }
   const [backups, setBackups] = useState<BackupPerson[]>(() =>
     ((band as unknown as { backups?: BackupPerson[] }).backups || []).map((b) => ({ name: b.name || "", instruments: b.instruments || [], phone: b.phone || "", email: b.email || "" }))
@@ -1096,33 +986,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <button className={"stats-tab" + (tab === "documents" ? " active" : "")} onClick={() => setTab("documents")}>Documents</button>
         {(isMgr || can.perms) && <button className={"stats-tab" + (tab === "permisos" ? " active" : "")} onClick={() => setTab("permisos")}>Permisos</button>}
       </div>
-
-      {/* Targeta grossa flotant en passar el ratolí per una targeta petita
-          de l'equip (a Inici o a Equip): sempre muntada, a través d'un
-          portal a <body>, perquè cap altre element de la pàgina la pugui
-          tapar mai, sigui quina sigui la pestanya activa. */}
-      {hoveredTeam && typeof document !== "undefined" && createPortal(
-        <div
-          className="bento-chroma-flyout"
-          style={{
-            top: hoveredTeam.rect.top + hoveredTeam.rect.height / 2,
-            left: hoveredTeam.rect.left + hoveredTeam.rect.width / 2,
-          }}
-          onMouseEnter={cancelHoverClose}
-          onMouseLeave={() => setHoveredTeam(null)}
-        >
-          <ChromaGrid
-            items={[personChromaItem(
-              hoveredTeam.person, band, openProfile, photosByName, igByName,
-              !!linkedByName[hoveredTeam.person.name], undefined, undefined, copiedEmailKey, copyEmail,
-            )]}
-            columns={1}
-            cardWidth={190}
-            radius={240}
-          />
-        </div>,
-        document.body
-      )}
 
       {attTooltip && typeof document !== "undefined" && createPortal(
         <div
@@ -1324,6 +1187,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           </div>
         </div>
       )}
+      {/* Músics i crew: dues columnes a l'escriptori (músics a l'esquerra,
+          crew a la dreta), apilades en una sola columna al mòbil. */}
+      <div className="team-cols">
       {/* Membres */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
@@ -1353,31 +1219,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           band.members.length > 0 && (
             <div className={teamEdit ? "team-editing" : undefined}>
               {teamEdit && <div className="team-edit-hint">Clica una persona per treure-la del grup o passar-la a suplents.</div>}
-              <TeamRow
-                people={band.members}
-                cardWidth={76}
-                radius={12}
-                visibleCount={8}
-                onAdd={teamEdit && can.members && addKind !== "member" ? () => setAddKind("member") : undefined}
-                addLabel="Nou músic"
-                renderItem={(m) => {
-                  const item = personChromaItem(
-                    m, band, openProfile, photosByName, igByName,
-                    !!linkedByName[m.name], isAdminLike ? handleInvite : undefined,
-                    undefined,
-                    copiedEmailKey, copyEmail,
-                  );
-                  if (teamEdit) return {
-                    ...item, onClick: () => openTeamTarget(m, "member"),
-                    actions: [{ icon: <TrashIcon />, title: "Elimina", onClick: () => openTeamRemove(m, "member") }],
-                  };
-                  return {
-                    ...item,
-                    onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
-                    onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
-                  };
-                }}
-              />
+              <div className="backup-list">
+                {band.members.map((m) => (
+                  <TeamMemberRow
+                    key={m.name} person={m} kind="member" band={band} onOpen={openProfile} photosByName={photosByName}
+                    linked={!!linkedByName[m.name]} onInvite={isAdminLike ? handleInvite : undefined}
+                    editing={teamEdit}
+                    onEditClick={() => openTeamTarget(m, "member")}
+                    onRemoveClick={() => openTeamRemove(m, "member")}
+                  />
+                ))}
+              </div>
             </div>
           )
         )}
@@ -1423,31 +1275,17 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           band.crew.length > 0 && (
             <div className={teamEdit ? "team-editing" : undefined}>
               {teamEdit && <div className="team-edit-hint">Clica una persona per treure-la del grup o passar-la a suplents.</div>}
-              <TeamRow
-                people={band.crew}
-                cardWidth={76}
-                radius={12}
-                visibleCount={8}
-                onAdd={teamEdit && can.members && addKind !== "crew" ? () => setAddKind("crew") : undefined}
-                addLabel="Nou tècnic"
-                renderItem={(m) => {
-                  const item = personChromaItem(
-                    m, band, openProfile, photosByName, igByName,
-                    !!linkedByName[m.name], isAdminLike ? handleInvite : undefined,
-                    undefined,
-                    copiedEmailKey, copyEmail,
-                  );
-                  if (teamEdit) return {
-                    ...item, onClick: () => openTeamTarget(m, "crew"),
-                    actions: [{ icon: <TrashIcon />, title: "Elimina", onClick: () => openTeamRemove(m, "crew") }],
-                  };
-                  return {
-                    ...item,
-                    onMouseEnter: (rect: DOMRect) => { cancelHoverClose(); scheduleHoverOpen(m, rect); },
-                    onMouseLeave: () => { cancelHoverOpen(); scheduleHoverClose(m.name); },
-                  };
-                }}
-              />
+              <div className="backup-list">
+                {band.crew.map((m) => (
+                  <TeamMemberRow
+                    key={m.name} person={m} kind="crew" band={band} onOpen={openProfile} photosByName={photosByName}
+                    linked={!!linkedByName[m.name]} onInvite={isAdminLike ? handleInvite : undefined}
+                    editing={teamEdit}
+                    onEditClick={() => openTeamTarget(m, "crew")}
+                    onRemoveClick={() => openTeamRemove(m, "crew")}
+                  />
+                ))}
+              </div>
             </div>
           )
         )}
@@ -1465,6 +1303,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* Uneix-te al grup (el gestor, o un membre amb el permís "Admin") */}
