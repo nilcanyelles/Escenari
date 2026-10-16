@@ -704,6 +704,19 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   const [formationEditorOpen, setFormationEditorOpen] = useState(false);
   const [editingFormation, setEditingFormation] = useState<Formation | null>(null);
   const can: MemberPerms = isMgr ? { ...ALL_PERMS } : (caps || { ...DEFAULT_PERMS });
+  // Pestanya Contactes: només els relatius a aquest grup concret, no tot el
+  // llistat de l'agència — músics i crew del grup, més qui s'hagi afegit al
+  // full de ruta d'algun dels seus concerts.
+  const bandContacts = useMemo(() => {
+    const names = new Set<string>();
+    (band.members || []).forEach((p) => names.add(normalize(p.name)));
+    (band.crew || []).forEach((p) => names.add(normalize(p.name)));
+    concerts.forEach((c) => {
+      const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
+      rs.contacts.forEach((ct) => { if (ct.name.trim()) names.add(normalize(ct.name)); });
+    });
+    return contacts.filter((ct) => names.has(normalize(ct.name)));
+  }, [band, concerts, contacts]);
   // Un membre amb el permís "Admin" veu i pot editar exactament el mateix
   // que el gestor dins d'aquest grup (equip, aparença, codi d'unió,
   // suplents...) — mai fora d'ell (routing/"base" es queda lligat a
@@ -1185,7 +1198,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "contactes" && can.contacts && (
-        <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={contactInteractions} embedded />
+        <ContactesView contacts={bandContacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={contactInteractions} embedded />
       )}
 
       {tab === "equip" && (<>
