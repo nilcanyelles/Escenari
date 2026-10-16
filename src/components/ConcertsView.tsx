@@ -49,7 +49,8 @@ function EmptyCtaArrow({ targetRef }: { targetRef: React.RefObject<HTMLElement |
       const el = targetRef.current;
       if (!el) return;
       const r = el.getBoundingClientRect();
-      setTarget({ x: r.left + r.width / 2, y: r.top - 6 });
+      // Just a sota del botó, amb un marge perquè la fletxa no el toqui.
+      setTarget({ x: r.left + r.width / 2, y: r.bottom + 16 });
     }
     measure();
     window.addEventListener("resize", measure);
@@ -59,8 +60,15 @@ function EmptyCtaArrow({ targetRef }: { targetRef: React.RefObject<HTMLElement |
   if (!mounted || !target || typeof document === "undefined") return null;
   const startX = window.innerWidth / 2;
   const startY = window.innerHeight / 2;
-  const midX = (startX + target.x) / 2;
-  const path = `M ${startX} ${startY} Q ${midX} ${target.y} ${target.x} ${target.y}`;
+  const dx = target.x - startX;
+  const dy = target.y - startY;
+  // Corba pronunciada en forma de ganxo: puja gairebé vertical a prop de
+  // l'inici i després avança quasi pla fins just a sobre del punt final.
+  const c1x = startX + dx * 0.12;
+  const c1y = startY + dy * 0.85;
+  const c2x = startX + dx * 0.92;
+  const c2y = startY + dy * 0.08;
+  const path = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${target.x} ${target.y}`;
   return createPortal(
     <svg className="empty-cta-arrow-svg" aria-hidden="true">
       <defs>
@@ -605,7 +613,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
       <AttTooltipPortal />
 
       {upcomingList.length === 0 && pastList.length === 0 ? (
-        <div className="empty-state">Cap concert coincideix amb els filtres.</div>
+        concerts.length > 0 && <div className="empty-state">Cap concert coincideix amb els filtres.</div>
       ) : (
         <div className="concerts-list">
           {upcomingList.length > 0 && (
