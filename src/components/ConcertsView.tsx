@@ -172,7 +172,7 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, canDelete = false, allowBolo, detailBase = "/concerts", contacts = [], myNames, today, fullHistoryLoaded = true, showMineToggle = false }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; canDelete?: boolean; allowBolo?: boolean; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string; fullHistoryLoaded?: boolean; showMineToggle?: boolean }) {
+export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, canDelete = false, allowBolo, creatableBands, detailBase = "/concerts", contacts = [], myNames, today, fullHistoryLoaded = true, showMineToggle = false }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; canDelete?: boolean; allowBolo?: boolean; creatableBands?: Band[]; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string; fullHistoryLoaded?: boolean; showMineToggle?: boolean }) {
   const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
@@ -532,7 +532,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
         {canCreate && (
           <span style={{ position: "relative", display: "inline-block" }}>
-            <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />
+            <NewEventButton bands={creatableBands ?? bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />
             {concerts.length === 0 && (
               <div className="empty-cta-hint" aria-hidden="true">
                 <span>Crea el primer esdeveniment!</span>

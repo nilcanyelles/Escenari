@@ -158,10 +158,6 @@ export default function NewEventButton({ bands, selectedBandId = "", allowBolo =
                   ))}
                 </div>
               </div>
-              <div>
-                <label className="form-label">Data</label>
-                <InlineDatePicker value={date} onChange={setDate} today={todayStr} />
-              </div>
               <div className="modal-actions">
                 <div className="spacer"></div>
                 <button className="btn-outline" onClick={() => setStep("kind")}>← Enrere</button>

@@ -36,7 +36,11 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
     return memberPerms(me);
   }
   const eligible = bandId ? bands.filter((b) => b.id === bandId) : bands;
-  const canCreate = eligible.some((b) => permsFor(b).events);
+  // Només s'ofereixen al desplegable "Quin grup?" els grups on de veres es
+  // té el permís "Esdeveniments" — abans sortien tots els grups del músic,
+  // encara que no hi pogués crear res.
+  const creatableBands = eligible.filter((b) => permsFor(b).events);
+  const canCreate = creatableBands.length > 0;
   // "Bolo" (fitxa completa, amb caixet/factura): només a qui sigui Admin
   // d'aquell grup — la resta d'esdeveniments (assaig/reunió/altre) ja els
   // deixa crear el permís "Esdeveniments".
@@ -59,6 +63,7 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
       canCreate={canCreate}
       canDelete={canCreate}
       allowBolo={allowBolo}
+      creatableBands={creatableBands}
       detailBase="/artista/concerts"
       myNames={myNames}
       today={today()}
