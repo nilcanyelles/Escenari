@@ -562,20 +562,24 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 /* ---------- FILTER BARS ---------- */
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-/* Quan el grup encara no té cap esdeveniment: fletxa assenyalant el botó
-   "+ Nou esdeveniment" perquè no passi desapercebut. */
-.empty-cta-hint {
-  position: absolute; bottom: calc(100% + 4px); right: -6px;
-  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
-  pointer-events: none; z-index: 5; animation: empty-cta-bounce 1.6s ease-in-out infinite;
+/* Quan el grup encara no té cap esdeveniment: fletxa des del mig de la
+   pantalla fins al botó "+ Nou esdeveniment" perquè no passi desapercebut
+   (vegeu EmptyCtaArrow a ConcertsView.tsx). */
+.empty-cta-arrow-svg {
+  position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 40;
 }
-.empty-cta-hint span {
-  font-size: 13px; font-weight: 700; color: var(--accent-text); white-space: nowrap;
+.empty-cta-arrow-path {
+  fill: none; stroke: var(--accent-text); stroke-width: 3; stroke-linecap: round;
+  animation: empty-cta-pulse 1.6s ease-in-out infinite;
 }
-.empty-cta-hint svg { color: var(--accent-text); }
-@keyframes empty-cta-bounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(6px); }
+.empty-cta-arrow-head { fill: var(--accent-text); animation: empty-cta-pulse 1.6s ease-in-out infinite; }
+.empty-cta-arrow-label {
+  fill: var(--accent-text); font-family: "Space Grotesk", sans-serif; font-size: 16px; font-weight: 700;
+  animation: empty-cta-pulse 1.6s ease-in-out infinite;
+}
+@keyframes empty-cta-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
 }
 .concerts-list, .contactes-list { display: flex; flex-direction: column; gap: 16px; }
 .t-head.concerts-cols, .t-head.contactes-cols, .t-head.ccols {

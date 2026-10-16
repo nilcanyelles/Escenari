@@ -36,6 +36,44 @@ function AttTooltipPortal() {
     document.body
   );
 }
+// Quan el grup encara no té cap esdeveniment: fletxa des del mig de la
+// pantalla fins al botó "+ Nou esdeveniment" (mesurat amb getBoundingClientRect
+// perquè apunti de veres al botó sigui quina sigui la mida de la finestra),
+// perquè no passi desapercebut en una pantalla pràcticament buida.
+function EmptyCtaArrow({ targetRef }: { targetRef: React.RefObject<HTMLElement | null> }) {
+  const [target, setTarget] = useState<{ x: number; y: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    function measure() {
+      const el = targetRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setTarget({ x: r.left + r.width / 2, y: r.top - 6 });
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    return () => { window.removeEventListener("resize", measure); window.removeEventListener("scroll", measure, true); };
+  }, [targetRef]);
+  if (!mounted || !target || typeof document === "undefined") return null;
+  const startX = window.innerWidth / 2;
+  const startY = window.innerHeight / 2;
+  const midX = (startX + target.x) / 2;
+  const path = `M ${startX} ${startY} Q ${midX} ${target.y} ${target.x} ${target.y}`;
+  return createPortal(
+    <svg className="empty-cta-arrow-svg" aria-hidden="true">
+      <defs>
+        <marker id="empty-cta-arrowhead" markerWidth="9" markerHeight="9" refX="5" refY="4.5" orient="auto">
+          <path d="M0,0 L9,4.5 L0,9 Z" className="empty-cta-arrow-head" />
+        </marker>
+      </defs>
+      <text x={startX} y={startY - 16} textAnchor="middle" className="empty-cta-arrow-label">Crea el primer esdeveniment aquí dalt!</text>
+      <path d={path} className="empty-cta-arrow-path" markerEnd="url(#empty-cta-arrowhead)" />
+    </svg>,
+    document.body
+  );
+}
 function kindCounts(list: { kind?: string | null; status?: string }[]): Record<string, number> {
   const out: Record<string, number> = { bolo: 0, assaig: 0, reunio: 0, altre: 0 };
   list.forEach((c) => {
@@ -216,6 +254,7 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
   const [rsModalConcertId, setRsModalConcertId] = useState<string | null>(null);
   const [rsPreviewConcertId, setRsPreviewConcertId] = useState<string | null>(null);
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const newEventBtnRef = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
     if (modal?.concertId) {
@@ -531,19 +570,11 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
         </Dropdown>
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
         {canCreate && (
-          <span style={{ position: "relative", display: "inline-block" }}>
+          <span ref={newEventBtnRef} style={{ position: "relative", display: "inline-block" }}>
             <NewEventButton bands={creatableBands ?? bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />
-            {concerts.length === 0 && (
-              <div className="empty-cta-hint" aria-hidden="true">
-                <span>Crea el primer esdeveniment!</span>
-                <svg width="44" height="44" viewBox="0 0 46 46" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M6 6 C 10 26, 26 38, 40 36"></path>
-                  <path d="M29 31 L41 37 L36 25"></path>
-                </svg>
-              </div>
-            )}
           </span>
         )}
+        {canCreate && concerts.length === 0 && <EmptyCtaArrow targetRef={newEventBtnRef} />}
       </div>
 
       {showMineToggle && (
