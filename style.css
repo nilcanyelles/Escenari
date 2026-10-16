@@ -562,6 +562,21 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 
 /* ---------- FILTER BARS ---------- */
 .filter-bar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+/* Quan el grup encara no té cap esdeveniment: fletxa assenyalant el botó
+   "+ Nou esdeveniment" perquè no passi desapercebut. */
+.empty-cta-hint {
+  position: absolute; bottom: calc(100% + 4px); right: -6px;
+  display: flex; flex-direction: column; align-items: flex-end; gap: 2px;
+  pointer-events: none; z-index: 5; animation: empty-cta-bounce 1.6s ease-in-out infinite;
+}
+.empty-cta-hint span {
+  font-size: 13px; font-weight: 700; color: var(--accent-text); white-space: nowrap;
+}
+.empty-cta-hint svg { color: var(--accent-text); }
+@keyframes empty-cta-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
 .concerts-list, .contactes-list { display: flex; flex-direction: column; gap: 16px; }
 .t-head.concerts-cols, .t-head.contactes-cols, .t-head.ccols {
   position: sticky; top: 75px; z-index: 2; background: var(--bg-card);

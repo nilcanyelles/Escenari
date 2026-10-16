@@ -530,7 +530,20 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
           {tagOpts.map((t) => <option key={t} value={t}>{t}</option>)}
         </Dropdown>
         {isMgr && <button className="btn-outline" onClick={() => setImportOpen(true)} title="Importa concerts des d'un Excel (amb plantilla)">Importa</button>}
-        {canCreate && <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />}
+        {canCreate && (
+          <span style={{ position: "relative", display: "inline-block" }}>
+            <NewEventButton bands={bands} selectedBandId={selectedBandId} allowBolo={allowBolo ?? isMgr} defaultDate={today} detailBase={detailBase} />
+            {concerts.length === 0 && (
+              <div className="empty-cta-hint" aria-hidden="true">
+                <span>Crea el primer esdeveniment!</span>
+                <svg width="44" height="44" viewBox="0 0 46 46" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M6 6 C 10 26, 26 38, 40 36"></path>
+                  <path d="M29 31 L41 37 L36 25"></path>
+                </svg>
+              </div>
+            )}
+          </span>
+        )}
       </div>
 
       {showMineToggle && (
