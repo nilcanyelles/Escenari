@@ -6,6 +6,7 @@ import type { Person, Concert, Band } from "@/lib/types";
 import { resolveAttendanceLink } from "@/lib/attendance-link";
 import { getBackupRequests } from "@/lib/group-data";
 import { getSetlists } from "@/lib/material-data";
+import { getTeamPhotosAndIg } from "@/lib/person-profile";
 import ConfirmView, { type ConfMember, type ConfViewer, type ConfSubInfo } from "./ConfirmView";
 
 export const dynamic = "force-dynamic";
@@ -48,17 +49,13 @@ export default async function ConfirmPage({ params, searchParams }: {
   ]);
 
   const members: Person[] = [...(band.members || []), ...(band.crew || [])];
-  const [links, photos] = await Promise.all([
+  const [links, teamPhotos] = await Promise.all([
     pool.query("select member_name, clerk_user_id from band_members where band_id=$1", [band.id]).then((r) => r.rows),
-    pool.query(
-      "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-      [link.workspaceId]
-    ).then((r) => r.rows),
+    getTeamPhotosAndIg(link.workspaceId, [band.id]),
   ]);
   const linkedByName: Record<string, string> = {};
   links.forEach((l) => { linkedByName[normalize(l.member_name)] = l.clerk_user_id; });
-  const photosByName: Record<string, string> = {};
-  photos.forEach((p) => { photosByName[normalize(p.person_name)] = p.photo_file_id; });
+  const { photosByName } = teamPhotos;
 
   // Membres encara sense vincle però amb un compte d'Escenari al mateix
   // correu: també se'ls demana entrar (en respondre, quedaran vinculats).

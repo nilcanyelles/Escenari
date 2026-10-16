@@ -9,6 +9,7 @@ import { getFormations } from "@/lib/formation-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getShareLinks } from "@/lib/share-data";
 import { getTransactions } from "@/lib/finance";
+import { getTeamPhotosAndIg } from "@/lib/person-profile";
 import { memberPerms } from "@/lib/perms";
 import { computePayouts, myPayout } from "@/lib/payouts";
 import { today } from "@/lib/format";
@@ -56,20 +57,16 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
   if (isAdmin && workspaceId && band) {
     await ensureShareLinkForConcert(id, workspaceId);
     const [fullBands, fullConcert, companyInfo, clientDetails, contacts, billing, activeLinks,
-      linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, photoRows] = await Promise.all([
+      linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, teamPhotos] = await Promise.all([
       getBands(workspaceId), getConcertById(workspaceId, id), getCompanyInfo(workspaceId),
       getClientDetails(workspaceId), getContacts(workspaceId), getWorkspaceBilling(workspaceId), activeLinksForConcert(workspaceId, id),
       getLinkedMembers(band.id), getShareLinks(workspaceId, id), getBackupRequests(workspaceId, { concertId: id }),
       getRiders(band.id), getSetlists(band.id), getFormations(band.id), getRiderApprovals(workspaceId, id), getTransactions(workspaceId),
-      db().query(
-        "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-        [workspaceId]
-      ).then((r) => r.rows as { person_name: string; photo_file_id: string }[]),
+      getTeamPhotosAndIg(workspaceId, [band.id]),
     ]);
     if (!fullConcert) notFound();
     const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
-    const photosByName: Record<string, string> = {};
-    photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+    const { photosByName } = teamPhotos;
 
     const unavailTitles = await getUnavailabilityTitlesOnDate(linkedMembers.map((lm) => lm.clerkUserId), fullConcert.date);
     const unavailByMember: Record<string, string> = {};
@@ -127,15 +124,12 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
   // l'agència en comptes de deixar el camp buit.
   const canContacts = perms.contacts || profile.role === "manager";
 
-  const [setlists, linkedMembers, raw, txs, photoRows, shareLinks, contacts, formations] = await Promise.all([
+  const [setlists, linkedMembers, raw, txs, teamPhotos, shareLinks, contacts, formations] = await Promise.all([
     band ? getSetlists(band.id) : Promise.resolve([]),
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     db().query("select amount, agency_pct, agency_assumes_expenses, payouts from concerts where id=$1", [id]).then((r) => r.rows[0] || null),
     workspaceId ? getTransactions(workspaceId) : Promise.resolve([]),
-    workspaceId ? db().query(
-      "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-      [workspaceId]
-    ).then((r) => r.rows) : Promise.resolve([]),
+    workspaceId && band ? getTeamPhotosAndIg(workspaceId, [band.id]) : Promise.resolve({ photosByName: {}, igByName: {} }),
     canEvents && workspaceId ? getShareLinks(workspaceId, id) : Promise.resolve([]),
     canContacts && workspaceId ? getContacts(workspaceId) : Promise.resolve([]),
     band ? getFormations(band.id) : Promise.resolve([]),
@@ -157,8 +151,7 @@ export default async function ArtistConcertDetailContent({ id }: { id: string })
   );
   const myAmount = myPayout(summary.payouts, myName);
 
-  const photosByName: Record<string, string> = {};
-  photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+  const { photosByName } = teamPhotos;
 
   return (
     <ArtistConcertDetail

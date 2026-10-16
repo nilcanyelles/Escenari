@@ -3,6 +3,7 @@ import { db } from "./db";
 import { normalize } from "./text";
 import { today } from "./format";
 import { instrumentsFor } from "./tags";
+import { getTeamPhotosAndIg } from "./person-profile";
 import type { Person, SocialLinks, SocialPlatform, SocialStats, SocialTracking } from "./types";
 import { SOCIAL_PLATFORMS, isTracked } from "./social-history";
 
@@ -66,8 +67,8 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
   const b = (await pool.query("select * from bands where public_token=$1", [token])).rows[0];
   if (!b) return null;
 
-  const [profRows, concertRows, accountRows, linkedRows] = await Promise.all([
-    pool.query("select person_name, photo_file_id, ig_handle from person_profiles where workspace_id=$1", [b.workspace_id]),
+  const [teamPhotos, concertRows, accountRows, linkedRows] = await Promise.all([
+    getTeamPhotosAndIg(b.workspace_id, [b.id]),
     pool.query(
       `select to_char(date, 'YYYY-MM-DD') as date from concerts
        where band_id=$1 and coalesce(kind, 'bolo')='bolo' and status <> 'cancel·lat'`,
@@ -77,12 +78,8 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
     pool.query("select member_name from band_members where band_id=$1", [b.id]),
   ]);
   const linkedSet = new Set<string>(linkedRows.rows.map((r) => normalize(r.member_name)));
-  const photos: Record<string, string> = {};
-  const igs: Record<string, string> = {};
-  profRows.rows.forEach((r) => {
-    if (r.photo_file_id) photos[normalize(r.person_name)] = r.photo_file_id;
-    if (r.ig_handle) igs[normalize(r.person_name)] = r.ig_handle;
-  });
+  const photos = teamPhotos.photosByName;
+  const igs = teamPhotos.igByName;
 
   const t = today();
   const dates: string[] = concertRows.rows.map((r) => r.date);

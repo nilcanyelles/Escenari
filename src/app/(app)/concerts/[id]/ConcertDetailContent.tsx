@@ -7,7 +7,7 @@ import { getShareLinks } from "@/lib/share-data";
 import { getRiders, getSetlists, getRiderApprovals } from "@/lib/material-data";
 import { getFormations } from "@/lib/formation-data";
 import { getTransactions } from "@/lib/finance";
-import { normalize } from "@/lib/text";
+import { getTeamPhotosAndIg } from "@/lib/person-profile";
 import { today } from "@/lib/format";
 import { emailConfigured } from "@/lib/email";
 import { requireManager } from "@/lib/current-user";
@@ -31,7 +31,7 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
 
   const band = bands.find((b) => b.id === concert.bandId) || null;
   await ensureShareLinkForConcert(id, workspaceId);
-  const [linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, clashConcerts, clientHistoryConcerts, photoRows] = await Promise.all([
+  const [linkedMembers, shareLinks, backupRequests, riders, setlists, formations, riderApprovals, transactions, clashConcerts, clientHistoryConcerts, teamPhotos] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     getShareLinks(workspaceId, id),
     getBackupRequests(workspaceId, { concertId: id }),
@@ -42,17 +42,10 @@ export default async function ConcertDetailContent({ id }: { id: string }) {
     getTransactions(workspaceId),
     concert.status !== "cancel·lat" ? getConcertsOnDate(workspaceId, concert.date, id) : Promise.resolve([]),
     getClientHistory(workspaceId, concert.contact?.company || "", id),
-    (async () => {
-      const { db } = await import("@/lib/db");
-      return (await db().query(
-        "select person_name, photo_file_id from person_profiles where workspace_id=$1 and photo_file_id is not null",
-        [workspaceId]
-      )).rows as { person_name: string; photo_file_id: string }[];
-    })(),
+    band ? getTeamPhotosAndIg(workspaceId, [band.id]) : Promise.resolve({ photosByName: {}, igByName: {} }),
   ]);
   const concertExpenses = transactions.filter((t) => t.concertId === id && t.kind === "despesa");
-  const photosByName: Record<string, string> = {};
-  photoRows.forEach((r) => { photosByName[normalize(r.person_name)] = r.photo_file_id; });
+  const { photosByName } = teamPhotos;
 
   const unavailTitles = await getUnavailabilityTitlesOnDate(linkedMembers.map((lm) => lm.clerkUserId), concert.date);
   const unavailByMember: Record<string, string> = {};

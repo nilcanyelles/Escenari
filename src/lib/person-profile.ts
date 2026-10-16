@@ -99,6 +99,36 @@ function toDateStr(d: Date | string): string {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+// Foto i Instagram de l'equip d'un o més grups — mai la d'algú que només
+// coincideix de nom amb un altre músic/crew ja reclamat en un altre grup
+// del mateix workspace: un perfil sense compte vinculat és segur de
+// mostrar (ningú més el pot reclamar sense ser-ho de veres), però un que ja
+// té compte només es mostra per als grups on aquell compte s'ha vinculat
+// de veres (band_members) — si no, la foto real d'una persona sortiria a
+// algú altre que el gestor acaba de crear amb el mateix nom, fins que
+// aquesta persona reclami el seu propi lloc en aquell grup.
+export async function getTeamPhotosAndIg(workspaceId: string, bandIds: string[]): Promise<{ photosByName: Record<string, string>; igByName: Record<string, string> }> {
+  const photosByName: Record<string, string> = {};
+  const igByName: Record<string, string> = {};
+  if (!bandIds.length) return { photosByName, igByName };
+  const pool = db();
+  const { rows } = await pool.query(
+    `select pp.person_name, pp.photo_file_id, pp.ig_handle,
+            (pp.clerk_user_id is null or exists(
+              select 1 from band_members bm where bm.clerk_user_id = pp.clerk_user_id and bm.band_id = any($2)
+            )) as safe
+     from person_profiles pp
+     where pp.workspace_id = $1`,
+    [workspaceId, bandIds]
+  );
+  rows.forEach((r) => {
+    if (!r.safe) return;
+    if (r.photo_file_id) photosByName[normalize(r.person_name)] = r.photo_file_id;
+    if (r.ig_handle) igByName[normalize(r.person_name)] = r.ig_handle;
+  });
+  return { photosByName, igByName };
+}
+
 // Grups que cada persona ha amagat del seu propi perfil públic, per nom
 // normalitzat — per filtrar la llista de grups que es mostra a la pestanya
 // de Contactes perquè coincideixi amb el que la persona ha triat mostrar.

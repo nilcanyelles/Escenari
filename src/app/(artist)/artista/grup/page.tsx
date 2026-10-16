@@ -10,6 +10,7 @@ import { getRiders, getSetlists, getBandEditors } from "@/lib/material-data";
 import { getFormations } from "@/lib/formation-data";
 import { getSongs, getBandFiles } from "@/lib/songs";
 import { getSelectedBandId } from "@/lib/band-scope";
+import { getTeamPhotosAndIg, getHiddenBandsByName } from "@/lib/person-profile";
 import { memberPerms } from "@/lib/perms";
 import { normalize } from "@/lib/text";
 import { today } from "@/lib/format";
@@ -66,18 +67,10 @@ export default async function ArtistGrupPage() {
     canContacts && workspaceId ? getContactInteractions(workspaceId) : Promise.resolve([]),
   ]);
 
-  const profRows = (await db().query(
-    "select person_name, photo_file_id, ig_handle, hidden_bands from person_profiles where workspace_id=$1",
-    [workspaceId]
-  )).rows;
-  const photosByName: Record<string, string> = {};
-  const igByName: Record<string, string> = {};
-  const hiddenBandsByName: Record<string, string[]> = {};
-  profRows.forEach((r) => {
-    if (r.photo_file_id) photosByName[normalize(r.person_name)] = r.photo_file_id;
-    if (r.ig_handle) igByName[normalize(r.person_name)] = r.ig_handle;
-    if (r.hidden_bands?.length) hiddenBandsByName[normalize(r.person_name)] = r.hidden_bands;
-  });
+  const [{ photosByName, igByName }, hiddenBandsByName] = await Promise.all([
+    getTeamPhotosAndIg(workspaceId, [bandId]),
+    getHiddenBandsByName(workspaceId),
+  ]);
 
   return (
     <Suspense fallback={null}>
