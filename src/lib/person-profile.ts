@@ -148,8 +148,10 @@ export async function getOrCreatePersonProfile(workspaceId: string, personName: 
 }
 
 // El gestor apareix automàticament com a "Mànager" a l'equip tècnic de tots
-// els grups del seu workspace (tret que ja hi sigui com a membre o crew).
-// Idempotent: es crida en carregar la pàgina del grup.
+// els grups del seu workspace (tret que ja hi sigui com a membre o crew, o
+// que algú l'hagi tret expressament — vegeu "manager_hidden" a
+// removeBandPersonAction, que llavors ho deixa de banda per sempre en
+// aquell grup concret). Idempotent: es crida en carregar la pàgina del grup.
 export async function ensureManagerCrew(workspaceId: string, manager: { clerkUserId: string; name: string; email: string }) {
   const name = (manager.name || "").trim();
   if (!name) return;
@@ -158,7 +160,7 @@ export async function ensureManagerCrew(workspaceId: string, manager: { clerkUse
   await pool.query("update person_profiles set clerk_user_id=$1 where id=$2 and clerk_user_id is null", [manager.clerkUserId, token]);
   const pp = (await pool.query("select phone, whatsapp, role_label from person_profiles where id=$1", [token])).rows[0] || {};
   const key = normalize(name);
-  const bands = (await pool.query("select id, members, crew from bands where workspace_id=$1", [workspaceId])).rows;
+  const bands = (await pool.query("select id, members, crew from bands where workspace_id=$1 and manager_hidden=false", [workspaceId])).rows;
   for (const b of bands) {
     const present = [...(b.members || []), ...(b.crew || [])].some((m: { name: string }) => normalize(m.name) === key);
     if (present) continue;

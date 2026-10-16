@@ -166,7 +166,7 @@ export async function addBandPersonAction(bandId: string, kind: "member" | "crew
 // "Treure gent". També se'n desfà el vincle de compte (band_members) i
 // qualsevol invitació pendent per reclamar el perfil.
 export async function removeBandPersonAction(bandId: string, kind: "member" | "crew", name: string) {
-  await requireBandAccess(bandId, "removeMembers");
+  const access = await requireBandAccess(bandId, "removeMembers");
   const pool = db();
   const band = (await pool.query("select members, crew from bands where id=$1", [bandId])).rows[0];
   if (!band) throw new Error("Grup no trobat");
@@ -177,6 +177,12 @@ export async function removeBandPersonAction(bandId: string, kind: "member" | "c
   await pool.query(`update bands set ${col}=$1 where id=$2`, [JSON.stringify(list), bandId]);
   await pool.query("delete from band_members where band_id=$1 and lower(member_name)=lower($2)", [bandId, name.trim()]);
   await pool.query("delete from invitations where band_id=$1 and lower(name)=lower($2) and status='pendent'", [bandId, name.trim()]);
+  // Si qui es treu és el gestor mateix: no es torna a afegir sol al
+  // carregar la pàgina (ensureManagerCrew) — segueix veient i gestionant el
+  // grup igualment, per ser del workspace, encara que no hi surti a l'equip.
+  if (normalize(name) === normalize(access.profile.name)) {
+    await pool.query("update bands set manager_hidden=true where id=$1", [bandId]);
+  }
   revalidateGroup();
 }
 
