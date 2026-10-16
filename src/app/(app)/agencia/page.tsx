@@ -6,6 +6,7 @@ import { getWorkspaceBilling, groupCap } from "@/lib/billing";
 import { syncCheckoutSession } from "@/lib/stripe";
 import { getContacts, getBands, getConcerts } from "@/lib/data";
 import { getContactInteractions } from "@/lib/contacts-data";
+import { getHiddenBandsByName } from "@/lib/person-profile";
 import { bandRoster } from "@/lib/roster";
 import { syncAllBandPeopleToContacts } from "@/app/(app)/contactes/actions";
 
@@ -28,7 +29,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
   // Pestanya Contactes: els músics/crew de tots els grups entren al
   // magatzem de contactes (com a /contactes).
   await syncAllBandPeopleToContacts(profile.workspaceId);
-  const [members, invitations, wsRow, bandRows, billing, groups, contacts, allBands, concerts, interactions] = await Promise.all([
+  const [members, invitations, wsRow, bandRows, billing, groups, contacts, allBands, concerts, interactions, hiddenBandsByName] = await Promise.all([
     getAgencyMembers(profile.workspaceId),
     getAgencyInvitations(profile.workspaceId),
     db().query("select name, logo from workspaces where id=$1", [profile.workspaceId]).then((r) => r.rows[0] || null),
@@ -46,6 +47,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
     // (vegeu el mateix canvi a /concerts i /grup).
     getConcerts(profile.workspaceId, { monthsBack: 12 }),
     getContactInteractions(profile.workspaceId),
+    getHiddenBandsByName(profile.workspaceId),
   ]);
   const concertCountByPerson: Record<string, number> = {};
   concerts.forEach((c) => {
@@ -68,6 +70,7 @@ export default async function AgenciaPage({ searchParams }: { searchParams: Prom
       allBands={allBands}
       concertCountByPerson={concertCountByPerson}
       interactions={interactions}
+      hiddenBandsByName={hiddenBandsByName}
     />
   );
 }

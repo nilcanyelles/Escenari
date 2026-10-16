@@ -346,7 +346,7 @@ function AgencyGroupCard({ b }: { b: BandOpt }) {
   );
 }
 
-export default function AgenciaView({ agency, me, members, invitations, bands, billing, groups, billingNotice = "", contacts = [], allBands = [], concertCountByPerson = {}, interactions = [] }: {
+export default function AgenciaView({ agency, me, members, invitations, bands, billing, groups, billingNotice = "", contacts = [], allBands = [], concertCountByPerson = {}, interactions = [], hiddenBandsByName = {} }: {
   agency: { name: string; logo: string };
   me: { clerkUserId: string; agencyOwner: boolean; canCreateGroups: boolean };
   members: AgencyMember[];
@@ -360,6 +360,7 @@ export default function AgenciaView({ agency, me, members, invitations, bands, b
   allBands?: Band[];
   concertCountByPerson?: Record<string, number>;
   interactions?: ContactInteraction[];
+  hiddenBandsByName?: Record<string, string[]>;
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -408,7 +409,7 @@ export default function AgenciaView({ agency, me, members, invitations, bands, b
       )}
 
       {tab === "contactes" && (
-        <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={interactions} embedded />
+        <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={interactions} hiddenBandsByName={hiddenBandsByName} embedded />
       )}
 
       {tab === "grups" && (

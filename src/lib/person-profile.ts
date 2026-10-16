@@ -99,6 +99,19 @@ function toDateStr(d: Date | string): string {
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 }
 
+// Grups que cada persona ha amagat del seu propi perfil públic, per nom
+// normalitzat — per filtrar la llista de grups que es mostra a la pestanya
+// de Contactes perquè coincideixi amb el que la persona ha triat mostrar.
+export async function getHiddenBandsByName(workspaceId: string): Promise<Record<string, string[]>> {
+  const { rows } = await db().query(
+    "select person_name, hidden_bands from person_profiles where workspace_id=$1",
+    [workspaceId]
+  );
+  const map: Record<string, string[]> = {};
+  rows.forEach((r) => { map[normalize(r.person_name)] = r.hidden_bands || []; });
+  return map;
+}
+
 // Crea (o troba) el perfil d'una persona d'un workspace i torna el token.
 // Sempre en blanc si no n'hi havia cap (sense compte vinculat ni foto/bio/IG
 // prellenades) encara que ja hi hagi algú amb el mateix nom en un altre grup

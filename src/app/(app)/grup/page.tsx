@@ -61,16 +61,20 @@ export default async function GrupPage() {
     getContactInteractions(workspaceId),
   ]);
 
-  // Fotos de perfil i Instagram reals (perquè les targetes de l'equip els usin).
+  // Fotos de perfil i Instagram reals (perquè les targetes de l'equip els
+  // usin), i els grups que cadascú ha amagat del seu perfil (per filtrar-los
+  // igual a la pestanya Contactes).
   const profRows = (await db().query(
-    "select person_name, photo_file_id, ig_handle from person_profiles where workspace_id=$1",
+    "select person_name, photo_file_id, ig_handle, hidden_bands from person_profiles where workspace_id=$1",
     [workspaceId]
   )).rows;
   const photosByName: Record<string, string> = {};
   const igByName: Record<string, string> = {};
+  const hiddenBandsByName: Record<string, string[]> = {};
   profRows.forEach((r) => {
     if (r.photo_file_id) photosByName[normalize(r.person_name)] = r.photo_file_id;
     if (r.ig_handle) igByName[normalize(r.person_name)] = r.ig_handle;
+    if (r.hidden_bands?.length) hiddenBandsByName[normalize(r.person_name)] = r.hidden_bands;
   });
 
   return (
@@ -90,6 +94,7 @@ export default async function GrupPage() {
         formations={formations}
         contacts={contacts}
         contactInteractions={contactInteractions}
+        hiddenBandsByName={hiddenBandsByName}
         photosByName={photosByName}
         igByName={igByName}
         socialPrev={socialPrev}

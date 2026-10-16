@@ -668,7 +668,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, formations = [], contacts = [], contactInteractions = [], photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, formations = [], contacts = [], contactInteractions = [], hiddenBandsByName = {}, photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -684,6 +684,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // Contactes de l'agència — vegeu el permís "Contactes".
   contacts?: Contact[];
   contactInteractions?: ContactInteraction[];
+  // Grups que cada persona ha amagat del seu propi perfil (per nom
+  // normalitzat) — per filtrar els grups que es mostren a Contactes.
+  hiddenBandsByName?: Record<string, string[]>;
   photosByName?: Record<string, string>;
   igByName?: Record<string, string>;
   viewer?: "manager" | "artist";
@@ -1198,7 +1201,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "contactes" && can.contacts && (
-        <ContactesView contacts={bandContacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={contactInteractions} embedded />
+        <ContactesView contacts={bandContacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={contactInteractions} hiddenBandsByName={hiddenBandsByName} embedded />
       )}
 
       {tab === "equip" && (<>

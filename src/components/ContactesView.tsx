@@ -46,8 +46,10 @@ function DeleteContactBtn({ id }: { id: string }) {
 
 // Membre trobat als grups amb aquest nom: instruments (músic) o funcions
 // (crew), combinats de tots els grups on toca — mateixa lògica que la fitxa
-// de perfil, perquè les bombolles concordin amb el que es veu allà.
-function bandBadgesFor(name: string, allBands: Band[]) {
+// de perfil, perquè les bombolles concordin amb el que es veu allà. Els
+// grups que la persona ha amagat del seu propi perfil ("hiddenBandIds") no
+// hi compten, perquè Contactes mostri el mateix que el seu perfil públic.
+function bandBadgesFor(name: string, allBands: Band[], hiddenBandIds: string[] = []) {
   const instruments: string[] = [];
   const functions: string[] = [];
   const bandNames: string[] = [];
@@ -58,6 +60,7 @@ function bandBadgesFor(name: string, allBands: Band[]) {
   let isMusician = false;
   let isCrew = false;
   allBands.forEach((b) => {
+    if (hiddenBandIds.includes(b.id)) return;
     let inThisBand = false;
     (b.members || []).forEach((p) => {
       if (p.name !== name) return;
@@ -78,9 +81,26 @@ function bandBadgesFor(name: string, allBands: Band[]) {
   return { inBands, isMusician, isCrew, instruments, functions, bandNames };
 }
 
+// Telèfon/correu "del perfil": el primer que no sigui buit entre totes les
+// seves pertinences a grups (músic o crew) — la mateixa font que fa servir
+// MemberProfileModal, perquè sigui consistent amb el que s'hi veu i s'hi
+// edita. Es fa servir només com a valor per defecte a la fila/edició de
+// Contactes — mai es desa de tornada aquí, només al contacte mateix.
+function profileContactFor(name: string, allBands: Band[]): { phone: string; email: string } {
+  let phone = "";
+  let email = "";
+  for (const b of allBands) {
+    const m = (b.members || []).concat(b.crew || []).find((p) => p.name === name);
+    if (m?.phone && !phone) phone = m.phone;
+    if (m?.email && !email) email = m.email;
+    if (phone && email) break;
+  }
+  return { phone, email };
+}
+
 // "embedded": dins d'una altra pàgina (pestanya Contactes de l'Agència) —
 // sense el fons "glow" propi, que ja el posa la pàgina que la conté.
-export default function ContactesView({ contacts, allBands, concertCountByPerson, interactions = [], embedded = false }: { contacts: Contact[]; allBands: Band[]; concertCountByPerson: Record<string, number>; interactions?: ContactInteraction[]; embedded?: boolean }) {
+export default function ContactesView({ contacts, allBands, concertCountByPerson, interactions = [], hiddenBandsByName = {}, embedded = false }: { contacts: Contact[]; allBands: Band[]; concertCountByPerson: Record<string, number>; interactions?: ContactInteraction[]; hiddenBandsByName?: Record<string, string[]>; embedded?: boolean }) {
   const [search, setSearch] = useState("");
   const [kindFilter, setKindFilter] = useState<"tots" | ContactKind>("tots");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -91,10 +111,10 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
   const badgesByName = useMemo(() => {
     const map: Record<string, ReturnType<typeof bandBadgesFor>> = {};
     contacts.forEach((c) => {
-      if (c.kinds.includes("grup")) map[c.name] = bandBadgesFor(c.name, allBands);
+      if (c.kinds.includes("grup")) map[c.name] = bandBadgesFor(c.name, allBands, hiddenBandsByName[normalize(c.name)] || []);
     });
     return map;
-  }, [contacts, allBands]);
+  }, [contacts, allBands, hiddenBandsByName]);
 
   // Cerca sense distingir accents ni majúscules.
   const q = normalize(search.trim());
@@ -192,15 +212,28 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
                       : (c.company || "—")}
                   </div>
                   <div className="t-dim" onClick={(e) => e.stopPropagation()}>
-                    {c.phone ? <a className="quick-link" href={`tel:${c.phone.replace(/\s/g, "")}`} title="Truca">{c.phone}</a> : "—"}
+                    {(() => {
+                      const phone = c.phone || (c.kinds.includes("grup") ? profileContactFor(c.name, allBands).phone : "");
+                      return phone ? <a className="quick-link" href={`tel:${phone.replace(/\s/g, "")}`} title="Truca">{phone}</a> : "—";
+                    })()}
                   </div>
                   <div className="t-dim" onClick={(e) => e.stopPropagation()}>
-                    {c.email ? <a className="quick-link" href={`mailto:${c.email}`} title="Escriu un correu">{c.email}</a> : "—"}
+                    {(() => {
+                      const email = c.email || (c.kinds.includes("grup") ? profileContactFor(c.name, allBands).email : "");
+                      return email ? <a className="quick-link" href={`mailto:${email}`} title="Escriu un correu">{email}</a> : "—";
+                    })()}
                   </div>
                   <div onClick={(e) => e.stopPropagation()} style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     {c.address && (
                       <a className="row-rs-btn" style={{ textDecoration: "none" }} title={`Mapa: ${c.address}`}
                         href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(c.address)}`} target="_blank" rel="noreferrer">🗺</a>
+                    )}
+                    {c.kinds.includes("grup") && info?.inBands && (
+                      <button type="button" className="row-rs-btn" title="Edita el telèfon, el correu… d'aquest contacte" onClick={() => setOpenId(c.id)}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                        </svg>
+                      </button>
                     )}
                     <DeleteContactBtn id={c.id} />
                   </div>
@@ -228,7 +261,12 @@ export default function ContactesView({ contacts, allBands, concertCountByPerson
           onRenamed={(newName) => setProfileName(newName)}
         />
       )}
-      {openContact && <ContactModal key={openContact.id} contact={openContact} onClose={() => setOpenId(null)} />}
+      {openContact && (
+        <ContactModal
+          key={openContact.id} contact={openContact} onClose={() => setOpenId(null)}
+          defaults={openContact.kinds.includes("grup") ? profileContactFor(openContact.name, allBands) : undefined}
+        />
+      )}
       {creating && <ContactModal key="new" contact={null} onClose={() => setCreating(false)} />}
     </div>
   );

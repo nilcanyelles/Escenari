@@ -14,11 +14,14 @@ const KIND_META: Record<string, { label: string; hue: number }> = {
 
 type Cf = { name: string; role: string; phone: string; email: string; company: string; cif: string; address: string; iban: string; notes: string };
 
-export default function ContactModal({ contact, onClose }: { contact: Contact | null; onClose: () => void }) {
+// "defaults": per a contactes vinculats a músics/crew d'un grup, el telèfon
+// i correu del seu perfil, per omplir-los quan el contacte encara no en té
+// (mai es desen al perfil — només aquí, al contacte mateix, si es confirmen).
+export default function ContactModal({ contact, onClose, defaults }: { contact: Contact | null; onClose: () => void; defaults?: { phone: string; email: string } }) {
   const router = useRouter();
   const isNew = !contact;
   const [cf, setCf] = useState<Cf>({
-    name: contact?.name || "", role: contact?.role || "", phone: contact?.phone || "", email: contact?.email || "",
+    name: contact?.name || "", role: contact?.role || "", phone: contact?.phone || defaults?.phone || "", email: contact?.email || defaults?.email || "",
     company: contact?.company || "", cif: contact?.cif || "", address: contact?.address || "", iban: contact?.iban || "",
     notes: contact?.notes || "",
   });

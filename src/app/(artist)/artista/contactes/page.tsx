@@ -1,6 +1,7 @@
 import ContactesView from "@/components/ContactesView";
 import { getContacts, getBands, getConcerts } from "@/lib/data";
 import { getContactInteractions } from "@/lib/contacts-data";
+import { getHiddenBandsByName } from "@/lib/person-profile";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull } from "@/lib/artist-data";
 import { memberPerms } from "@/lib/perms";
@@ -37,11 +38,12 @@ export default async function ArtistContactesPage() {
 
   const workspaceId = (await db().query("select workspace_id from bands where id=$1", [bands[0].id])).rows[0]?.workspace_id;
   if (!workspaceId) return null;
-  const [contacts, allBands, concerts, interactions] = await Promise.all([
+  const [contacts, allBands, concerts, interactions, hiddenBandsByName] = await Promise.all([
     getContacts(workspaceId),
     getBands(workspaceId),
     getConcerts(workspaceId),
     getContactInteractions(workspaceId),
+    getHiddenBandsByName(workspaceId),
   ]);
   const concertCountByPerson: Record<string, number> = {};
   concerts.forEach((c) => {
@@ -51,5 +53,5 @@ export default async function ArtistContactesPage() {
     });
   });
 
-  return <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={interactions} embedded />;
+  return <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={interactions} hiddenBandsByName={hiddenBandsByName} embedded />;
 }
