@@ -2217,9 +2217,12 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .cd-att-unavail-warning::before { content: "⚠"; }
 
-/* Músics i crew (Equip): dues columnes a l'escriptori, una de sola al
-   mòbil — vegeu .backup-row, el mateix format de fila que els suplents. */
+/* Músics i crew (Equip): dues columnes a l'escriptori (músics a l'esquerra;
+   crew i, a sota amb la mateixa amplada, els suplents de confiança a la
+   dreta), una de sola al mòbil — vegeu .backup-row, el mateix format de
+   fila que els suplents. */
 .team-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+.team-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 @media (max-width: 900px) {
   .team-cols { grid-template-columns: 1fr; }
 }

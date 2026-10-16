@@ -1205,9 +1205,10 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       )}
 
       {tab === "equip" && (<>
-      {/* Músics i crew: dues columnes a l'escriptori (músics a l'esquerra,
-          crew a la dreta), apilades en una sola columna al mòbil. */}
+      {/* Músics a l'esquerra; crew i, a sota (mateixa amplada), els
+          suplents de confiança a la dreta — una sola columna al mòbil. */}
       <div className="team-cols">
+      <div className="team-col">
       {/* Membres */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
@@ -1269,7 +1270,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           </div>
         )}
       </div>
+      </div>
 
+      <div className="team-col">
       {/* Crew */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
@@ -1321,7 +1324,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             </div>
           </div>
         )}
-      </div>
       </div>
 
       {/* Suplents */}
@@ -1385,6 +1387,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
             </div>
           </div>
         )}
+      </div>
+      </div>
       </div>
 
       {/* Uneix-te al grup (el gestor, o un membre amb el permís "Admin") */}
