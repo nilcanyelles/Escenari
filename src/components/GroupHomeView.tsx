@@ -19,7 +19,9 @@ import { memberPerms, PERM_LABELS, DEFAULT_PERMS, ALL_PERMS } from "@/lib/perms"
 import { bandRoster } from "@/lib/roster";
 import VerifiedTick from "@/components/VerifiedTick";
 import { logoBox } from "@/lib/logo";
-import type { MemberPerms, Vehicle, SocialStats, SocialPlatform, Formation } from "@/lib/types";
+import type { MemberPerms, Vehicle, SocialStats, SocialPlatform, Formation, Contact } from "@/lib/types";
+import type { ContactInteraction } from "@/lib/contacts-data";
+import ContactesView from "@/components/ContactesView";
 import { SOCIAL_PLATFORMS, PLATFORM_META, FOLLOWERS_KEY, isTracked, formatNumber, formatHeroNumber } from "@/lib/social-history";
 import { normalizeRouteSheet, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
 import GroupAppearanceModal from "@/components/GroupAppearanceModal";
@@ -666,7 +668,7 @@ function InstrumentChips({ items }: { items: string[] }) {
   );
 }
 
-export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, formations = [], photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
+export default function GroupHomeView({ band, allBands, concerts, linkedMembers, backupRequests, concertCountByPerson, riders, setlists, editors, songs, files, formations = [], contacts = [], contactInteractions = [], photosByName = {}, igByName = {}, viewer = "manager", caps, myName = "", socialPrev = {}, today, agencyOwner = false }: {
   band: Band;
   allBands: Band[];
   concerts: Concert[];
@@ -679,6 +681,9 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   songs: Song[];
   files: BandFile[];
   formations?: Formation[];
+  // Contactes de l'agència — vegeu el permís "Contactes".
+  contacts?: Contact[];
+  contactInteractions?: ContactInteraction[];
   photosByName?: Record<string, string>;
   igByName?: Record<string, string>;
   viewer?: "manager" | "artist";
@@ -709,8 +714,8 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
   // La pestanya inicial es pot indicar per URL (p. ex. ?tab=cancons), com
   // quan es torna de l'editor d'una cançó cap a l'apartat de cançons del grup.
   const initialTabParam = searchParams.get("tab");
-  const initialTab = initialTabParam === "equip" || initialTabParam === "cancons" || initialTabParam === "documents" || initialTabParam === "permisos" ? initialTabParam : "inici";
-  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "documents" | "permisos">(initialTab);
+  const initialTab = initialTabParam === "equip" || initialTabParam === "cancons" || initialTabParam === "documents" || initialTabParam === "permisos" || initialTabParam === "contactes" ? initialTabParam : "inici";
+  const [tab, setTab] = useState<"inici" | "equip" | "cancons" | "documents" | "permisos" | "contactes">(initialTab);
   // Tooltip d'assistència d'una fila: via portal a <body> perquè el
   // "transform" que posa el hover de la targeta (.magic-bento-card) no el
   // deixi tapat per la targeta veïna (context d'apilament nou).
@@ -984,6 +989,7 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <button className={"stats-tab" + (tab === "equip" ? " active" : "")} onClick={() => setTab("equip")}>Equip</button>
         <button className={"stats-tab" + (tab === "cancons" ? " active" : "")} onClick={() => setTab("cancons")}>Cançons</button>
         <button className={"stats-tab" + (tab === "documents" ? " active" : "")} onClick={() => setTab("documents")}>Documents</button>
+        {can.contacts && <button className={"stats-tab" + (tab === "contactes" ? " active" : "")} onClick={() => setTab("contactes")}>Contactes</button>}
         {(isMgr || can.perms) && <button className={"stats-tab" + (tab === "permisos" ? " active" : "")} onClick={() => setTab("permisos")}>Permisos</button>}
       </div>
 
@@ -1178,15 +1184,11 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
         <PermsMatrix band={band} photosByName={photosByName} linkedNames={linkedNameSet} isManager={isAdminLike} myName={myName} />
       )}
 
-      {tab === "equip" && (<>
-      {can.contacts && (
-        <div className="panel" style={{ marginBottom: 16 }}>
-          <div className="panel-header-row">
-            <div className="panel-title">Contactes de l&apos;agència</div>
-            <Link href={`${base}/contactes`} className="btn-outline">Veure contactes</Link>
-          </div>
-        </div>
+      {tab === "contactes" && can.contacts && (
+        <ContactesView contacts={contacts} allBands={allBands} concertCountByPerson={concertCountByPerson} interactions={contactInteractions} embedded />
       )}
+
+      {tab === "equip" && (<>
       {/* Músics i crew: dues columnes a l'escriptori (músics a l'esquerra,
           crew a la dreta), apilades en una sola columna al mòbil. */}
       <div className="team-cols">
@@ -1306,41 +1308,6 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
       </div>
       </div>
 
-      {/* Uneix-te al grup (el gestor, o un membre amb el permís "Admin") */}
-      {isAdminLike && (
-      <div className="panel">
-        <div className="panel-title" style={{ marginBottom: 10 }}>Uneix-te al grup</div>
-        <div className="t-dim" style={{ fontSize: 13, marginBottom: 12 }}>
-          Comparteix el codi o l&apos;enllaç: qui el faci servir quedarà vinculat a aquest grup, com a músic o
-          com a tècnic de so segons el que triï en unir-s&apos;hi. Si ja té compte a Escenari, l&apos;enllaç
-          l&apos;hi porta directament; si no, primer l&apos;hi fa crear el perfil.
-          Si la persona ja existeix aquí creada a mà, usa el botó 🔗 de la seva targeta per convidar-la a reclamar el perfil.
-        </div>
-        {effectiveJoinActive && effectiveJoinCode ? (
-          <>
-            <div className="join-box">
-              <span className="join-code">{effectiveJoinCode}</span>
-              <button type="button" className="btn-outline"
-                onClick={async () => {
-                  await navigator.clipboard.writeText(joinMsg("membre"));
-                  setJoinCopied(true);
-                  window.setTimeout(() => setJoinCopied(false), 1600);
-                }}>{joinCopied ? "Copiat ✓" : "Copia el missatge"}</button>
-              <button type="button" className="btn-outline cd-wa-btn"
-                onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
-              <button type="button" className="btn-outline" disabled={codeBusy} onClick={handleGenerateCode} title="El codi d'ara deixarà de funcionar">
-                {codeBusy ? "Generant…" : "Genera un codi nou"}
-              </button>
-            </div>
-          </>
-        ) : (
-          <button type="button" className="btn-primary" disabled={codeBusy} onClick={handleGenerateCode}>
-            {codeBusy ? "Generant…" : "Genera codi"}
-          </button>
-        )}
-      </div>
-      )}
-
       {/* Suplents */}
       <div className="panel">
         <div className="panel-header-row" style={{ marginBottom: 14 }}>
@@ -1403,6 +1370,41 @@ export default function GroupHomeView({ band, allBands, concerts, linkedMembers,
           </div>
         )}
       </div>
+
+      {/* Uneix-te al grup (el gestor, o un membre amb el permís "Admin") */}
+      {isAdminLike && (
+      <div className="panel">
+        <div className="panel-title" style={{ marginBottom: 10 }}>Uneix-te al grup</div>
+        <div className="t-dim" style={{ fontSize: 13, marginBottom: 12 }}>
+          Comparteix el codi o l&apos;enllaç: qui el faci servir quedarà vinculat a aquest grup, com a músic o
+          com a tècnic de so segons el que triï en unir-s&apos;hi. Si ja té compte a Escenari, l&apos;enllaç
+          l&apos;hi porta directament; si no, primer l&apos;hi fa crear el perfil.
+          Si la persona ja existeix aquí creada a mà, usa el botó 🔗 de la seva targeta per convidar-la a reclamar el perfil.
+        </div>
+        {effectiveJoinActive && effectiveJoinCode ? (
+          <>
+            <div className="join-box">
+              <span className="join-code">{effectiveJoinCode}</span>
+              <button type="button" className="btn-outline"
+                onClick={async () => {
+                  await navigator.clipboard.writeText(joinMsg("membre"));
+                  setJoinCopied(true);
+                  window.setTimeout(() => setJoinCopied(false), 1600);
+                }}>{joinCopied ? "Copiat ✓" : "Copia el missatge"}</button>
+              <button type="button" className="btn-outline cd-wa-btn"
+                onClick={() => window.open(`https://wa.me/?text=${encodeURIComponent(joinMsg("membre"))}`, "_blank")}>WhatsApp</button>
+              <button type="button" className="btn-outline" disabled={codeBusy} onClick={handleGenerateCode} title="El codi d'ara deixarà de funcionar">
+                {codeBusy ? "Generant…" : "Genera un codi nou"}
+              </button>
+            </div>
+          </>
+        ) : (
+          <button type="button" className="btn-primary" disabled={codeBusy} onClick={handleGenerateCode}>
+            {codeBusy ? "Generant…" : "Genera codi"}
+          </button>
+        )}
+      </div>
+      )}
 
       {/* Cerques de suplent publicades (gestió del gestor) */}
       {isAdminLike && openRequests.length > 0 && (

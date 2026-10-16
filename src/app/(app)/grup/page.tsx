@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import GroupHomeView from "@/components/GroupHomeView";
-import { getBands, getConcerts } from "@/lib/data";
+import { getBands, getConcerts, getContacts } from "@/lib/data";
+import { getContactInteractions } from "@/lib/contacts-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getRiders, getSetlists, getBandEditors } from "@/lib/material-data";
 import { getFormations } from "@/lib/formation-data";
@@ -45,7 +46,7 @@ export default async function GrupPage() {
   if (!bandId) redirect("/agenda");
 
   const band = bands.find((b) => b.id === bandId)!;
-  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev, formations] = await Promise.all([
+  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev, formations, contacts, contactInteractions] = await Promise.all([
     getLinkedMembers(bandId),
     getBackupRequests(workspaceId, { bandId }),
     getRiders(bandId),
@@ -56,6 +57,8 @@ export default async function GrupPage() {
     // Xifres de xarxes del mes passat, per als "+123" de la targeta d'Inici.
     getSocialPrevMonth(bandId, today()),
     getFormations(bandId),
+    getContacts(workspaceId),
+    getContactInteractions(workspaceId),
   ]);
 
   // Fotos de perfil i Instagram reals (perquè les targetes de l'equip els usin).
@@ -85,6 +88,8 @@ export default async function GrupPage() {
         songs={songs}
         files={files}
         formations={formations}
+        contacts={contacts}
+        contactInteractions={contactInteractions}
         photosByName={photosByName}
         igByName={igByName}
         socialPrev={socialPrev}

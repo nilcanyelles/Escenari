@@ -3,6 +3,8 @@ import { Suspense } from "react";
 import GroupHomeView from "@/components/GroupHomeView";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
+import { getContacts } from "@/lib/data";
+import { getContactInteractions } from "@/lib/contacts-data";
 import { getLinkedMembers, getBackupRequests } from "@/lib/group-data";
 import { getRiders, getSetlists, getBandEditors } from "@/lib/material-data";
 import { getFormations } from "@/lib/formation-data";
@@ -38,6 +40,9 @@ export default async function ArtistGrupPage() {
   const myName = link?.member_name || profile.name;
   const me = (band.members || []).find((m) => normalize(m.name) === normalize(myName)) || null;
   const caps = memberPerms(me);
+  // Amb el permís "Contactes", o si qui mira és també de l'agència (ha
+  // triat la vista de músic amb el mateix compte), veu els contactes.
+  const canContacts = caps.contacts || profile.role === "manager";
 
   const concertCountByPerson: Record<string, number> = {};
   concerts.forEach((c) => {
@@ -47,7 +52,7 @@ export default async function ArtistGrupPage() {
     });
   });
 
-  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev, formations] = await Promise.all([
+  const [linkedMembers, backupRequests, riders, setlists, editors, songs, files, socialPrev, formations, contacts, contactInteractions] = await Promise.all([
     getLinkedMembers(bandId),
     getBackupRequests(workspaceId, { bandId }),
     getRiders(bandId),
@@ -57,6 +62,8 @@ export default async function ArtistGrupPage() {
     getBandFiles(bandId),
     getSocialPrevMonth(bandId, today()),
     getFormations(bandId),
+    canContacts && workspaceId ? getContacts(workspaceId) : Promise.resolve([]),
+    canContacts && workspaceId ? getContactInteractions(workspaceId) : Promise.resolve([]),
   ]);
 
   const profRows = (await db().query(
@@ -85,6 +92,8 @@ export default async function ArtistGrupPage() {
         songs={songs}
         files={files}
         formations={formations}
+        contacts={contacts}
+        contactInteractions={contactInteractions}
         photosByName={photosByName}
         igByName={igByName}
         viewer="artist"
