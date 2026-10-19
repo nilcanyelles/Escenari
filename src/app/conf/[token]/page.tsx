@@ -7,6 +7,7 @@ import { resolveAttendanceLink } from "@/lib/attendance-link";
 import { getBackupRequests } from "@/lib/group-data";
 import { getSetlists } from "@/lib/material-data";
 import { getTeamPhotosAndIg } from "@/lib/person-profile";
+import { getFormations } from "@/lib/formation-data";
 import ConfirmView, { type ConfMember, type ConfViewer, type ConfSubInfo } from "./ConfirmView";
 
 export const dynamic = "force-dynamic";
@@ -37,15 +38,16 @@ export default async function ConfirmPage({ params, searchParams }: {
   )).rows[0];
   if (!band) notFound();
 
-  const [rows, setlists] = await Promise.all([
+  const [rows, setlists, formations] = await Promise.all([
     link.concertIds.length
       ? pool.query(
-          `select id, date, time, exact_time, city, venue, address, festa_entitat, kind, status, attendance, substitutes, substitute_confirmed, route_sheet, setlist_id, band_id, band_name
+          `select id, date, time, exact_time, city, venue, address, festa_entitat, kind, status, attendance, substitutes, substitute_confirmed, route_sheet, setlist_id, band_id, band_name, formation_id, formation_assignments
            from concerts where id = any($1::text[]) order by date, time`,
           [link.concertIds]
         ).then((r) => r.rows)
       : Promise.resolve([]),
     getSetlists(link.bandId),
+    getFormations(link.bandId),
   ]);
 
   const members: Person[] = [...(band.members || []), ...(band.crew || [])];
@@ -87,7 +89,7 @@ export default async function ConfirmPage({ params, searchParams }: {
     tags: [], status: c.status as Concert["status"], paid: !!c.paid, amount: 0,
     attendance: (c.attendance || {}) as Record<string, "yes" | "no">, substitutes: c.substitutes || {},
     substituteConfirmed: c.substitute_confirmed || {},
-    noSubstitute: {}, convocatoriaExcluded: {}, formationId: null, formationAssignments: {}, clientInvoiceFileId: null, contact: { email: "", name: "", phone: "", company: "" },
+    noSubstitute: {}, convocatoriaExcluded: {}, formationId: c.formation_id || null, formationAssignments: c.formation_assignments || {}, clientInvoiceFileId: null, contact: { email: "", name: "", phone: "", company: "" },
     routeSheet: c.route_sheet, kind: c.kind || "bolo", canAnnounce: "", announceAfter: "", ticketType: "",
     setlistId: c.setlist_id || null,
   }));
@@ -132,6 +134,7 @@ export default async function ConfirmPage({ params, searchParams }: {
       concerts={concerts}
       diaBand={diaBand}
       diaPhotosByName={photosByName}
+      formations={formations}
       members={confMembers}
       subs={subs}
       linkedNames={links.map((l) => l.member_name as string)}

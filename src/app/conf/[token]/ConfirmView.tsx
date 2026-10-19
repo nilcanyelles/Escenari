@@ -9,7 +9,7 @@ import { logoBox } from "@/lib/logo";
 import { personPhotoDataUri } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { formatDateFull, capitalize, formatConcertTime, timePeriodFor, WEEKDAY_FULL, MONTH_ABBR } from "@/lib/format";
-import type { Concert, Band } from "@/lib/types";
+import type { Concert, Band, Formation } from "@/lib/types";
 import type { Setlist } from "@/lib/material-types";
 import DiaBody from "@/components/DiaBody";
 import { AttendingRows } from "@/components/DiaQuiVeCard";
@@ -88,7 +88,7 @@ function rowDate(date: string): string {
   return `${WEEKDAY_FULL[dt.getDay()].slice(0, 3)} ${p[2]} ${MONTH_ABBR[p[1] - 1]}${sameYear ? "" : " " + p[0]}`;
 }
 
-export default function ConfirmView({ token, single, allFuture, band, concerts, diaBand, diaPhotosByName = {}, members, linkedNames = [], subs = {}, viewer, preselect, setlists = [] }: {
+export default function ConfirmView({ token, single, allFuture, band, concerts, diaBand, diaPhotosByName = {}, formations = [], members, linkedNames = [], subs = {}, viewer, preselect, setlists = [] }: {
   token: string;
   // Enllaç d'un sol concert (els de sempre): es mostra el pòster i els
   // detalls del dia a dalt de tot, com fins ara.
@@ -101,6 +101,9 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
   diaBand: Band | null;
   // Fotos reals de l'equip (per a "Qui ve" dins DiaBody).
   diaPhotosByName?: Record<string, string>;
+  // Formacions del grup — perquè "Qui ve" segueixi qui s'ha seleccionat a
+  // la formació assignada, no només qui ha confirmat a la convocatòria.
+  formations?: Formation[];
   members: ConfMember[];
   // Noms amb compte vinculat, per al tick lila de "Qui ve" (DiaBody).
   linkedNames?: string[];
@@ -427,12 +430,13 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
     const attExcluded = c.convocatoriaExcluded || {};
     const linkedSet = new Set(linkedNames.map(normalize));
     const people = [...(diaBand?.members || []), ...(diaBand?.crew || [])].filter((p) => !attExcluded[p.name]);
+    const activeFormation = c.formationId ? formations.find((f) => f.id === c.formationId) ?? null : null;
     return (
       <div className="dia-card">
         <div className="dia-card-title">Assistència</div>
         <div className="cfm-att-list">
           <AttendingRows
-            concert={c} people={people} backups={diaBand?.backups || []} activeFormation={null}
+            concert={c} people={people} backups={diaBand?.backups || []} activeFormation={activeFormation}
             linkedSet={linkedSet} photosByName={diaPhotosByName}
           />
         </div>
@@ -461,7 +465,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
 
         {one && (
           <div className="dia" style={{ padding: 0, margin: 0, maxWidth: "none" }}>
-            <DiaBody concert={one} band={diaBand} linkedNames={linkedNames} photosByName={diaPhotosByName} />
+            <DiaBody concert={one} band={diaBand} linkedNames={linkedNames} photosByName={diaPhotosByName} formations={formations} />
           </div>
         )}
 
