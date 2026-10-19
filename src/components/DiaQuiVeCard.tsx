@@ -124,44 +124,49 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
         </div>
       ) : activeFormation ? (
         <div className="dia-members">
-          {activeFormation.slots.map((s) => {
-            const name = (concert.formationAssignments || {})[s.id] || "";
+          {activeFormation.slots.filter((s) => (concert.formationAssignments || {})[s.id]).map((s) => {
+            const name = (concert.formationAssignments || {})[s.id] as string;
             return (
               <span key={s.id} className="dia-member-group">
                 <span className="badge instrument-badge sm">
                   <InstrumentIcon name={s.instrument} icon={instrumentIconKey(s.instrument)} />
                   {s.instrument}
                 </span>
-                {name ? (
-                  <span className="dia-member yes">✓ {name}{linkedSet.has(normalize(name)) && <VerifiedTick size={11} />}</span>
-                ) : (
-                  <span className="dia-member">sense assignar</span>
-                )}
+                <span className="dia-member yes">{name}{linkedSet.has(normalize(name)) && <VerifiedTick size={11} />}</span>
               </span>
             );
           })}
-          {activeFormation.slots.length === 0 && <span className="t-dim" style={{ fontSize: 13 }}>Aquesta formació no té places.</span>}
+          {activeFormation.slots.every((s) => !(concert.formationAssignments || {})[s.id]) && (
+            <span className="t-dim" style={{ fontSize: 13 }}>Encara ningú confirmat a la formació.</span>
+          )}
         </div>
       ) : (
         <div className="dia-members">
           {people.map((p) => {
             const a = attendance[p.name];
             const sub = substitutes[p.name];
-            return a === "no" && sub ? (
-              <span key={p.name} className="dia-member-group">
-                <span className="dia-member no" style={{ textDecoration: "line-through" }}>✕ {p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}</span>
-                <span className="dia-member sub">
-                  <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="m21 16-4 4-4-4"></path><path d="M17 20V4"></path><path d="m3 8 4-4 4 4"></path><path d="M7 4v16"></path></svg>
-                  {sub}
+            if (a === "no" && sub) {
+              const subPerson = backups.find((b) => normalize(b.name) === normalize(sub));
+              const role = subPerson?.instruments?.length ? subPerson.instruments.join(", ") : (subPerson?.role || (p.instruments?.length ? p.instruments.join(", ") : p.role));
+              return (
+                <span key={p.name} className="dia-member-group">
+                  <span className="dia-member yes">{sub}{linkedSet.has(normalize(sub)) && <VerifiedTick size={11} />}</span>
+                  {role && <span className="badge instrument-badge sm">{role}</span>}
                 </span>
-              </span>
-            ) : (
-              <span key={p.name} className={"dia-member" + (a === "yes" ? " yes" : a === "no" ? " no" : "")}>
-                {a === "yes" ? "✓ " : a === "no" ? "✕ " : "? "}{p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}
+              );
+            }
+            if (a !== "yes") return null;
+            const role = p.instruments?.length ? p.instruments.join(", ") : p.role;
+            return (
+              <span key={p.name} className="dia-member-group">
+                <span className="dia-member yes">{p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}</span>
+                {role && <span className="badge instrument-badge sm">{role}</span>}
               </span>
             );
           })}
-          {people.length === 0 && <span className="t-dim" style={{ fontSize: 13 }}>Sense formació assignada.</span>}
+          {people.every((p) => attendance[p.name] !== "yes" && !(attendance[p.name] === "no" && substitutes[p.name])) && (
+            <span className="t-dim" style={{ fontSize: 13 }}>Encara ningú ha confirmat.</span>
+          )}
         </div>
       )}
     </div>
