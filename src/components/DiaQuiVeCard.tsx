@@ -14,15 +14,20 @@ function EditIcon() {
 }
 
 // Fila d'assistència de només lectura, mateix format que la targeta d'equip
-// (foto, nom, xips d'instrument) — amb una formació concreta assignada, es
-// mostren només els instruments de la plaça que li toca (ressaltats); sense
-// formació, es mostren tots els seus instruments/càrrec, cap ressaltat.
+// (foto, nom, xips d'instrument). Amb una formació concreta assignada, els
+// músics que hi toquen surten tal com s'han seleccionat (instrument de la
+// plaça, ressaltat), independentment del que digui la convocatòria — una
+// formació només cobreix músics, així que l'equip tècnic (o algú no
+// assignat a cap plaça) que hagi confirmat "sí" també hi surt, amb els
+// seus instruments/càrrec sense ressaltar. Sense formació, tothom surt
+// només pel que hagi confirmat a la convocatòria, com fins ara.
 export function AttendingRows({ concert, people, backups, activeFormation, linkedSet, photosByName }: {
   concert: Concert; people: Person[]; backups: BackupPerson[]; activeFormation: Formation | null;
   linkedSet: Set<string>; photosByName: Record<string, string>;
 }) {
   type Row = { key: string; name: string; chips: { label: string; highlighted: boolean }[] };
-  let rows: Row[];
+  const rows: Row[] = [];
+  const already = new Set<string>();
   if (activeFormation) {
     const bySlotName: Record<string, string[]> = {};
     activeFormation.slots.forEach((s) => {
@@ -30,27 +35,29 @@ export function AttendingRows({ concert, people, backups, activeFormation, linke
       if (!n) return;
       (bySlotName[n] = bySlotName[n] || []).push(s.instrument);
     });
-    rows = Object.entries(bySlotName).map(([name, instruments]) => ({
-      key: name, name, chips: instruments.map((label) => ({ label, highlighted: true })),
-    }));
-  } else {
-    rows = [];
-    const attendance = concert.attendance || {};
-    const substitutes = concert.substitutes || {};
-    people.forEach((p) => {
-      const a = attendance[p.name];
-      const sub = substitutes[p.name];
-      if (a === "yes") {
-        rows.push({ key: p.name, name: p.name, chips: instrumentsFor(p).map((label) => ({ label, highlighted: false })) });
-      } else if (a === "no" && sub) {
-        const subPerson = backups.find((b) => normalize(b.name) === normalize(sub));
-        const labels = subPerson
-          ? (subPerson.instruments?.length ? subPerson.instruments : (subPerson.role ? [subPerson.role] : []))
-          : instrumentsFor(p);
-        rows.push({ key: p.name + "-sub", name: sub, chips: labels.map((label) => ({ label, highlighted: false })) });
-      }
+    Object.entries(bySlotName).forEach(([name, instruments]) => {
+      rows.push({ key: name, name, chips: instruments.map((label) => ({ label, highlighted: true })) });
+      already.add(normalize(name));
     });
   }
+  const attendance = concert.attendance || {};
+  const substitutes = concert.substitutes || {};
+  people.forEach((p) => {
+    if (already.has(normalize(p.name))) return;
+    const a = attendance[p.name];
+    const sub = substitutes[p.name];
+    if (a === "yes") {
+      rows.push({ key: p.name, name: p.name, chips: instrumentsFor(p).map((label) => ({ label, highlighted: false })) });
+      already.add(normalize(p.name));
+    } else if (a === "no" && sub && !already.has(normalize(sub))) {
+      const subPerson = backups.find((b) => normalize(b.name) === normalize(sub));
+      const labels = subPerson
+        ? (subPerson.instruments?.length ? subPerson.instruments : (subPerson.role ? [subPerson.role] : []))
+        : instrumentsFor(p);
+      rows.push({ key: p.name + "-sub", name: sub, chips: labels.map((label) => ({ label, highlighted: false })) });
+      already.add(normalize(sub));
+    }
+  });
   if (rows.length === 0) {
     return <span className="t-dim" style={{ fontSize: 13 }}>Encara ningú ha confirmat.</span>;
   }
