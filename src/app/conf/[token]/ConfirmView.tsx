@@ -12,6 +12,7 @@ import { formatDateFull, capitalize, formatConcertTime, timePeriodFor, WEEKDAY_F
 import type { Concert, Band } from "@/lib/types";
 import type { Setlist } from "@/lib/material-types";
 import DiaBody from "@/components/DiaBody";
+import { AttendingRows } from "@/components/DiaQuiVeCard";
 import VerifiedTick from "@/components/VerifiedTick";
 import RouteSheetPreview from "@/components/RouteSheetPreview";
 import { KIND_META } from "@/components/CalendariView";
@@ -87,7 +88,7 @@ function rowDate(date: string): string {
   return `${WEEKDAY_FULL[dt.getDay()].slice(0, 3)} ${p[2]} ${MONTH_ABBR[p[1] - 1]}${sameYear ? "" : " " + p[0]}`;
 }
 
-export default function ConfirmView({ token, single, allFuture, band, concerts, diaBand, members, linkedNames = [], subs = {}, viewer, preselect, setlists = [] }: {
+export default function ConfirmView({ token, single, allFuture, band, concerts, diaBand, diaPhotosByName = {}, members, linkedNames = [], subs = {}, viewer, preselect, setlists = [] }: {
   token: string;
   // Enllaç d'un sol concert (els de sempre): es mostra el pòster i els
   // detalls del dia a dalt de tot, com fins ara.
@@ -98,6 +99,8 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
   subs?: Record<string, Record<string, ConfSubInfo>>;
   concerts: Concert[];
   diaBand: Band | null;
+  // Fotos reals de l'equip (per a "Qui ve" dins DiaBody).
+  diaPhotosByName?: Record<string, string>;
   members: ConfMember[];
   // Noms amb compte vinculat, per al tick lila de "Qui ve" (DiaBody).
   linkedNames?: string[];
@@ -417,39 +420,21 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
     );
   }
 
-  // Assistència del dia en format llista (nom, foto, instruments, si ve o
-  // no, i el suplent si n'hi ha) — va després de DiaBody: el primer que es
-  // veu de l'enllaç ha de ser la informació del dia (horaris, lloc,
-  // contactes...), no la llista d'assistència.
+  // Assistència del dia, mateix format que "Qui ve" de DiaBody (foto, nom,
+  // xips d'instrument, només els qui vénen) — per als concerts expandits
+  // de la llista de diversos (el d'un sol concert ja el porta DiaBody).
   function renderAttendanceList(c: Concert) {
     const attExcluded = c.convocatoriaExcluded || {};
-    const convokedMembers = members.filter((m) => !attExcluded[m.name]);
+    const linkedSet = new Set(linkedNames.map(normalize));
+    const people = [...(diaBand?.members || []), ...(diaBand?.crew || [])].filter((p) => !attExcluded[p.name]);
     return (
       <div className="dia-card">
         <div className="dia-card-title">Assistència</div>
         <div className="cfm-att-list">
-          {convokedMembers.map((m) => {
-            const a = (c.attendance || {})[m.name];
-            const subName = a === "no" ? (c.substitutes || {})[m.name] : "";
-            return (
-              <div key={m.name} className={"cd-att-row" + (a === "yes" ? " att-yes" : a === "no" ? " att-no" : "")}>
-                <img className="member-photo" src={m.photoId ? `/api/file/${m.photoId}` : personPhotoDataUri(m.name)} alt="" />
-                <div className="cd-att-main">
-                  <div className="member-name">{m.name}{m.linked && <VerifiedTick size={12} />}</div>
-                  {m.instruments.length > 0 && (
-                    <div className="member-instruments">
-                      {m.instruments.slice(0, 3).map((ins) => <span key={ins} className="member-instrument-chip">{ins}</span>)}
-                    </div>
-                  )}
-                  {subName && <div className="cfm-sub-line yes" style={{ marginTop: 2 }}>Suplent: <strong>{subName}</strong></div>}
-                </div>
-                <span className={"cfm-badge " + (a === "yes" ? "yes" : a === "no" ? "no" : "pending")}>
-                  {a === "yes" ? "Hi serà" : a === "no" ? "No hi serà" : "Pendent"}
-                </span>
-              </div>
-            );
-          })}
-          {convokedMembers.length === 0 && <span className="t-dim" style={{ fontSize: 13 }}>Sense formació assignada.</span>}
+          <AttendingRows
+            concert={c} people={people} backups={diaBand?.backups || []} activeFormation={null}
+            linkedSet={linkedSet} photosByName={diaPhotosByName}
+          />
         </div>
       </div>
     );
@@ -476,8 +461,7 @@ export default function ConfirmView({ token, single, allFuture, band, concerts, 
 
         {one && (
           <div className="dia" style={{ padding: 0, margin: 0, maxWidth: "none" }}>
-            <DiaBody concert={one} band={diaBand} linkedNames={linkedNames} hideQuiVe />
-            {renderAttendanceList(one)}
+            <DiaBody concert={one} band={diaBand} linkedNames={linkedNames} photosByName={diaPhotosByName} />
           </div>
         )}
 

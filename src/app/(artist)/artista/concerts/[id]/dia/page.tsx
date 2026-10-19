@@ -8,6 +8,7 @@ import DiaTopActions from "@/components/DiaTopActions";
 import DiaBody from "@/components/DiaBody";
 import { getLinkedMembers } from "@/lib/group-data";
 import { getFormations } from "@/lib/formation-data";
+import { getTeamPhotosAndIg } from "@/lib/person-profile";
 import { mapsHrefFor } from "@/lib/nav-app";
 
 export const dynamic = "force-dynamic";
@@ -24,9 +25,10 @@ export default async function ArtistDiaPage({ params }: { params: Promise<{ id: 
   const c = concerts.find((x) => x.id === id);
   if (!c) notFound();
   const band = bands.find((b) => b.id === c.bandId);
-  const [linkedMembers, formations] = await Promise.all([
+  const [linkedMembers, formations, teamPhotos] = await Promise.all([
     band ? getLinkedMembers(band.id) : Promise.resolve([]),
     band ? getFormations(band.id) : Promise.resolve([]),
+    band ? getTeamPhotosAndIg(workspaceId, [band.id]) : Promise.resolve({ photosByName: {}, igByName: {} }),
   ]);
   const linkedNames = linkedMembers.map((m) => m.memberName);
   const mapsQuery = [c.venue, c.address, c.city].filter(Boolean).join(", ");
@@ -56,7 +58,7 @@ export default async function ArtistDiaPage({ params }: { params: Promise<{ id: 
         <div className="cd-poster-date">{capitalize(formatDateFull(c.date))}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
       </div>
 
-      <DiaBody concert={c} band={band || null} linkedNames={linkedNames} navApp={navApp} formations={formations} />
+      <DiaBody concert={c} band={band || null} linkedNames={linkedNames} navApp={navApp} formations={formations} photosByName={teamPhotos.photosByName} />
     </div>
   );
 }

@@ -32,7 +32,7 @@ export default async function ConfirmPage({ params, searchParams }: {
   const pool = db();
 
   const band = (await pool.query(
-    "select id, name, logo, logo_aspect, color1, color2, members, crew from bands where id=$1",
+    "select id, name, logo, logo_aspect, color1, color2, members, crew, backups from bands where id=$1",
     [link.bandId]
   )).rows[0];
   if (!band) notFound();
@@ -93,7 +93,7 @@ export default async function ConfirmPage({ params, searchParams }: {
   }));
   const diaBand: Band = {
     id: band.id, name: band.name, city: "", rate: 0, contact: "", phone: "", tags: [],
-    members: band.members || [], crew: band.crew || [],
+    members: band.members || [], crew: band.crew || [], backups: band.backups || [],
   };
 
   // Cerques de suplent obertes d'aquests concerts (proposades des d'aquí
@@ -131,6 +131,7 @@ export default async function ConfirmPage({ params, searchParams }: {
       band={{ name: band.name, logo: band.logo || "", logoAspect: band.logo_aspect || "1:1", color1: band.color1 || "", color2: band.color2 || "" }}
       concerts={concerts}
       diaBand={diaBand}
+      diaPhotosByName={photosByName}
       members={confMembers}
       subs={subs}
       linkedNames={links.map((l) => l.member_name as string)}

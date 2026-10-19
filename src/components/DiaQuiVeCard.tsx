@@ -1,16 +1,82 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { Concert, Band, Formation } from "@/lib/types";
+import type { Concert, Band, Formation, Person, BackupPerson } from "@/lib/types";
 import { setConvocatoriaAction } from "@/app/(app)/concerts/actions";
 import { normalize } from "@/lib/text";
-import { instrumentIconKey } from "@/lib/instruments";
-import { InstrumentIcon } from "@/components/InstrumentPicker";
+import { instrumentsFor, instrumentIconFor, personPhotoDataUri } from "@/lib/tags";
 import VerifiedTick from "@/components/VerifiedTick";
 
 function EditIcon() {
   return (
     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+  );
+}
+
+// Fila d'assistència de només lectura, mateix format que la targeta d'equip
+// (foto, nom, xips d'instrument) — amb una formació concreta assignada, es
+// mostren només els instruments de la plaça que li toca (ressaltats); sense
+// formació, es mostren tots els seus instruments/càrrec, cap ressaltat.
+export function AttendingRows({ concert, people, backups, activeFormation, linkedSet, photosByName }: {
+  concert: Concert; people: Person[]; backups: BackupPerson[]; activeFormation: Formation | null;
+  linkedSet: Set<string>; photosByName: Record<string, string>;
+}) {
+  type Row = { key: string; name: string; chips: { label: string; highlighted: boolean }[] };
+  let rows: Row[];
+  if (activeFormation) {
+    const bySlotName: Record<string, string[]> = {};
+    activeFormation.slots.forEach((s) => {
+      const n = (concert.formationAssignments || {})[s.id];
+      if (!n) return;
+      (bySlotName[n] = bySlotName[n] || []).push(s.instrument);
+    });
+    rows = Object.entries(bySlotName).map(([name, instruments]) => ({
+      key: name, name, chips: instruments.map((label) => ({ label, highlighted: true })),
+    }));
+  } else {
+    rows = [];
+    const attendance = concert.attendance || {};
+    const substitutes = concert.substitutes || {};
+    people.forEach((p) => {
+      const a = attendance[p.name];
+      const sub = substitutes[p.name];
+      if (a === "yes") {
+        rows.push({ key: p.name, name: p.name, chips: instrumentsFor(p).map((label) => ({ label, highlighted: false })) });
+      } else if (a === "no" && sub) {
+        const subPerson = backups.find((b) => normalize(b.name) === normalize(sub));
+        const labels = subPerson
+          ? (subPerson.instruments?.length ? subPerson.instruments : (subPerson.role ? [subPerson.role] : []))
+          : instrumentsFor(p);
+        rows.push({ key: p.name + "-sub", name: sub, chips: labels.map((label) => ({ label, highlighted: false })) });
+      }
+    });
+  }
+  if (rows.length === 0) {
+    return <span className="t-dim" style={{ fontSize: 13 }}>Encara ningú ha confirmat.</span>;
+  }
+  return (
+    <div className="cd-attendance-list">
+      {rows.map((r) => (
+        <div key={r.key} className="cd-att-row att-yes">
+          <img className="member-photo backup-photo" src={photosByName[normalize(r.name)] ? `/api/file/${photosByName[normalize(r.name)]}` : personPhotoDataUri(r.name)} alt="" />
+          <div className="cd-att-main">
+            <div className="member-name">{r.name}{linkedSet.has(normalize(r.name)) && <VerifiedTick size={13} />}</div>
+            {r.chips.length > 0 && (
+              <div className="member-instruments">
+                {r.chips.map((c, i) => {
+                  const icon = instrumentIconFor(c.label);
+                  return (
+                    <span key={i} className={"member-instrument-chip" + (c.highlighted ? " slot-assigned" : "")}>
+                      {icon && <img src={icon} alt="" />}{c.label}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -20,12 +86,12 @@ function EditIcon() {
 // del títol que obre una edició ràpida d'assistència i substituts, sense
 // haver d'anar a la pestanya "Convocatòria" de la fitxa completa.
 // "linkedNames": qui té compte d'Escenari vinculat (tick lila al costat del nom).
-export default function DiaQuiVeCard({ concert, band, editable = false, linkedNames = [], formations = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[]; formations?: Formation[] }) {
+export default function DiaQuiVeCard({ concert, band, editable = false, linkedNames = [], formations = [], photosByName = {} }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[]; formations?: Formation[]; photosByName?: Record<string, string> }) {
   const linkedSet = new Set(linkedNames.map(normalize));
   // Amb una formació concreta assignada al bolo, "Qui ve" en mostra les
   // places (instrument + qui hi està assignat) en comptes de tota la
   // plantilla del grup — el mateix que ja es veu a la fitxa del concert.
-  const activeFormation = concert.formationId ? formations.find((f) => f.id === concert.formationId) : null;
+  const activeFormation = concert.formationId ? formations.find((f) => f.id === concert.formationId) ?? null : null;
   const [editing, setEditing] = useState(false);
   const [attendance, setAttendanceState] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutesState] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
@@ -122,52 +188,11 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
           })}
           {saving && <span className="t-dim" style={{ fontSize: 11 }}>Desant…</span>}
         </div>
-      ) : activeFormation ? (
-        <div className="dia-members">
-          {activeFormation.slots.filter((s) => (concert.formationAssignments || {})[s.id]).map((s) => {
-            const name = (concert.formationAssignments || {})[s.id] as string;
-            return (
-              <span key={s.id} className="dia-member-group">
-                <span className="badge instrument-badge sm">
-                  <InstrumentIcon name={s.instrument} icon={instrumentIconKey(s.instrument)} />
-                  {s.instrument}
-                </span>
-                <span className="dia-member yes">{name}{linkedSet.has(normalize(name)) && <VerifiedTick size={11} />}</span>
-              </span>
-            );
-          })}
-          {activeFormation.slots.every((s) => !(concert.formationAssignments || {})[s.id]) && (
-            <span className="t-dim" style={{ fontSize: 13 }}>Encara ningú confirmat a la formació.</span>
-          )}
-        </div>
       ) : (
-        <div className="dia-members">
-          {people.map((p) => {
-            const a = attendance[p.name];
-            const sub = substitutes[p.name];
-            if (a === "no" && sub) {
-              const subPerson = backups.find((b) => normalize(b.name) === normalize(sub));
-              const role = subPerson?.instruments?.length ? subPerson.instruments.join(", ") : (subPerson?.role || (p.instruments?.length ? p.instruments.join(", ") : p.role));
-              return (
-                <span key={p.name} className="dia-member-group">
-                  <span className="dia-member yes">{sub}{linkedSet.has(normalize(sub)) && <VerifiedTick size={11} />}</span>
-                  {role && <span className="badge instrument-badge sm">{role}</span>}
-                </span>
-              );
-            }
-            if (a !== "yes") return null;
-            const role = p.instruments?.length ? p.instruments.join(", ") : p.role;
-            return (
-              <span key={p.name} className="dia-member-group">
-                <span className="dia-member yes">{p.name}{linkedSet.has(normalize(p.name)) && <VerifiedTick size={11} />}</span>
-                {role && <span className="badge instrument-badge sm">{role}</span>}
-              </span>
-            );
-          })}
-          {people.every((p) => attendance[p.name] !== "yes" && !(attendance[p.name] === "no" && substitutes[p.name])) && (
-            <span className="t-dim" style={{ fontSize: 13 }}>Encara ningú ha confirmat.</span>
-          )}
-        </div>
+        <AttendingRows
+          concert={concert} people={people} backups={backups} activeFormation={activeFormation}
+          linkedSet={linkedSet} photosByName={photosByName}
+        />
       )}
     </div>
   );
