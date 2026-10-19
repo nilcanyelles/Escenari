@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Dropdown from "@/components/Dropdown";
 import { useRouter, usePathname } from "next/navigation";
-import type { Band, Concert, Contact } from "@/lib/types";
+import type { Band, Concert, Contact, Formation } from "@/lib/types";
 import { formatDate, statusColors, isConcertOver, formatCurrency } from "@/lib/format";
 import { KIND_META, KIND_ORDER } from "@/components/CalendariView";
 
@@ -218,7 +218,7 @@ function RouteSheetBtns({ c, onEdit, onPreview }: { c: Concert; onEdit: () => vo
   );
 }
 
-export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, canDelete = false, allowBolo, creatableBands, detailBase = "/concerts", contacts = [], myNames, today, fullHistoryLoaded = true, showMineToggle = false }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; canDelete?: boolean; allowBolo?: boolean; creatableBands?: Band[]; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; today: string; fullHistoryLoaded?: boolean; showMineToggle?: boolean }) {
+export default function ConcertsView({ bands, concerts, selectedBandId = "", viewer = "manager", canCreate = true, canDelete = false, allowBolo, creatableBands, detailBase = "/concerts", contacts = [], myNames, formations = [], today, fullHistoryLoaded = true, showMineToggle = false }: { bands: Band[]; concerts: Concert[]; selectedBandId?: string; viewer?: "manager" | "artist"; canCreate?: boolean; canDelete?: boolean; allowBolo?: boolean; creatableBands?: Band[]; detailBase?: string; contacts?: Contact[]; myNames?: Record<string, string>; formations?: Formation[]; today: string; fullHistoryLoaded?: boolean; showMineToggle?: boolean }) {
   const isMgr = viewer === "manager";
   const inBand = !!selectedBandId; // dins d'un grup, la columna Grup s'amaga
   const colsClass = "ccols" + (inBand ? " ccols-noband" : "");
@@ -321,7 +321,10 @@ export default function ConcertsView({ bands, concerts, selectedBandId = "", vie
     const attPeople = rowBand ? bandRoster(rowBand) : [];
     const attExcluded = c.convocatoriaExcluded || {};
     const attActive = attPeople.filter((p) => !attExcluded[p.name]);
-    const attTotal = attActive.length;
+    // Amb una formació concreta assignada, el total de la dreta és el
+    // nombre de places d'aquella formació, no tota la plantilla del grup.
+    const activeFormation = c.formationId ? formations.find((f) => f.id === c.formationId) : null;
+    const attTotal = activeFormation ? activeFormation.slots.length : attActive.length;
     const myName = myNames?.[c.bandId];
     // La teva pròpia resposta, instantània (estat local) en comptes
     // d'esperar el proper refresc — la barra/recompte de sota també l'ha de

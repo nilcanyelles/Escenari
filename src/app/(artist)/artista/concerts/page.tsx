@@ -1,6 +1,7 @@
 import ConcertsView from "@/components/ConcertsView";
 import { requireArtist } from "@/lib/current-user";
 import { getArtistBandsFull, getArtistConcertsFull } from "@/lib/artist-data";
+import { getFormations } from "@/lib/formation-data";
 import { getSelectedBandId } from "@/lib/band-scope";
 import { today } from "@/lib/format";
 import { normalize } from "@/lib/text";
@@ -23,6 +24,9 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
   ]);
   const bandId = bands.length === 1 ? bands[0].id : bands.some((b) => b.id === selectedRaw) ? selectedRaw : "";
   const scoped = bandId ? concerts.filter((c) => c.bandId === bandId) : concerts;
+  // Per al total de la columna Assistència quan un concert té una formació
+  // assignada (vegeu ConcertsView) — igual que a la pàgina del gestor.
+  const formations = (await Promise.all(bands.map((b) => getFormations(b.id)))).flat();
 
   const links = (await db().query(
     "select band_id, member_name from band_members where clerk_user_id=$1", [profile.clerkUserId]
@@ -66,6 +70,7 @@ export default async function ArtistConcertsPage({ searchParams }: { searchParam
       creatableBands={creatableBands}
       detailBase="/artista/concerts"
       myNames={myNames}
+      formations={formations}
       today={today()}
       fullHistoryLoaded={!!full}
       showMineToggle={canSeeAllEvents}
