@@ -10,6 +10,7 @@ import { getLinkedMembers } from "@/lib/group-data";
 import { getFormations } from "@/lib/formation-data";
 import { getTeamPhotosAndIg } from "@/lib/person-profile";
 import { mapsHrefFor } from "@/lib/nav-app";
+import { normalizeRouteSheet, withLiveConcertStart, type RouteSheet } from "@/lib/route-sheet";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +34,13 @@ export default async function ArtistDiaPage({ params }: { params: Promise<{ id: 
   const linkedNames = linkedMembers.map((m) => m.memberName);
   const mapsQuery = [c.venue, c.address, c.city].filter(Boolean).join(", ");
   const navApp = profile.navApp;
+  // Mateix càlcul que la pàgina pública de confirmació (ConfPoster), perquè
+  // la convocatòria i el full de ruta mostrin la mateixa hora de trobada i
+  // de concert — sempre els mateixos, sigui quina sigui la vista.
+  const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
+  const phases = withLiveConcertStart(rs.schedule, c.exactTime).filter((p) => p.phase && p.start);
+  const concertPhase = phases.find((p) => p.phase.trim().toLowerCase() === "concert");
+  const callPhase = phases.find((p) => p !== concertPhase);
 
   return (
     <div className="dia">
@@ -56,6 +64,12 @@ export default async function ArtistDiaPage({ params }: { params: Promise<{ id: 
           </a>
         )}
         <div className="cd-poster-date">{capitalize(formatDateFull(c.date))}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
+        {(callPhase || concertPhase) && (
+          <div className="bento-next-sched">
+            {callPhase && <div className="bento-next-sched-row"><span>{callPhase.phase}</span><b>{callPhase.start}</b></div>}
+            {concertPhase && <div className="bento-next-sched-row"><span>{concertPhase.phase}</span><b>{concertPhase.start}</b></div>}
+          </div>
+        )}
       </div>
 
       <DiaBody concert={c} band={band || null} linkedNames={linkedNames} navApp={navApp} formations={formations} photosByName={teamPhotos.photosByName} />
