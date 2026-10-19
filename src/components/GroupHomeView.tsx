@@ -295,7 +295,7 @@ function NextGigPoster({ c, base, band, setlists, songs, canEditSetlists }: {
         </>
       )}
       <div className="bento-next-actions" onClick={(e) => e.stopPropagation()}>
-        {isBolo && <Link className="btn-outline bento-next-icon-btn" href={`/concerts/${c.id}/dia`} title="Dia de bolo"><InfoIcon /></Link>}
+        {isBolo && <Link className="btn-outline bento-next-icon-btn" href={`${base}/concerts/${c.id}/dia`} title="Dia de bolo"><InfoIcon /></Link>}
         <SetlistButton c={c} band={band} setlists={setlists} songs={songs} canEdit={canEditSetlists} iconBtnClass="btn-outline bento-next-icon-btn" />
         {isBolo && <DiaTopActions concert={c} band={band} base={base} iconBtnClass="btn-outline bento-next-icon-btn" onInstagramClick={() => setPosterEditorOpen(true)} />}
       </div>
