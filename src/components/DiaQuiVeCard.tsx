@@ -1,9 +1,11 @@
 "use client";
 
 import { useRef, useState } from "react";
-import type { Concert, Band } from "@/lib/types";
+import type { Concert, Band, Formation } from "@/lib/types";
 import { setConvocatoriaAction } from "@/app/(app)/concerts/actions";
 import { normalize } from "@/lib/text";
+import { instrumentIconKey } from "@/lib/instruments";
+import { InstrumentIcon } from "@/components/InstrumentPicker";
 import VerifiedTick from "@/components/VerifiedTick";
 
 function EditIcon() {
@@ -18,8 +20,12 @@ function EditIcon() {
 // del títol que obre una edició ràpida d'assistència i substituts, sense
 // haver d'anar a la pestanya "Convocatòria" de la fitxa completa.
 // "linkedNames": qui té compte d'Escenari vinculat (tick lila al costat del nom).
-export default function DiaQuiVeCard({ concert, band, editable = false, linkedNames = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[] }) {
+export default function DiaQuiVeCard({ concert, band, editable = false, linkedNames = [], formations = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[]; formations?: Formation[] }) {
   const linkedSet = new Set(linkedNames.map(normalize));
+  // Amb una formació concreta assignada al bolo, "Qui ve" en mostra les
+  // places (instrument + qui hi està assignat) en comptes de tota la
+  // plantilla del grup — el mateix que ja es veu a la fitxa del concert.
+  const activeFormation = concert.formationId ? formations.find((f) => f.id === concert.formationId) : null;
   const [editing, setEditing] = useState(false);
   const [attendance, setAttendanceState] = useState<Record<string, string>>({ ...(concert.attendance || {}) });
   const [substitutes, setSubstitutesState] = useState<Record<string, string>>({ ...(concert.substitutes || {}) });
@@ -115,6 +121,26 @@ export default function DiaQuiVeCard({ concert, band, editable = false, linkedNa
             );
           })}
           {saving && <span className="t-dim" style={{ fontSize: 11 }}>Desant…</span>}
+        </div>
+      ) : activeFormation ? (
+        <div className="dia-members">
+          {activeFormation.slots.map((s) => {
+            const name = (concert.formationAssignments || {})[s.id] || "";
+            return (
+              <span key={s.id} className="dia-member-group">
+                <span className="badge instrument-badge sm">
+                  <InstrumentIcon name={s.instrument} icon={instrumentIconKey(s.instrument)} />
+                  {s.instrument}
+                </span>
+                {name ? (
+                  <span className="dia-member yes">✓ {name}{linkedSet.has(normalize(name)) && <VerifiedTick size={11} />}</span>
+                ) : (
+                  <span className="dia-member">sense assignar</span>
+                )}
+              </span>
+            );
+          })}
+          {activeFormation.slots.length === 0 && <span className="t-dim" style={{ fontSize: 13 }}>Aquesta formació no té places.</span>}
         </div>
       ) : (
         <div className="dia-members">

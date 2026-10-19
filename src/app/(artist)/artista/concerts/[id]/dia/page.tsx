@@ -7,21 +7,29 @@ import { formatDateFull, formatConcertTime, capitalize } from "@/lib/format";
 import DiaTopActions from "@/components/DiaTopActions";
 import DiaBody from "@/components/DiaBody";
 import { getLinkedMembers } from "@/lib/group-data";
+import { getFormations } from "@/lib/formation-data";
 import { mapsHrefFor } from "@/lib/nav-app";
 
 export const dynamic = "force-dynamic";
 
-// Bessona de la vista "dia de bolo" del gestor, per a un músic Admin del
-// grup — mateix cos (DiaBody), mateix accés editable.
+// Bessona de la vista "dia de bolo" del gestor, per a qualsevol músic del
+// grup convocat a aquest concert — mateix cos (DiaBody); només un Admin del
+// grup hi pot editar l'assistència (la resta la veu de només lectura).
 export default async function ArtistDiaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const profile = await requireArtist();
-  const { workspaceId } = await requireConcertAccess(id, "admin");
+  const access = await requireConcertAccess(id);
+  const { workspaceId } = access;
+  const editable = access.isManager || access.perms.admin;
   const [bands, concerts] = await Promise.all([getBands(workspaceId), getConcerts(workspaceId)]);
   const c = concerts.find((x) => x.id === id);
   if (!c) notFound();
   const band = bands.find((b) => b.id === c.bandId);
-  const linkedNames = band ? (await getLinkedMembers(band.id)).map((m) => m.memberName) : [];
+  const [linkedMembers, formations] = await Promise.all([
+    band ? getLinkedMembers(band.id) : Promise.resolve([]),
+    band ? getFormations(band.id) : Promise.resolve([]),
+  ]);
+  const linkedNames = linkedMembers.map((m) => m.memberName);
   const mapsQuery = [c.venue, c.address, c.city].filter(Boolean).join(", ");
   const navApp = profile.navApp;
 
@@ -49,7 +57,7 @@ export default async function ArtistDiaPage({ params }: { params: Promise<{ id: 
         <div className="cd-poster-date">{capitalize(formatDateFull(c.date))}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
       </div>
 
-      <DiaBody concert={c} band={band || null} editable linkedNames={linkedNames} navApp={navApp} />
+      <DiaBody concert={c} band={band || null} editable={editable} linkedNames={linkedNames} navApp={navApp} formations={formations} />
     </div>
   );
 }

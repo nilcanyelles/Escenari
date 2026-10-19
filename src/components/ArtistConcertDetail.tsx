@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import type { Band, Concert, Contact } from "@/lib/types";
 import type { Setlist } from "@/lib/material-types";
 import { setConcertMaterialAction } from "@/app/(app)/grup/material-actions";
@@ -162,6 +163,11 @@ export default function ArtistConcertDetail({ concert, band, myName, myAmount, s
             <AttendanceButtons concertId={concert.id} current={myAnswer} />
           )}
           <div className="cd-poster-actions">
+            {kind === "bolo" && (
+              <Link href={`/artista/concerts/${concert.id}/dia`} className="cd-poster-icon-btn" title="Tota la info del dia del bolo en una sola pantalla de mòbil">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
+              </Link>
+            )}
             {/* Compartir (Instagram / WhatsApp) i, només per als admins, el full de ruta. */}
             <DiaTopActions concert={concert} band={band} base="/artista" iconBtnClass="cd-poster-icon-btn" showRouteSheet={isAdmin} />
           </div>

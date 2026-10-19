@@ -1,4 +1,4 @@
-import type { Concert, Band } from "@/lib/types";
+import type { Concert, Band, Formation } from "@/lib/types";
 import { normalizeRouteSheet, type RouteSheet, formatPhoneDisplay, rsFormatDuration, llocItemMapsHref, RS_LLOC_ICONS } from "@/lib/route-sheet";
 import { mapsHrefFor } from "@/lib/nav-app";
 import DiaQuiVeCard from "@/components/DiaQuiVeCard";
@@ -11,7 +11,7 @@ import DiaQuiVeCard from "@/components/DiaQuiVeCard";
 // dia, no només un formulari d'assistència. "editable" activa el llapis
 // de "Qui ve" (només a la vista de gestor — mai a la pàgina pública).
 // "linkedNames": membres amb compte d'Escenari vinculat (tick lila a "Qui ve").
-export default function DiaBody({ concert: c, band, editable = false, linkedNames = [], navApp, hideQuiVe = false }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[]; navApp?: string; hideQuiVe?: boolean }) {
+export default function DiaBody({ concert: c, band, editable = false, linkedNames = [], navApp, hideQuiVe = false, formations = [] }: { concert: Concert; band: Band | null; editable?: boolean; linkedNames?: string[]; navApp?: string; hideQuiVe?: boolean; formations?: Formation[] }) {
   const rs = normalizeRouteSheet(c.routeSheet as RouteSheet | null, c);
 
   // L'adreça és el mateix camp que "Informació general" (mai un text lliure
@@ -100,7 +100,7 @@ export default function DiaBody({ concert: c, band, editable = false, linkedName
       </div>
 
       {/* Formació */}
-      {!hideQuiVe && <DiaQuiVeCard key={c.id} concert={c} band={band} editable={editable} linkedNames={linkedNames} />}
+      {!hideQuiVe && <DiaQuiVeCard key={c.id} concert={c} band={band} editable={editable} linkedNames={linkedNames} formations={formations} />}
 
       {/* Hospitalitat ràpida */}
       {otherHosp.length > 0 && (
