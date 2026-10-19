@@ -13,14 +13,13 @@ import { mapsHrefFor } from "@/lib/nav-app";
 export const dynamic = "force-dynamic";
 
 // Bessona de la vista "dia de bolo" del gestor, per a qualsevol músic del
-// grup convocat a aquest concert — mateix cos (DiaBody); només un Admin del
-// grup hi pot editar l'assistència (la resta la veu de només lectura).
+// grup convocat a aquest concert — mateix cos (DiaBody), sempre de només
+// lectura: per editar l'assistència cal anar a la pestanya Convocatòria de
+// la fitxa completa del concert, no des d'aquesta drecera.
 export default async function ArtistDiaPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const profile = await requireArtist();
-  const access = await requireConcertAccess(id);
-  const { workspaceId } = access;
-  const editable = access.isManager || access.perms.admin;
+  const { workspaceId } = await requireConcertAccess(id);
   const [bands, concerts] = await Promise.all([getBands(workspaceId), getConcerts(workspaceId)]);
   const c = concerts.find((x) => x.id === id);
   if (!c) notFound();
@@ -57,7 +56,7 @@ export default async function ArtistDiaPage({ params }: { params: Promise<{ id: 
         <div className="cd-poster-date">{capitalize(formatDateFull(c.date))}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
       </div>
 
-      <DiaBody concert={c} band={band || null} editable={editable} linkedNames={linkedNames} navApp={navApp} formations={formations} />
+      <DiaBody concert={c} band={band || null} linkedNames={linkedNames} navApp={navApp} formations={formations} />
     </div>
   );
 }

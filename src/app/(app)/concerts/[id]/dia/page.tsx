@@ -54,7 +54,7 @@ export default async function DiaPage({ params }: { params: Promise<{ id: string
         <div className="cd-poster-date">{capitalize(formatDateFull(c.date))}{c.exactTime ? ` — ${c.exactTime}` : c.time ? ` — ${formatConcertTime(c.time)}` : ""}</div>
       </div>
 
-      <DiaBody concert={c} band={band || null} editable linkedNames={linkedNames} navApp={profile.navApp} formations={formations} />
+      <DiaBody concert={c} band={band || null} linkedNames={linkedNames} navApp={profile.navApp} formations={formations} />
     </div>
   );
 }
