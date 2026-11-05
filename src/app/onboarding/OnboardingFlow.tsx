@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import BackLink from "@/components/BackLink";
+import UsernameField from "@/components/UsernameField";
 import { completeArtistOnboardingAction, completeAgencyOnboardingAction } from "./actions";
 
 type Step = "role" | "artist" | "agency" | "agency-done";
@@ -63,12 +64,16 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
 
   // Artista
   const [artistName, setArtistName] = useState(defaultName);
+  const [artistUsername, setArtistUsername] = useState("");
+  const [artistUsernameReady, setArtistUsernameReady] = useState(false);
   const [instruments, setInstruments] = useState<string[]>([]);
 
   // Agència
   const [agencyName, setAgencyName] = useState("");
   const [agencyLogo, setAgencyLogo] = useState("");
   const [managerName, setManagerName] = useState(defaultName);
+  const [managerUsername, setManagerUsername] = useState("");
+  const [managerUsernameReady, setManagerUsernameReady] = useState(false);
   const [managerPhoto, setManagerPhoto] = useState("");
   const [managerRole, setManagerRole] = useState("Mànager");
   const [invites, setInvites] = useState<Invite[]>([{ name: "", role: "", email: "" }]);
@@ -81,7 +86,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
     setBusy(true);
     setError("");
     try {
-      const result = await completeArtistOnboardingAction({ name: artistName, instruments });
+      const result = await completeArtistOnboardingAction({ name: artistName, instruments, username: artistUsername });
       if (!result.ok) { setError(result.error); return; }
       // Si venia d'un enllaç d'invitació a un grup, hi torna per reclamar-lo.
       router.push(next && next.startsWith("/") ? next : "/artista");
@@ -99,7 +104,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
     setError("");
     try {
       const result = await completeAgencyOnboardingAction({
-        agencyName, agencyLogo, managerName, managerPhoto, managerRole,
+        agencyName, agencyLogo, managerName, managerUsername, managerPhoto, managerRole,
         invites: invites.filter((i) => i.name.trim() || i.email.trim()),
       });
       if (!result.ok) { setError(result.error); return; }
@@ -146,12 +151,13 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
               autoFocus
             />
           </div>
+          <UsernameField value={artistUsername} onChange={setArtistUsername} fullName={artistName} onReady={setArtistUsernameReady} />
           <div className="field-group">
             <label className="field-label">Instruments que toques</label>
             <InstrumentPicker value={instruments} onChange={setInstruments} />
           </div>
           <div className="onboarding-error">{error}</div>
-          <button className="btn-primary" onClick={submitArtist} disabled={busy}>
+          <button className="btn-primary" onClick={submitArtist} disabled={busy || !artistUsernameReady}>
             {busy ? "Un moment..." : "Continua"}
           </button>
         </div>
@@ -197,6 +203,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
                 </div>
               </div>
             </div>
+            <UsernameField value={managerUsername} onChange={setManagerUsername} fullName={managerName} onReady={setManagerUsernameReady} />
           </div>
 
           {/* La resta de l'equip: cadascú rep un enllaç que el deixa dins
@@ -220,7 +227,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
           </div>
 
           <div className="onboarding-error">{error}</div>
-          <button className="btn-primary" onClick={submitAgency} disabled={busy}>
+          <button className="btn-primary" onClick={submitAgency} disabled={busy || !managerUsernameReady}>
             {busy ? "Creant l'agència..." : "Crea l'agència"}
           </button>
         </div>

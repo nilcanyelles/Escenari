@@ -6977,6 +6977,21 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .ob-logo-btn.round { border-radius: 999px; }
 .ob-logo-btn img { width: 100%; height: 100%; object-fit: cover; }
 .ob-logo-btn:hover { border-color: var(--accent); color: var(--text); }
+
+/* Nom d'usuari (@...), vegeu UsernameField — comprovació de disponibilitat
+   en viu (tick verd / vermell si ja existeix) i suggeriments clicables. */
+.username-field { position: relative; display: flex; align-items: center; }
+.username-field-at { position: absolute; left: 12px; color: var(--text-muted); font-size: 14px; pointer-events: none; z-index: 1; }
+.username-field-input { padding-left: 24px; padding-right: 34px; }
+.username-field.invalid .username-field-input { border-color: var(--red); color: var(--red); }
+.username-field-tick { position: absolute; right: 11px; color: oklch(0.72 0.15 155); display: inline-flex; }
+.username-field-msg { font-size: 11.5px; color: var(--red); margin-top: 2px; }
+.username-suggestions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.username-suggestion {
+  all: unset; cursor: pointer; font-size: 12.5px; padding: 5px 10px; border-radius: 999px;
+  background: oklch(0.68 0.19 290 / 0.14); color: oklch(0.72 0.16 290); transition: background .15s;
+}
+.username-suggestion:hover { background: oklch(0.68 0.19 290 / 0.26); }
 .invite-row-3 { display: grid; grid-template-columns: 1.2fr 1fr 1.4fr auto; gap: 8px; align-items: center; }
 @media (max-width: 640px) { .invite-row-3 { grid-template-columns: 1fr 1fr; } }
 .ob-links { display: flex; flex-direction: column; gap: 8px; }

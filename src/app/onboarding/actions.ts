@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { uploadFileBlob } from "@/lib/blob-storage";
 import { getOrCreatePersonProfile } from "@/lib/person-profile";
 import { createAgencyInvitations } from "@/lib/agency";
+import { slugifyUsername, isValidUsername, baseUsernameSuggestions, digitSuffixVariants } from "@/lib/username";
 
 async function requireClerkUser() {
   const { userId } = await auth();
@@ -15,18 +16,70 @@ async function requireClerkUser() {
   return { userId, email };
 }
 
-export async function completeArtistOnboardingAction(data: { name: string; instruments: string[] }) {
+async function isUsernameTaken(pool: ReturnType<typeof db>, username: string): Promise<boolean> {
+  const r = await pool.query("select 1 from profiles where lower(username)=lower($1) limit 1", [username]);
+  return !!r.rows[0];
+}
+
+// Dels candidats (en ordre de preferència), els primers "limit" que encara
+// no té ningú — una sola consulta per a tots alhora.
+async function firstAvailable(pool: ReturnType<typeof db>, candidates: Iterable<string>, limit: number): Promise<string[]> {
+  const list = Array.from(candidates);
+  if (list.length === 0) return [];
+  const rows = (
+    await pool.query("select lower(username) as u from profiles where lower(username) = any($1::text[])", [list.map((c) => c.toLowerCase())])
+  ).rows as { u: string }[];
+  const taken = new Set(rows.map((r) => r.u));
+  const out: string[] = [];
+  for (const c of list) {
+    if (!taken.has(c.toLowerCase())) out.push(c);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+export type UsernameCheckResult = {
+  normalized: string;
+  valid: boolean;
+  available: boolean;
+  suggestions: string[];
+};
+
+// Comprovació en viu mentre s'escriu el nom d'usuari (@...), vegeu
+// UsernameField a OnboardingFlow. Amb el camp buit, torna suggeriments a
+// partir del nom i cognoms; si el triat ja existeix, en torna variants amb
+// un sufix numèric.
+export async function checkUsernameAction(raw: string, fullName: string): Promise<UsernameCheckResult> {
+  const normalized = slugifyUsername(raw);
+  const pool = db();
+  if (!normalized) {
+    const suggestions = await firstAvailable(pool, baseUsernameSuggestions(fullName), 3);
+    return { normalized, valid: false, available: false, suggestions };
+  }
+  if (!isValidUsername(normalized)) {
+    return { normalized, valid: false, available: false, suggestions: [] };
+  }
+  const taken = await isUsernameTaken(pool, normalized);
+  if (!taken) return { normalized, valid: true, available: true, suggestions: [] };
+  const suggestions = await firstAvailable(pool, digitSuffixVariants(normalized), 3);
+  return { normalized, valid: true, available: false, suggestions };
+}
+
+export async function completeArtistOnboardingAction(data: { name: string; instruments: string[]; username: string }) {
   const { userId, email } = await requireClerkUser();
   const pool = db();
   const name = (data.name || "").trim();
   if (!name) return { ok: false as const, error: "Cal un nom." };
+  const username = slugifyUsername(data.username || "");
+  if (!isValidUsername(username)) return { ok: false as const, error: "Tria un nom d'usuari vàlid." };
+  if (await isUsernameTaken(pool, username)) return { ok: false as const, error: "Aquest nom d'usuari ja no està disponible." };
   const instruments = (data.instruments || []).map((i) => i.trim()).filter(Boolean);
 
   await pool.query(
-    `insert into profiles (clerk_user_id, email, role, name, instruments)
-     values ($1, $2, 'artist', $3, $4)
+    `insert into profiles (clerk_user_id, email, role, name, username, instruments)
+     values ($1, $2, 'artist', $3, $4, $5)
      on conflict (clerk_user_id) do nothing`,
-    [userId, email, name, JSON.stringify(instruments)]
+    [userId, email, name, username, JSON.stringify(instruments)]
   );
   return { ok: true as const };
 }
@@ -55,6 +108,7 @@ export type AgencyOnboardingInput = {
   agencyName: string;
   agencyLogo?: string;   // data URL o buit
   managerName: string;
+  managerUsername: string;
   managerPhoto?: string; // data URL o buit
   managerRole: string;
   invites: { name: string; role: string; email: string }[];
@@ -74,11 +128,14 @@ export async function completeAgencyOnboardingAction(data: AgencyOnboardingInput
   const agencyName = (data.agencyName || "").trim();
   const managerRole = (data.managerRole || "").trim() || "Mànager";
   if (!managerName || !agencyName) return { ok: false, error: "Cal el nom de l'agència i el teu nom." };
+  const managerUsername = slugifyUsername(data.managerUsername || "");
+  if (!isValidUsername(managerUsername)) return { ok: false, error: "Tria un nom d'usuari vàlid." };
   const agencyLogo = safeDataUrl(data.agencyLogo);
   const managerPhoto = safeDataUrl(data.managerPhoto);
 
   const existing = (await pool.query("select role from profiles where clerk_user_id=$1", [userId])).rows[0];
   if (existing) return { ok: true, invites: [] };
+  if (await isUsernameTaken(pool, managerUsername)) return { ok: false, error: "Aquest nom d'usuari ja no està disponible." };
 
   const client = await pool.connect();
   let wsId = "ws_legacy";
@@ -120,9 +177,9 @@ export async function completeAgencyOnboardingAction(data: AgencyOnboardingInput
     }
 
     await client.query(
-      `insert into profiles (clerk_user_id, email, role, name, workspace_id, agency_role, agency_owner, can_create_groups, view_all_groups)
-       values ($1, $2, 'manager', $3, $4, $5, true, true, true)`,
-      [userId, email, managerName, wsId, managerRole]
+      `insert into profiles (clerk_user_id, email, role, name, username, workspace_id, agency_role, agency_owner, can_create_groups, view_all_groups)
+       values ($1, $2, 'manager', $3, $4, $5, $6, true, true, true)`,
+      [userId, email, managerName, managerUsername, wsId, managerRole]
     );
 
     await client.query("commit");
