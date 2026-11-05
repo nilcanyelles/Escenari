@@ -89,6 +89,8 @@ export const INSTRUMENT_CATEGORIES: InstrumentCategory[] = [
     ["Triangle", "triangle"], ["Gong", "gong"], ["Plats", "cymbal"], ["Platerets", "cymbal"], ["Címbals", "cymbal"],
     ["Xilòfon", "mallet"], ["Vibràfon", "mallet"], ["Metal·lòfon", "mallet"], ["Glockenspiel", "mallet"],
     ["Campanes tubulars", "chimes"],
+    // Batucada
+    ["Repicador", "drum"], ["Tamborim", "tambourine"], ["Agogô", "triangle"], ["Cuíca", "handdrum"], ["Chocalho", "shaker"],
   ]),
   cat("Tecles", "piano", [
     "Piano", ["Orgue", "organ"], "Celesta", ["Acordió cromàtic", "accordion"], ["Acordió diatònic", "accordion"],
@@ -109,3 +111,39 @@ INSTRUMENT_CATEGORIES.forEach((c) => c.items.forEach((i) => { ICON_BY_NAME[i.nam
 export function instrumentIconKey(name: string): IconKey {
   return ICON_BY_NAME[(name || "").trim().toLowerCase()] || "note";
 }
+
+// Tipus de formació: el mateix selector d'instruments (InstrumentPicker),
+// vist per l'instrumentació típica d'un estil en comptes de per família —
+// un instrument hi pot sortir a més d'un tipus, és normal (p. ex. la Veu a
+// quasi tots). Noms tal qual al catàleg de dalt perquè l'selecció i la
+// icona funcionin igual.
+function formationCat(name: string, items: string[]): InstrumentCategory {
+  return { name, items: items.map((n) => ({ name: n, icon: instrumentIconKey(n) })) };
+}
+
+export const FORMATION_TYPES: InstrumentCategory[] = [
+  formationCat("Pop rock", [
+    "Veu", "Cors", "Guitarra elèctrica", "Guitarra acústica", "Baix elèctric", "Bateria", "Piano", "Sintetitzador", "Caixa de ritmes",
+  ]),
+  formationCat("Trap", ["Veu", "Cors", "Sintetitzador", "Caixa de ritmes", "Piano"]),
+  formationCat("Electrònica", ["Veu", "Sintetitzador", "Caixa de ritmes", "Piano"]),
+  formationCat("Tradicional", [
+    "Veu", "Gralla seca", "Gralla dolça", "Gralla baixa", "Dolçaina", "Tarota", "Tenora", "Tible",
+    "Sac de gemecs", "Gaita", "Cornamusa", "Flabiol", "Flabiol i tamborí", "Tamborí", "Tabal fondo", "Tabal valencià", "Pandero",
+  ]),
+  formationCat("Cobla", ["Flabiol i tamborí", "Tible", "Tenora", "Trompeta", "Fiscorn", "Trombó", "Contrabaix"]),
+  formationCat("Orquestra", [
+    "Violí", "Viola", "Violoncel", "Contrabaix", "Arpa",
+    "Flauta travessera", "Flautí", "Piccolo", "Clarinet", "Oboè", "Fagot", "Contrafagot", "Corn anglès",
+    "Saxofon soprano", "Saxofon alto", "Saxofon tenor", "Saxofon baríton",
+    "Trompeta", "Corneta", "Fiscorn", "Trombó", "Bombardó", "Tuba",
+    "Timbala", "Caixa de percussió", "Xilòfon", "Vibràfon", "Campanes tubulars", "Plats", "Gong", "Triangle",
+    "Piano", "Orgue", "Celesta",
+  ]),
+  formationCat("Folk", [
+    "Veu", "Cors", "Guitarra acústica", "Guitarra espanyola", "Violí", "Banjo", "Mandolina", "Ukelele",
+    "Acordió diatònic", "Harmònica", "Flauta", "Contrabaix", "Pandereta",
+  ]),
+  formationCat("Batucada", ["Surdo", "Contrasurdo", "Caixa de percussió", "Repicador", "Tamborim", "Agogô", "Cuíca", "Chocalho", "Pandero"]),
+  formationCat("Cor", ["Veu", "Cors"]),
+];

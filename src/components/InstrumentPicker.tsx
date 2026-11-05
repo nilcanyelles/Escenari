@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { INSTRUMENT_CATEGORIES, InstrumentSvg, instrumentIconKey } from "@/lib/instruments";
+import { INSTRUMENT_CATEGORIES, FORMATION_TYPES, InstrumentSvg, instrumentIconKey } from "@/lib/instruments";
 import { instrumentIconFor, customInstrumentList, registerCustomInstruments, INSTRUMENT_ICON_CHOICES } from "@/lib/tags";
 import { normalize } from "@/lib/text";
 import { addCustomInstrumentAction } from "@/app/instrument-actions";
@@ -29,16 +29,26 @@ export default function InstrumentPicker({
   const [customTick, setCustomTick] = useState(0);
   const [iconPickerFor, setIconPickerFor] = useState<string | null>(null);
   const [savingCustom, setSavingCustom] = useState(false);
+  // Per defecte, agrupat per família (com sempre); triant un tipus de
+  // formació del selector de filtres, es veuen només els instruments
+  // habituals d'aquell estil — un instrument hi pot sortir a més d'una
+  // formació, no cal que siguin exclusius.
+  const [formation, setFormation] = useState<string | null>(null);
+  const [filterOpen, setFilterOpen] = useState(false);
   const q = normalize(query.trim());
 
   const selectedLower = useMemo(() => new Set(value.map((v) => v.toLowerCase())), [value]);
 
   const allCategories = useMemo(() => {
+    if (formation) {
+      const f = FORMATION_TYPES.find((ft) => ft.name === formation);
+      return f ? [f] : [];
+    }
     const custom = customInstrumentList();
     if (!custom.length) return INSTRUMENT_CATEGORIES;
     return INSTRUMENT_CATEGORIES.concat([{ name: "Personalitzats", items: custom.map((c) => ({ name: c.name, icon: instrumentIconKey(c.name) })) }]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [customTick]);
+  }, [customTick, formation]);
 
   const categories = useMemo(() => {
     if (!q) return allCategories;
@@ -94,21 +104,48 @@ export default function InstrumentPicker({
           ))}
         </div>
       )}
-      <input
-        className="field-input"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            const first = categories[0]?.items[0];
-            if (first && exactMatch) toggle(first.name);
-            else if (first && categories.length === 1 && categories[0].items.length === 1) toggle(first.name);
-            else if (!first) startCustom();
-          }
-        }}
-        placeholder="Cerca un instrument…"
-      />
+      <div className="instr-search-row">
+        <input
+          className="field-input"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              const first = categories[0]?.items[0];
+              if (first && exactMatch) toggle(first.name);
+              else if (first && categories.length === 1 && categories[0].items.length === 1) toggle(first.name);
+              else if (!first) startCustom();
+            }
+          }}
+          placeholder="Cerca un instrument…"
+        />
+        <div className="instr-filter-wrap">
+          <button
+            type="button" className={"instr-filter-btn" + (formation ? " active" : "")}
+            title="Filtra per tipus de formació" onClick={() => setFilterOpen((v) => !v)}
+          >
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+          </button>
+          {filterOpen && (
+            <>
+              <div className="instr-filter-backdrop" onClick={() => setFilterOpen(false)} />
+              <div className="instr-filter-menu">
+                <button type="button" className={"instr-filter-item" + (!formation ? " active" : "")} onClick={() => { setFormation(null); setFilterOpen(false); }}>
+                  Per tipus d&apos;instrument
+                </button>
+                <div className="instr-filter-sep" />
+                {FORMATION_TYPES.map((f) => (
+                  <button
+                    key={f.name} type="button" className={"instr-filter-item" + (formation === f.name ? " active" : "")}
+                    onClick={() => { setFormation(f.name); setFilterOpen(false); }}
+                  >{f.name}</button>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
       {iconPickerFor ? (
         <div className="instr-panel instr-custom-panel">
           <div className="instr-cat-title">Tria una icona per a «{iconPickerFor}»</div>
