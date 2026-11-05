@@ -5369,6 +5369,8 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .pv-chip img { width: 15px; height: 15px; object-fit: contain; }
 .pv-bands { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
+.pv-bands-total { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--text-faint); }
+.pv-bands-total strong { color: var(--text); font-weight: 800; }
 .pv-band {
   display: flex; align-items: center; gap: 10px;
   background: oklch(1 0 0 / 0.04);
@@ -5390,15 +5392,23 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .pv-band-counts { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: auto; flex-shrink: 0; }
 .pv-band-counts span { font-size: 11px; color: var(--text-faint); }
 .pv-band-counts strong { font-weight: 800; color: var(--text); margin-right: 3px; }
-.pv-band-ins-edit {
-  all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 999px; color: var(--text-faint); flex: none;
-}
-.pv-band-ins-edit:hover { background: oklch(1 0 0 / 0.1); color: var(--text); }
 .pv-band-ins-editor {
   margin: 6px 0 2px; padding: 12px; border-radius: 10px; cursor: default;
   background: oklch(1 0 0 / 0.03); border: 1px solid var(--border-soft);
 }
+/* Menú de dos botons a la punta del ratolí en clicar una fila de "Grups"
+   (vegeu bandMenuAt a ProfileView). */
+.pv-band-menu-backdrop { position: fixed; inset: 0; z-index: 200; }
+.pv-band-menu {
+  position: fixed; z-index: 201; transform: translate(-10px, -4px);
+  display: flex; flex-direction: column; min-width: 180px; padding: 6px;
+  background: var(--bg-card-2); border: 1px solid var(--border-soft); border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.pv-band-menu-item {
+  all: unset; cursor: pointer; padding: 9px 10px; border-radius: 7px; font-size: 13px; color: var(--text);
+}
+.pv-band-menu-item:hover { background: oklch(1 0 0 / 0.08); }
 
 /* Columna principal */
 .pv-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; min-height: 0; }
