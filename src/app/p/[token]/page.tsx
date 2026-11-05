@@ -33,5 +33,5 @@ export default async function PersonProfilePage({ params }: { params: Promise<{ 
     ? data
     : { ...data, concerts: [], busyDays: Object.fromEntries(Object.keys(data.busyDays).map((d) => [d, ""])) };
 
-  return <ProfileView data={safe} isOwner={isOwner} isManager={isManager} today={today()} navApp={isOwner && me ? me.navApp : undefined} />;
+  return <ProfileView data={safe} isOwner={isOwner} isManager={isManager} today={today()} navApp={isOwner && me ? me.navApp : undefined} accountUsername={isOwner && me ? me.username : undefined} />;
 }

@@ -5,7 +5,7 @@ import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 // d'invitació per codi (WhatsApp). Els feeds iCal/públics i el cron van per
 // token propi.
 const isPublic = createRouteMatcher([
-  "/", "/sign-in(.*)", "/sign-up(.*)", "/f/(.*)", "/m/(.*)", "/a/(.*)", "/p/(.*)", "/g/(.*)", "/j/(.*)", "/i/(.*)", "/u/(.*)", "/ct/(.*)", "/conf/(.*)", "/s/(.*)",
+  "/", "/onboarding(.*)", "/sign-in(.*)", "/sign-up(.*)", "/f/(.*)", "/m/(.*)", "/a/(.*)", "/p/(.*)", "/g/(.*)", "/j/(.*)", "/i/(.*)", "/u/(.*)", "/ct/(.*)", "/conf/(.*)", "/s/(.*)",
   "/api/ics/(.*)", "/api/public-events/(.*)", "/api/cron/(.*)", "/api/file/(.*)", "/api/rider-pdf/(.*)", "/api/stripe/(.*)",
 ]);
 

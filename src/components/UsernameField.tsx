@@ -11,8 +11,8 @@ type Status = "idle" | "checking" | "ok" | "taken" | "invalid";
 // suggeriments clicables — a partir del nom mentre el camp és buit, o amb
 // un sufix numèric quan el triat ja existeix. "onReady" avisa el pare de
 // si l'estat actual es pot enviar (per activar/desactivar "Continua").
-export default function UsernameField({ value, onChange, fullName, onReady }: {
-  value: string; onChange: (v: string) => void; fullName: string; onReady?: (ok: boolean) => void;
+export default function UsernameField({ value, onChange, fullName, onReady, required = false, excludeUsername, autoFocus = false }: {
+  value: string; onChange: (v: string) => void; fullName: string; onReady?: (ok: boolean) => void; required?: boolean; excludeUsername?: string; autoFocus?: boolean;
 }) {
   const [status, setStatus] = useState<Status>("idle");
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -22,7 +22,7 @@ export default function UsernameField({ value, onChange, fullName, onReady }: {
   function runCheck(v: string) {
     const id = ++reqId.current;
     setStatus("checking");
-    checkUsernameAction(v, fullName).then((r) => {
+    checkUsernameAction(v, fullName, excludeUsername).then((r) => {
       if (id !== reqId.current) return; // resposta obsoleta, n'hi ha una de més nova en camí
       setSuggestions(r.suggestions);
       if (!v) { setStatus("idle"); return; }
@@ -36,7 +36,7 @@ export default function UsernameField({ value, onChange, fullName, onReady }: {
     timer.current = window.setTimeout(() => runCheck(value), 300);
     return () => { if (timer.current) window.clearTimeout(timer.current); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, fullName]);
+  }, [value, fullName, excludeUsername]);
 
   useEffect(() => { onReady?.(status === "ok"); }, [status, onReady]);
 
@@ -47,7 +47,7 @@ export default function UsernameField({ value, onChange, fullName, onReady }: {
 
   return (
     <div className="field-group">
-      <label className="field-label">Nom d&apos;usuari</label>
+      <label className="field-label">Nom d&apos;usuari{required && <span className="field-required" title="Obligatori">*</span>}</label>
       <div className={"username-field" + (status === "taken" || status === "invalid" ? " invalid" : "")}>
         <span className="username-field-at">@</span>
         <input
@@ -55,6 +55,7 @@ export default function UsernameField({ value, onChange, fullName, onReady }: {
           value={value}
           onChange={(e) => onChange(slugifyUsername(e.target.value))}
           placeholder="nomusuari"
+          autoFocus={autoFocus}
         />
         {status === "ok" && (
           <span className="username-field-tick" title="Disponible">

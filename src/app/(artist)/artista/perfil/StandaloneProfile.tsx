@@ -6,13 +6,15 @@ import { personPhotoDataUri } from "@/lib/tags";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import NavAppBadge from "@/components/NavAppBadge";
 import { NAV_APP_OPTIONS, type NavApp } from "@/lib/nav-app";
+import UsernameSettingRow from "@/components/UsernameSettingRow";
 import { updateStandaloneProfileAction, uploadStandalonePhotoAction } from "./standalone-actions";
 
 // Perfil del músic abans d'unir-se a cap grup: foto, xarxes, contacte i
 // instruments, desats directament al seu compte (profiles). Quan s'uneixi
 // a un grup, aquestes dades es copien soles al perfil públic del grup.
-export default function StandaloneProfile({ name, initial }: {
+export default function StandaloneProfile({ name, username, initial }: {
   name: string;
+  username: string;
   initial: { photoFileId: string | null; bio: string; igHandle: string; phone: string; whatsapp: string; instruments: string[]; navApp: NavApp };
 }) {
   const router = useRouter();
@@ -57,8 +59,10 @@ export default function StandaloneProfile({ name, initial }: {
 
   return (
     <div className="panel" style={{ maxWidth: 640 }}>
-      <div className="panel-title" style={{ marginBottom: 4 }}>El teu perfil</div>
-      <div className="t-dim" style={{ fontSize: 13, marginBottom: 16 }}>
+      <div className="panel-title" style={{ marginBottom: 2 }}>El teu perfil</div>
+      <div className="t-strong" style={{ fontSize: 15 }}>{name}</div>
+      <UsernameSettingRow username={username} fullName={name} />
+      <div className="t-dim" style={{ fontSize: 13, margin: "12px 0 16px" }}>
         Encara no estàs a cap grup. Quan t&apos;uneixis amb el codi apareixeràn aquí.
       </div>
       <div style={{ display: "flex", gap: 20, flexWrap: "wrap" }}>

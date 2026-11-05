@@ -69,6 +69,8 @@ export type PersonProfileData = {
   workspaceId: string;
   name: string;
   clerkUserId: string | null;
+  // Nom d'usuari (@...) del compte d'Escenari vinculat, si n'hi ha.
+  username: string;
   photoFileId: string | null;
   bio: string;
   igHandle: string;
@@ -329,12 +331,15 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
 
   // Disponibilitat (només si té compte) i dies ocupats per bolos.
   const availability: Record<string, boolean> = {};
+  let username = "";
   if (row.clerk_user_id) {
     const aRows = (await pool.query(
       "select to_char(day, 'YYYY-MM-DD') as day, available from subs_availability where clerk_user_id=$1",
       [row.clerk_user_id]
     )).rows;
     aRows.forEach((a) => { availability[a.day] = !!a.available; });
+    const prof = (await pool.query("select username from profiles where clerk_user_id=$1", [row.clerk_user_id])).rows[0];
+    username = prof?.username || "";
   }
   const busyDays: Record<string, string> = {};
   concerts.forEach((c) => {
@@ -347,6 +352,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     workspaceId: row.workspace_id,
     name: row.person_name,
     clerkUserId: row.clerk_user_id,
+    username,
     photoFileId: row.photo_file_id,
     bio: row.bio || "",
     igHandle: row.ig_handle || "",

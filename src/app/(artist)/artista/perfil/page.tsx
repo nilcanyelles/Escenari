@@ -30,6 +30,7 @@ export default async function ArtistProfilePage() {
     return (
       <StandaloneProfile
         name={profile.name}
+        username={profile.username}
         initial={{
           photoFileId: profile.photoFileId, bio: profile.bio, igHandle: profile.igHandle,
           phone: profile.phone, whatsapp: profile.whatsapp, instruments: profile.instruments, navApp: profile.navApp,
@@ -43,5 +44,5 @@ export default async function ArtistProfilePage() {
   const data = await getPersonProfileData(token);
   if (!data) return null;
 
-  return <ProfileView data={data} isOwner={true} isManager={false} today={today()} navApp={profile.navApp} />;
+  return <ProfileView data={data} isOwner={true} isManager={false} today={today()} navApp={profile.navApp} accountUsername={profile.username} />;
 }

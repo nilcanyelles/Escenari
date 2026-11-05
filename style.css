@@ -82,6 +82,7 @@ button { font-family: inherit; }
 .mobile-logo-img { height: 24px; width: auto; flex: none; }
 .field-group { display: flex; flex-direction: column; gap: 6px; }
 .field-label { font-size: 12px; color: var(--text-muted); font-weight: 500; }
+.field-required { color: var(--red); margin-left: 3px; }
 .field-input, select.field-input {
   background: var(--bg-deep); border: 1px solid var(--border-input);
   border-radius: var(--radius-sm); padding: 11px 12px;
@@ -1595,6 +1596,11 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .join-code-value { font-family: "Space Grotesk", monospace; font-size: 30px; font-weight: 700; letter-spacing: 6px; color: var(--accent-strong); }
 .join-code-label { font-size: 12px; color: var(--text-muted); }
 .onboarding-error { font-size: 12.5px; color: var(--red); min-height: 16px; }
+.onboarding-signin-hint { text-align: center; font-size: 12.5px; color: var(--text-ghost); margin: 10px 0 0; }
+.onboarding-signin-hint a, .onboarding-signin-hint button {
+  all: unset; cursor: pointer; color: var(--accent); font-weight: 600; font-size: inherit; font-family: inherit;
+}
+.onboarding-signin-hint a:hover, .onboarding-signin-hint button:hover { text-decoration: underline; }
 
 /* ---------- ARTIST AREA ---------- */
 .artist-gig-list { display: flex; flex-direction: column; gap: 12px; }
@@ -5384,6 +5390,15 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 .pv-band-counts { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; margin-left: auto; flex-shrink: 0; }
 .pv-band-counts span { font-size: 11px; color: var(--text-faint); }
 .pv-band-counts strong { font-weight: 800; color: var(--text); margin-right: 3px; }
+.pv-band-ins-edit {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; border-radius: 999px; color: var(--text-faint); flex: none;
+}
+.pv-band-ins-edit:hover { background: oklch(1 0 0 / 0.1); color: var(--text); }
+.pv-band-ins-editor {
+  margin: 6px 0 2px; padding: 12px; border-radius: 10px; cursor: default;
+  background: oklch(1 0 0 / 0.03); border: 1px solid var(--border-soft);
+}
 
 /* Columna principal */
 .pv-main { display: flex; flex-direction: column; gap: 20px; min-width: 0; min-height: 0; }
@@ -6992,6 +7007,18 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
   background: oklch(0.68 0.19 290 / 0.14); color: oklch(0.72 0.16 290); transition: background .15s;
 }
 .username-suggestion:hover { background: oklch(0.68 0.19 290 / 0.26); }
+/* Fila de nom d'usuari a "El teu perfil" (vegeu UsernameSettingRow). */
+.username-row { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+.username-row.prominent { margin-top: 0; }
+.username-row.prominent .username-row-edit { opacity: 0.6; }
+.username-row.prominent .username-row-edit:hover { opacity: 1; }
+.username-row-value { font-size: 13.5px; color: var(--text-muted); }
+.username-row-edit {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 999px; color: var(--text-faint);
+}
+.username-row-edit:hover { background: oklch(1 0 0 / 0.08); color: var(--text); }
+.username-row-edit-wrap { display: flex; flex-direction: column; gap: 8px; max-width: 320px; margin-top: 4px; }
 .invite-row-3 { display: grid; grid-template-columns: 1.2fr 1fr 1.4fr auto; gap: 8px; align-items: center; }
 @media (max-width: 640px) { .invite-row-3 { grid-template-columns: 1fr 1fr; } }
 .ob-links { display: flex; flex-direction: column; gap: 8px; }

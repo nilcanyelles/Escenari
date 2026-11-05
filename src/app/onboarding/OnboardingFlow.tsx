@@ -2,6 +2,8 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { SignInButton, SignOutButton, useAuth } from "@clerk/nextjs";
+import { clerkAppearance } from "@/lib/clerk-appearance";
 import InstrumentPicker from "@/components/InstrumentPicker";
 import BackLink from "@/components/BackLink";
 import UsernameField from "@/components/UsernameField";
@@ -46,6 +48,42 @@ function readImage(file: File | undefined, set: (dataUrl: string) => void, max =
   img.src = url;
 }
 
+// Estrella vermella al costat de l'etiqueta d'un camp obligatori.
+function Req() {
+  return <span className="field-required" title="Obligatori">*</span>;
+}
+
+// Peu amb enllaç a inici de sessió — a totes les pantalles prèvies a crear
+// el compte de veritat (un cop creat, ja no té sentit oferir-lo). Obre el
+// formulari de Clerk directament en una modal, sense navegar a /sign-in.
+// Clerk no deixa obrir la modal si ja hi ha una sessió activa (mode
+// single-session) — p. ex. qui ha entrat amb Clerk però encara no ha
+// acabat l'alta: en aquest cas el text es queda, però l'acció passa a ser
+// tancar la sessió (per poder entrar amb un altre compte), no petar amb
+// l'avís de Clerk en intentar obrir un segon inici de sessió.
+function SignInHint({ redirectUrl }: { redirectUrl: string }) {
+  const { isLoaded, isSignedIn } = useAuth();
+  if (!isLoaded) return <p className="onboarding-signin-hint">&nbsp;</p>;
+  if (isSignedIn) {
+    return (
+      <p className="onboarding-signin-hint">
+        Ja has entrat amb un altre compte?{" "}
+        <SignOutButton redirectUrl="/onboarding">
+          <button type="button">Tanca la sessió</button>
+        </SignOutButton>
+      </p>
+    );
+  }
+  return (
+    <p className="onboarding-signin-hint">
+      Ja tens el teu compte?{" "}
+      <SignInButton mode="modal" appearance={clerkAppearance} fallbackRedirectUrl={redirectUrl}>
+        <button type="button">Inicia sessió</button>
+      </SignInButton>
+    </p>
+  );
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -81,8 +119,10 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
   const agencyLogoRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
 
+  const artistCanSubmit = !!artistName.trim() && artistUsernameReady && instruments.length > 0;
+
   async function submitArtist() {
-    if (busy) return;
+    if (busy || !artistCanSubmit) return;
     setBusy(true);
     setError("");
     try {
@@ -118,6 +158,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
   }
 
   const wide = step === "role" || step === "agency" || step === "agency-done";
+  const signInRedirectUrl = next && next.startsWith("/") ? next : "/onboarding";
 
   return (
     <div className={"onboarding-card" + (wide ? " wide" : "")}>
@@ -134,6 +175,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
               <div className="role-card-title">Soc artista</div>
             </button>
           </div>
+          <SignInHint redirectUrl={signInRedirectUrl} />
         </>
       )}
 
@@ -142,7 +184,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
           <BackLink className="onboarding-back" onClick={() => setStep("role")}>Torna enrere</BackLink>
           <h1 className="onboarding-title">El teu perfil d&apos;artista</h1>
           <div className="field-group">
-            <label className="field-label">El teu nom</label>
+            <label className="field-label">El teu nom<Req /></label>
             <input
               className="field-input"
               value={artistName}
@@ -151,15 +193,16 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
               autoFocus
             />
           </div>
-          <UsernameField value={artistUsername} onChange={setArtistUsername} fullName={artistName} onReady={setArtistUsernameReady} />
+          <UsernameField value={artistUsername} onChange={setArtistUsername} fullName={artistName} onReady={setArtistUsernameReady} required />
           <div className="field-group">
-            <label className="field-label">Instruments que toques</label>
+            <label className="field-label">Instruments que toques<Req /></label>
             <InstrumentPicker value={instruments} onChange={setInstruments} />
           </div>
           <div className="onboarding-error">{error}</div>
-          <button className="btn-primary" onClick={submitArtist} disabled={busy || !artistUsernameReady}>
+          <button className="btn-primary" onClick={submitArtist} disabled={busy || !artistCanSubmit}>
             {busy ? "Un moment..." : "Continua"}
           </button>
+          <SignInHint redirectUrl={signInRedirectUrl} />
         </div>
       )}
 
@@ -230,6 +273,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
           <button className="btn-primary" onClick={submitAgency} disabled={busy || !managerUsernameReady}>
             {busy ? "Creant l'agència..." : "Crea l'agència"}
           </button>
+          <SignInHint redirectUrl={signInRedirectUrl} />
         </div>
       )}
 

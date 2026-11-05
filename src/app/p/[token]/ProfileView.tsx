@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { PersonProfileData } from "@/lib/person-profile";
 import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDate } from "@/lib/format";
 import { personPhotoDataUri, bandPhotoDataUri, instrumentIconFor } from "@/lib/tags";
-import { updateProfileInfoAction, uploadProfilePhotoAction, updatePersonAction } from "../profile-actions";
+import { updateProfileInfoAction, uploadProfilePhotoAction, updatePersonAction, updateBandInstrumentsAction } from "../profile-actions";
 import { setMemberPermAction } from "@/app/(app)/grup/actions";
 import { DEFAULT_PERMS, PERM_LABELS } from "@/lib/perms";
 import type { MemberPerms } from "@/lib/types";
@@ -16,6 +16,7 @@ import InstrumentPicker from "@/components/InstrumentPicker";
 import NavAppBadge from "@/components/NavAppBadge";
 import { NAV_APP_OPTIONS, type NavApp } from "@/lib/nav-app";
 import { updateStandaloneProfileAction } from "@/app/(artist)/artista/perfil/standalone-actions";
+import UsernameSettingRow from "@/components/UsernameSettingRow";
 
 // Permisos del membre en un grup, editables pel gestor des del perfil.
 function BandPermsRow({ bandId, memberName, initial }: { bandId: string; memberName: string; initial: Partial<MemberPerms> }) {
@@ -106,12 +107,15 @@ function AttendanceCalendar({ concerts, today }: { concerts: PersonProfileData["
   );
 }
 
-export default function ProfileView({ data, isOwner, isManager, today, navApp = "google" }: {
+export default function ProfileView({ data, isOwner, isManager, today, navApp = "google", accountUsername }: {
   data: PersonProfileData;
   isOwner: boolean;
   isManager: boolean;
   today: string;
   navApp?: NavApp;
+  // Nom d'usuari (@...) del compte — només té sentit quan isOwner (és el
+  // teu propi compte, no el d'algú que miris com a gestor).
+  accountUsername?: string;
 }) {
   const router = useRouter();
   const [myNavApp, setMyNavApp] = useState(navApp);
@@ -124,6 +128,18 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
   }
   const canEditAll = isOwner || (isManager && !data.clerkUserId);
   const [editOpen, setEditOpen] = useState(false);
+  // Edició dels instruments que toca en UN grup concret (no els personals),
+  // des de la fila d'aquell grup a "Grups".
+  const [bandInsOpen, setBandInsOpen] = useState<string | null>(null);
+  const [bandInsDraft, setBandInsDraft] = useState<string[]>([]);
+  const [bandInsSaving, setBandInsSaving] = useState(false);
+  async function saveBandInstruments(bandId: string) {
+    setBandInsSaving(true);
+    await updateBandInstrumentsAction(data.token, bandId, bandInsDraft);
+    setBandInsSaving(false);
+    setBandInsOpen(null);
+    router.refresh();
+  }
   const [form, setForm] = useState({
     name: data.name,
     instruments: data.instruments,
@@ -159,15 +175,15 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
   // Grups del perfil: si és músic i crew del mateix grup alhora, una sola
   // entrada amb els dos rols junts, no dues de separades.
   const groupEntries = (() => {
-    const byBandId = new Map<string, { bandId: string; name: string; logo: string; color1: string; roleText: string }>();
+    const byBandId = new Map<string, { bandId: string; name: string; logo: string; color1: string; roleText: string; instruments: string[] | null }>();
     data.bands.forEach((b) => {
-      byBandId.set(b.id, { bandId: b.id, name: b.name, logo: b.logo, color1: b.color1, roleText: b.instruments.join(", ") || b.role });
+      byBandId.set(b.id, { bandId: b.id, name: b.name, logo: b.logo, color1: b.color1, roleText: b.instruments.join(", ") || b.role, instruments: b.instruments });
     });
     data.crewRoles.forEach((c) => {
       const crewText = c.role || "Crew";
       const existing = byBandId.get(c.bandId);
       if (existing) existing.roleText = `${existing.roleText} · ${crewText}`;
-      else byBandId.set(c.bandId, { bandId: c.bandId, name: c.bandName, logo: c.logo, color1: c.color1, roleText: crewText });
+      else byBandId.set(c.bandId, { bandId: c.bandId, name: c.bandName, logo: c.logo, color1: c.color1, roleText: crewText, instruments: null });
     });
     // Bolos fets i a la vista d'aquest grup en concret (mateix criteri que
     // les estadístiques de dalt: només bolos de debò).
@@ -247,8 +263,13 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
           </div>
 
           <h1 className="pv-name">{data.name}{data.clerkUserId && <VerifiedTick size={16} />}</h1>
+          {isOwner && accountUsername !== undefined ? (
+            <UsernameSettingRow username={accountUsername} fullName={data.name} prominent />
+          ) : data.username ? (
+            <div className="username-row prominent"><span className="pv-ig">@{data.username}</span></div>
+          ) : null}
           {data.igHandle && (
-            <a className="pv-ig" href={`https://instagram.com/${data.igHandle}`} target="_blank" rel="noreferrer">@{data.igHandle}</a>
+            <a className="pv-ig" style={{ fontSize: 12, color: "var(--text-muted)" }} href={`https://instagram.com/${data.igHandle}`} target="_blank" rel="noreferrer">Instagram: @{data.igHandle}</a>
           )}
           {data.bio && <p className="pv-bio">{data.bio}</p>}
 
@@ -310,6 +331,7 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                   (instrument i càrrec); si són grups diferents, una
                   entrada per cada un. */}
               {groupEntries.map((g) => {
+                const canEditIns = (isOwner || isManager) && g.instruments !== null;
                 const content = (
                   <>
                     <img src={g.logo || bandPhotoDataUri({ id: g.bandId, name: g.name })} alt="" />
@@ -321,23 +343,60 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                       <span><strong>{g.doneCount}</strong> bolos fets</span>
                       <span><strong>{g.upcomingCount}</strong> a la vista</span>
                     </div>
+                    {canEditIns && (
+                      <button
+                        type="button" className="pv-band-ins-edit" title="Edita els instruments que toques en aquest grup"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setBandInsDraft(g.instruments || []);
+                          setBandInsOpen(bandInsOpen === g.bandId ? null : g.bandId);
+                        }}
+                      >
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                      </button>
+                    )}
                   </>
                 );
                 // Clicar un grup hi porta directament — només té sentit si
                 // qui mira el perfil hi té accés (el propi músic o el
                 // gestor); un tercer qualsevol el veu igual però sense clicar.
-                return isOwner || isManager ? (
-                  <button
-                    key={g.bandId} type="button" className="pv-band pv-band-link"
+                // Un <div role="button"> en comptes de <button> perquè el
+                // llapis d'instruments (un botó seu) hi pugui anar a dins
+                // sense botons niats (invàlid en HTML).
+                function openBand() {
+                  document.cookie = `escenari_band=${encodeURIComponent(g.bandId)}; path=/; max-age=31536000; samesite=lax`;
+                  router.push(isManager ? "/grup" : "/artista/grup");
+                  router.refresh();
+                }
+                const row = isOwner || isManager ? (
+                  <div
+                    key={g.bandId} role="button" tabIndex={0} className="pv-band pv-band-link"
+                    title="Obre el grup i edita els instruments"
                     style={{ ["--pv-accent" as string]: g.color1 || "#8b7bff", flexWrap: "wrap" }}
-                    onClick={() => {
-                      document.cookie = `escenari_band=${encodeURIComponent(g.bandId)}; path=/; max-age=31536000; samesite=lax`;
-                      router.push(isManager ? "/grup" : "/artista/grup");
-                      router.refresh();
-                    }}
-                  >{content}</button>
+                    onClick={openBand}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openBand(); } }}
+                  >{content}</div>
                 ) : (
                   <div key={g.bandId} className="pv-band" style={{ ["--pv-accent" as string]: g.color1 || "#8b7bff", flexWrap: "wrap" }}>{content}</div>
+                );
+                return (
+                  <div key={g.bandId}>
+                    {row}
+                    {bandInsOpen === g.bandId && (
+                      <div className="pv-band-ins-editor" onClick={(e) => e.stopPropagation()}>
+                        <div className="t-dim" style={{ fontSize: 12, marginBottom: 6 }}>
+                          Instruments que toques a {g.name} — no afecta la teva llista personal d&apos;instruments.
+                        </div>
+                        <InstrumentPicker value={bandInsDraft} onChange={setBandInsDraft} />
+                        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                          <button type="button" className="btn-outline" onClick={() => setBandInsOpen(null)}>Cancel·la</button>
+                          <button type="button" className="btn-save" disabled={bandInsSaving} onClick={() => saveBandInstruments(g.bandId)}>
+                            {bandInsSaving ? "Desant…" : "Desa"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 );
               })}
               {groupEntries.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}

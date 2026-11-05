@@ -49,7 +49,10 @@ export type UsernameCheckResult = {
 // UsernameField a OnboardingFlow. Amb el camp buit, torna suggeriments a
 // partir del nom i cognoms; si el triat ja existeix, en torna variants amb
 // un sufix numèric.
-export async function checkUsernameAction(raw: string, fullName: string): Promise<UsernameCheckResult> {
+// "excludeUsername": en editar un nom d'usuari ja desat (vegeu
+// UsernameSettingRow), el mateix que ja tens no s'ha de marcar com a
+// "ocupat" només perquè ja és teu.
+export async function checkUsernameAction(raw: string, fullName: string, excludeUsername?: string): Promise<UsernameCheckResult> {
   const normalized = slugifyUsername(raw);
   const pool = db();
   if (!normalized) {
@@ -58,6 +61,9 @@ export async function checkUsernameAction(raw: string, fullName: string): Promis
   }
   if (!isValidUsername(normalized)) {
     return { normalized, valid: false, available: false, suggestions: [] };
+  }
+  if (excludeUsername && normalized === slugifyUsername(excludeUsername)) {
+    return { normalized, valid: true, available: true, suggestions: [] };
   }
   const taken = await isUsernameTaken(pool, normalized);
   if (!taken) return { normalized, valid: true, available: true, suggestions: [] };
@@ -74,6 +80,7 @@ export async function completeArtistOnboardingAction(data: { name: string; instr
   if (!isValidUsername(username)) return { ok: false as const, error: "Tria un nom d'usuari vàlid." };
   if (await isUsernameTaken(pool, username)) return { ok: false as const, error: "Aquest nom d'usuari ja no està disponible." };
   const instruments = (data.instruments || []).map((i) => i.trim()).filter(Boolean);
+  if (instruments.length === 0) return { ok: false as const, error: "Tria com a mínim un instrument." };
 
   await pool.query(
     `insert into profiles (clerk_user_id, email, role, name, username, instruments)

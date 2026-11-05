@@ -9,6 +9,7 @@ export type Profile = {
   email: string;
   role: "manager" | "artist";
   name: string;
+  username: string;
   instruments: string[];
   workspaceId: string | null;
   // Membre d'agència (gestors): càrrec, si mana a l'agència i permisos.
@@ -33,7 +34,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
   const { userId } = await auth();
   if (!userId) return null;
   const { rows } = await db().query(
-    `select clerk_user_id, email, role, name, instruments, workspace_id,
+    `select clerk_user_id, email, role, name, username, instruments, workspace_id,
             agency_role, agency_owner, can_create_groups, view_all_groups, assigned_band_ids,
             photo_file_id, bio, ig_handle, phone, whatsapp, nav_app
      from profiles where clerk_user_id = $1`,
@@ -46,6 +47,7 @@ export const getProfile = cache(async (): Promise<Profile | null> => {
     email: r.email,
     role: r.role,
     name: r.name,
+    username: r.username || "",
     instruments: r.instruments || [],
     workspaceId: r.workspace_id,
     agencyRole: r.agency_role || "",
@@ -91,6 +93,7 @@ export const hasBandMembership = cache(async (clerkUserId: string): Promise<bool
 export async function requireManager(): Promise<Profile & { workspaceId: string }> {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
+  if (!profile.username) redirect("/escull-usuari");
   if (profile.role !== "manager" || !profile.workspaceId) redirect("/artista");
   if ((await getViewMode()) === "artist" && (await hasBandMembership(profile.clerkUserId))) redirect("/artista");
   return profile as Profile & { workspaceId: string };
@@ -102,6 +105,7 @@ export async function requireManager(): Promise<Profile & { workspaceId: string 
 export async function requireArtist(): Promise<Profile> {
   const profile = await getProfile();
   if (!profile) redirect("/onboarding");
+  if (!profile.username) redirect("/escull-usuari");
   if (profile.role === "manager" && profile.workspaceId) {
     // Qualsevol gestor pot tenir també el seu compte de músic, encara que
     // encara no toqui en cap grup (p. ex. just entrant per un enllaç

@@ -6,6 +6,28 @@ import { getProfile } from "@/lib/current-user";
 import { getOrCreatePersonProfile } from "@/lib/person-profile";
 import { normalize } from "@/lib/text";
 import { uploadFileBlob } from "@/lib/blob-storage";
+import { slugifyUsername, isValidUsername } from "@/lib/username";
+
+// Canvia el nom d'usuari (@...) del propi compte — des de "El teu perfil" o
+// des de la pantalla d'actualització que es mostra a qui encara no en té
+// (vegeu /escull-usuari). Sempre el del compte que fa la crida, mai el
+// d'algú altre.
+export async function updateUsernameAction(username: string): Promise<{ ok: boolean; error?: string }> {
+  const me = await getProfile();
+  if (!me) return { ok: false, error: "Sessió no vàlida" };
+  const normalized = slugifyUsername(username);
+  if (!isValidUsername(normalized)) return { ok: false, error: "Nom d'usuari no vàlid." };
+  const pool = db();
+  const taken = (await pool.query(
+    "select 1 from profiles where lower(username)=lower($1) and clerk_user_id<>$2",
+    [normalized, me.clerkUserId]
+  )).rows[0];
+  if (taken) return { ok: false, error: "Aquest nom d'usuari ja no està disponible." };
+  await pool.query("update profiles set username=$1, updated_at=now() where clerk_user_id=$2", [normalized, me.clerkUserId]);
+  revalidatePath("/artista/perfil");
+  revalidatePath("/escull-usuari");
+  return { ok: true };
+}
 
 // person_profiles té un índex únic (workspace_id, lower(person_name)): si
 // ja hi ha una altra fila amb aquest nom al mateix workspace (típic quan el
@@ -40,6 +62,30 @@ export async function openPersonProfileAction(personName: string): Promise<{ tok
   if (!me || me.role !== "manager" || !me.workspaceId) throw new Error("Sessió de gestor no vàlida");
   const token = await getOrCreatePersonProfile(me.workspaceId, personName);
   return { token };
+}
+
+// Canvia els instruments que la persona toca EN AQUEST GRUP en concret
+// (bands.members[].instruments), sense tocar la seva llista personal
+// d'instruments (profiles.instruments, "tots els que toca") — vegeu el
+// desplegable d'edició d'un grup a "Qui ve"/el perfil.
+export async function updateBandInstrumentsAction(token: string, bandId: string, instruments: string[]): Promise<{ ok: boolean; error?: string }> {
+  const { row } = await accessFor(token);
+  const pool = db();
+  const band = (await pool.query("select members from bands where id=$1 and workspace_id=$2", [bandId, row.workspace_id])).rows[0];
+  if (!band) return { ok: false, error: "Grup no trobat" };
+  const nameKey = normalize(String(row.person_name));
+  const clean = instruments.map((i) => i.trim()).filter(Boolean);
+  let changed = false;
+  const members = (band.members || []).map((m: { name: string; role: string; instruments?: string[] }) => {
+    if (normalize(m.name) !== nameKey) return m;
+    changed = true;
+    return { ...m, instruments: clean, role: clean.join(", ") || m.role };
+  });
+  if (!changed) return { ok: false, error: "No ets músic d'aquest grup" };
+  await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
+  revalidatePath("/p/" + token);
+  revalidatePath("/artista/perfil");
+  return { ok: true };
 }
 
 // Un artista obre el seu propi perfil (primer workspace on és membre).
