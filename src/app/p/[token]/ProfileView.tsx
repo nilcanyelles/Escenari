@@ -282,11 +282,9 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
           </div>
 
           <h1 className="pv-name">{data.name}{data.clerkUserId && <VerifiedTick size={16} />}</h1>
-          {isOwner && accountUsername !== undefined ? (
-            <UsernameSettingRow username={accountUsername} fullName={data.name} prominent />
-          ) : data.username ? (
-            <div className="username-row prominent"><span className="pv-ig">@{data.username}</span></div>
-          ) : null}
+          {((isOwner && accountUsername) || data.username) && (
+            <div className="username-row prominent"><span className="pv-ig">@{(isOwner && accountUsername) || data.username}</span></div>
+          )}
           {data.bio && <p className="pv-bio">{data.bio}</p>}
 
           {(data.phone || data.email || data.igHandle) && (
@@ -476,6 +474,10 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                 <>
                   <div><label className="form-label">Nom</label>
                     <input className="field-input form-field" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+                  {isOwner && accountUsername !== undefined && (
+                    <div><label className="form-label">Nom d&apos;usuari</label>
+                      <UsernameSettingRow username={accountUsername} fullName={data.name} /></div>
+                  )}
                   <div><label className="form-label">Instruments</label>
                     <InstrumentPicker value={form.instruments} onChange={(next) => setForm({ ...form, instruments: next })} /></div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
