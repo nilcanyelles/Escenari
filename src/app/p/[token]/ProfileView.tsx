@@ -542,8 +542,6 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
       )}
 
       {shareOpen && <ProfileShareModal data={data} photoUrl={photoUrl} onClose={() => setShareOpen(false)} />}
-
-      <div className="pf-footer pf-footer-corner">Perfil personal generat amb Escenari</div>
     </div>
   );
 }

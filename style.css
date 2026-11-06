@@ -5391,7 +5391,7 @@ a.rs-counter-file-badge:hover { text-decoration: underline; }
 }
 .pv-chip img { width: 15px; height: 15px; object-fit: contain; }
 .pv-bands { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; overflow-y: auto; padding-right: 4px; }
-.pv-bands-total { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--text-faint); display: flex; flex-direction: column; gap: 4px; }
+.pv-bands-total { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-soft); font-size: 12px; color: var(--text-faint); display: flex; flex-direction: column; gap: 4px; align-items: flex-end; text-align: right; }
 .pv-bands-total strong { color: var(--text); font-weight: 800; }
 .pv-band {
   display: flex; align-items: center; gap: 10px;
