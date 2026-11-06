@@ -5,7 +5,7 @@ import { requireManager, hasBandMembership } from "@/lib/current-user";
 import { getBands } from "@/lib/data";
 import { getSelectedBandId, resolveBandScope } from "@/lib/band-scope";
 import { db } from "@/lib/db";
-import { IconSwap } from "@/components/RailIcons";
+import { IconSwap, IconPerson } from "@/components/RailIcons";
 
 export default async function AppGroupLayout({ children, modal }: { children: React.ReactNode; modal: React.ReactNode }) {
   const profile = await requireManager();
@@ -37,15 +37,17 @@ export default async function AppGroupLayout({ children, modal }: { children: Re
         phone: ppRow?.phone || "",
         whatsapp: ppRow?.whatsapp || "",
         email: ppRow?.contact_email || profile.email || "",
-        editable: true,
-        switchView: { href: "/artista/perfil", label: "Vista de músic", mode: "artist" },
       }}
       bands={bands.map((b) => ({ id: b.id, name: b.name, logo: b.logo || "", color1: b.color1 || "", tags: b.tags }))}
       selectedBandId={selectedBandId}
       agency={{ name: wsRow?.name || "", logo: wsRow?.logo || "" }}
+      railLinks={[
+        { href: "/perfil", label: "Perfil personal", emoji: "👤", icon: <IconPerson /> },
+      ]}
       subLinks={[
         { href: "/suplents", label: "Suplències", emoji: "🔄", icon: <IconSwap /> },
       ]}
+      showProfileButton={false}
     >
       {children}
       {modal}

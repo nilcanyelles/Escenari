@@ -52,6 +52,7 @@ export default function AppShell({
   agency,
   routeBase = "",
   homeHref = "/resum",
+  showProfileButton = true,
   children,
 }: {
   todayLabel: string;
@@ -64,6 +65,9 @@ export default function AppShell({
   agency?: ShellAgency | null; // gestor: l'agència surt on abans hi havia "Tots els grups"
   routeBase?: string;       // "" per al gestor, "/artista" per als músics
   homeHref?: string;
+  // Quan hi ha una pestanya "Perfil personal" pròpia (amb editar/alternar
+  // vista/tancar sessió al seu peu), el desplegable de l'avatar sobra.
+  showProfileButton?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -272,7 +276,7 @@ export default function AppShell({
             <span className="brand-name">ESCENARI</span>
           </Link>
           <div className="spacer"></div>
-          <ProfileButton />
+          {showProfileButton && <ProfileButton />}
         </div>
         {bandChips}
 
@@ -338,7 +342,7 @@ export default function AppShell({
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
             <div className="page-date">{todayLabel}</div>
-            <ProfileButton />
+            {showProfileButton && <ProfileButton />}
           </div>
         </div>
 

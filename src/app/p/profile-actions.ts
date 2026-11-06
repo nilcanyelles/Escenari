@@ -25,6 +25,7 @@ export async function updateUsernameAction(username: string): Promise<{ ok: bool
   if (taken) return { ok: false, error: "Aquest nom d'usuari ja no està disponible." };
   await pool.query("update profiles set username=$1, updated_at=now() where clerk_user_id=$2", [normalized, me.clerkUserId]);
   revalidatePath("/artista/perfil");
+  revalidatePath("/perfil");
   revalidatePath("/escull-usuari");
   return { ok: true };
 }
@@ -85,6 +86,7 @@ export async function updateBandInstrumentsAction(token: string, bandId: string,
   await pool.query("update bands set members=$1 where id=$2", [JSON.stringify(members), bandId]);
   revalidatePath("/p/" + token);
   revalidatePath("/artista/perfil");
+  revalidatePath("/perfil");
   return { ok: true };
 }
 

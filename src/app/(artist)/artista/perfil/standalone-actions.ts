@@ -43,6 +43,7 @@ export async function updateStandaloneProfileAction(patch: {
   // per props des de cada pàgina que l'incrusta.
   if (navApp) (await cookies()).set(NAV_APP_COOKIE, navApp, { path: "/", maxAge: 31536000, sameSite: "lax" });
   revalidatePath("/artista/perfil");
+  revalidatePath("/perfil");
 }
 
 export async function uploadStandalonePhotoAction(formData: FormData): Promise<{ ok: boolean; error?: string }> {
@@ -64,5 +65,6 @@ export async function uploadStandalonePhotoAction(formData: FormData): Promise<{
   );
   await db().query("update profiles set photo_file_id=$1 where clerk_user_id=$2", [id, me.clerkUserId]);
   revalidatePath("/artista/perfil");
+  revalidatePath("/perfil");
   return { ok: true };
 }
