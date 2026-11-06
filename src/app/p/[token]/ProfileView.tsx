@@ -171,6 +171,8 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
   const photoUrl = localPhoto || (data.photoFileId ? `/api/file/${data.photoFileId}?v=${data.photoFileId}` : personPhotoDataUri(data.name));
   // "A la vista": només bolos de debò, no assajos ni reunions.
   const upcoming = data.concerts.filter((c) => c.date >= today && c.kind === "bolo");
+  // "Assajos fets": comptats a part dels bolos, no sumats al mateix total.
+  const rehearsalsDone = data.concerts.filter((c) => c.answer === "yes" && c.kind === "assaig" && c.status === "confirmat").length;
   const canEditInfo = isOwner || (isManager && !data.clerkUserId);
   // El panell de permisos (a la columna dreta, sota Grups) només el veu el
   // gestor.
@@ -192,20 +194,23 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
     // Bolos fets i a la vista d'aquest grup en concret (mateix criteri que
     // les estadístiques de dalt: només bolos de debò).
     return Array.from(byBandId.values()).map((g) => {
-      const bandBolos = data.concerts.filter((c) => c.bandId === g.bandId && c.kind === "bolo");
+      const bandConcerts = data.concerts.filter((c) => c.bandId === g.bandId);
+      const bandBolos = bandConcerts.filter((c) => c.kind === "bolo");
+      const bandAssaigs = bandConcerts.filter((c) => c.kind === "assaig");
       return {
         ...g,
         doneCount: bandBolos.filter((c) => c.answer === "yes" && c.status === "confirmat").length,
         upcomingCount: bandBolos.filter((c) => c.date >= today).length,
+        doneRehearsalCount: bandAssaigs.filter((c) => c.answer === "yes" && c.status === "confirmat").length,
       };
     });
   })();
 
-  // Totals de concerts i assajos fets a TOTS els grups — només té sentit
-  // mostrar-los si n'hi ha més d'un (amb un de sol ja es veu igual a la
-  // seva pròpia fila).
-  const totalConcertsAllBands = data.concerts.filter((c) => c.answer === "yes" && c.kind === "bolo" && c.status === "confirmat").length;
-  const totalRehearsalsAllBands = data.concerts.filter((c) => c.answer === "yes" && c.kind === "assaig" && c.status === "confirmat").length;
+  // Totals de concerts i assajos fets a TOTS els grups, comptats a part —
+  // només té sentit mostrar-los si n'hi ha més d'un grup (amb un de sol ja
+  // es veu igual a la seva pròpia fila).
+  const totalConcertsAllBands = data.totalConcerts;
+  const totalRehearsalsAllBands = rehearsalsDone;
 
   async function handleSave() {
     setSaving(true);
@@ -314,6 +319,7 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
 
           <div className="pv-stats">
             <div className="pv-stat"><span className="pv-stat-n">{data.totalConcerts}</span><span>concerts fets</span></div>
+            <div className="pv-stat"><span className="pv-stat-n">{rehearsalsDone}</span><span>assajos fets</span></div>
             <div className="pv-stat"><span className="pv-stat-n">{upcoming.length}</span><span>a la vista</span></div>
             {data.since && <div className="pv-stat"><span className="pv-stat-n">{data.since}</span><span>en actiu des de</span></div>}
           </div>
@@ -347,6 +353,7 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                     </div>
                     <div className="pv-band-counts">
                       <span><strong>{g.doneCount}</strong> bolos fets</span>
+                      <span><strong>{g.doneRehearsalCount}</strong> assajos fets</span>
                       <span><strong>{g.upcomingCount}</strong> a la vista</span>
                     </div>
                   </>
