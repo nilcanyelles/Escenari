@@ -326,8 +326,9 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     });
   }
 
-  // "Concerts fets": només bolos de debò, no assajos ni reunions.
-  const past = concerts.filter((c) => c.answer === "yes" && c.kind === "bolo");
+  // "Concerts fets": només bolos de debò, no assajos ni reunions, i només
+  // esdeveniments que l'agència ha confirmat (no pendents ni reservats).
+  const past = concerts.filter((c) => c.answer === "yes" && c.kind === "bolo" && c.status === "confirmat");
 
   // Disponibilitat (només si té compte) i dies ocupats per bolos.
   const availability: Record<string, boolean> = {};

@@ -195,7 +195,7 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
       const bandBolos = data.concerts.filter((c) => c.bandId === g.bandId && c.kind === "bolo");
       return {
         ...g,
-        doneCount: bandBolos.filter((c) => c.answer === "yes").length,
+        doneCount: bandBolos.filter((c) => c.answer === "yes" && c.status === "confirmat").length,
         upcomingCount: bandBolos.filter((c) => c.date >= today).length,
       };
     });
@@ -204,8 +204,8 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
   // Totals de concerts i assajos fets a TOTS els grups — només té sentit
   // mostrar-los si n'hi ha més d'un (amb un de sol ja es veu igual a la
   // seva pròpia fila).
-  const totalConcertsAllBands = data.concerts.filter((c) => c.answer === "yes" && c.kind === "bolo").length;
-  const totalRehearsalsAllBands = data.concerts.filter((c) => c.answer === "yes" && c.kind === "assaig").length;
+  const totalConcertsAllBands = data.concerts.filter((c) => c.answer === "yes" && c.kind === "bolo" && c.status === "confirmat").length;
+  const totalRehearsalsAllBands = data.concerts.filter((c) => c.answer === "yes" && c.kind === "assaig" && c.status === "confirmat").length;
 
   async function handleSave() {
     setSaving(true);
