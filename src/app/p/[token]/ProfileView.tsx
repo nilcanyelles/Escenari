@@ -172,8 +172,9 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
   // "A la vista" i "fets": mateix criteri que la pestanya Esdeveniments —
   // si realment ja ha passat (isConcertOver), no només la data.
   const upcoming = data.concerts.filter((c) => c.kind === "bolo" && !isConcertOver(c.date, c.time));
-  // "Assajos fets": comptats a part dels bolos, no sumats al mateix total.
-  const rehearsalsDone = data.concerts.filter((c) => c.kind === "assaig" && isConcertOver(c.date, c.time)).length;
+  // "Assajos fets": comptats a part dels bolos, no sumats al mateix total,
+  // i només els que aquesta persona en concret va confirmar.
+  const rehearsalsDone = data.concerts.filter((c) => c.kind === "assaig" && c.answer === "yes" && isConcertOver(c.date, c.time)).length;
   const rehearsalsUpcoming = data.concerts.filter((c) => c.kind === "assaig" && !isConcertOver(c.date, c.time)).length;
   const canEditInfo = isOwner || (isManager && !data.clerkUserId);
   // El panell de permisos (a la columna dreta, sota Grups) només el veu el
@@ -201,9 +202,9 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
       const bandAssaigs = bandConcerts.filter((c) => c.kind === "assaig");
       return {
         ...g,
-        doneCount: bandBolos.filter((c) => isConcertOver(c.date, c.time)).length,
+        doneCount: bandBolos.filter((c) => c.answer === "yes" && isConcertOver(c.date, c.time)).length,
         upcomingCount: bandBolos.filter((c) => !isConcertOver(c.date, c.time)).length,
-        doneRehearsalCount: bandAssaigs.filter((c) => isConcertOver(c.date, c.time)).length,
+        doneRehearsalCount: bandAssaigs.filter((c) => c.answer === "yes" && isConcertOver(c.date, c.time)).length,
         upcomingRehearsalCount: bandAssaigs.filter((c) => !isConcertOver(c.date, c.time)).length,
       };
     });

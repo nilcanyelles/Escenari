@@ -329,11 +329,12 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     });
   }
 
-  // "Concerts fets": mateix criteri que la pestanya Esdeveniments —
-  // realment ja ha passat (isConcertOver), sense comptar assajos/reunions,
-  // i independent de si aquesta persona en concret hi va confirmar
-  // assistència.
-  const past = concerts.filter((c) => c.kind === "bolo" && isConcertOver(c.date, c.time));
+  // "Concerts fets": només bolos de debò (no assajos ni reunions), que
+  // realment ja han passat (isConcertOver, mateix criteri que la pestanya
+  // Esdeveniments) i on aquesta persona en concret hi va confirmar
+  // assistència — si no, un grup gran on només hi participen alguns membres
+  // a cada bolo comptaria bolos d'altres companys com a propis.
+  const past = concerts.filter((c) => c.kind === "bolo" && c.answer === "yes" && isConcertOver(c.date, c.time));
 
   // Disponibilitat (només si té compte) i dies ocupats per bolos.
   const availability: Record<string, boolean> = {};
