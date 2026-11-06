@@ -50,17 +50,26 @@ export default function InstrumentPicker({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [customTick, formation]);
 
+  // La cerca sempre mira a tot el catàleg, encara que hi hagi un filtre de
+  // formació actiu: el filtre només restringeix la llista quan no es cerca.
+  const searchCategories = useMemo(() => {
+    const custom = customInstrumentList();
+    if (!custom.length) return INSTRUMENT_CATEGORIES;
+    return INSTRUMENT_CATEGORIES.concat([{ name: "Personalitzats", items: custom.map((c) => ({ name: c.name, icon: instrumentIconKey(c.name) })) }]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [customTick]);
+
   const categories = useMemo(() => {
     if (!q) return allCategories;
-    return allCategories.map((c) => ({
+    return searchCategories.map((c) => ({
       name: c.name,
       items: c.items.filter((i) => normalize(i.name).includes(q)),
     })).filter((c) => c.items.length > 0);
-  }, [q, allCategories]);
+  }, [q, allCategories, searchCategories]);
 
   const exactMatch = useMemo(
-    () => allCategories.some((c) => c.items.some((i) => normalize(i.name) === q)),
-    [q, allCategories]
+    () => searchCategories.some((c) => c.items.some((i) => normalize(i.name) === q)),
+    [q, searchCategories]
   );
 
   function toggle(name: string) {
