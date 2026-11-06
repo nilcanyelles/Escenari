@@ -1,6 +1,7 @@
 import { randomBytes } from "node:crypto";
 import { db } from "./db";
 import { normalize } from "./text";
+import { isConcertOver } from "./format";
 
 export type ProfileBand = {
   id: string;
@@ -28,6 +29,7 @@ export type ProfileCrewRole = {
 export type ProfileConcert = {
   id: string;
   date: string;
+  time: string;
   city: string;
   venue: string;
   bandId: string;
@@ -285,7 +287,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
   let songs: ProfileSong[] = [];
   if (visibleIds.length) {
     const cRows = (await pool.query(
-      `select id, date, city, venue, band_id, band_name, status, kind, attendance from concerts
+      `select id, date, time, city, venue, band_id, band_name, status, kind, attendance from concerts
        where workspace_id=$1 and band_id = any($2) and status <> 'cancel·lat'
        order by date`,
       [row.workspace_id, visibleIds]
@@ -296,6 +298,7 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
       return {
         id: c.id,
         date: toDateStr(c.date),
+        time: c.time || "",
         city: c.city,
         venue: c.venue,
         bandId: c.band_id,
@@ -326,9 +329,11 @@ export async function getPersonProfileData(token: string): Promise<PersonProfile
     });
   }
 
-  // "Concerts fets": només bolos de debò, no assajos ni reunions, i només
-  // esdeveniments que l'agència ha confirmat (no pendents ni reservats).
-  const past = concerts.filter((c) => c.answer === "yes" && c.kind === "bolo" && c.status === "confirmat");
+  // "Concerts fets": mateix criteri que la pestanya Esdeveniments —
+  // realment ja ha passat (isConcertOver), sense comptar assajos/reunions,
+  // i independent de si aquesta persona en concret hi va confirmar
+  // assistència.
+  const past = concerts.filter((c) => c.kind === "bolo" && isConcertOver(c.date, c.time));
 
   // Disponibilitat (només si té compte) i dies ocupats per bolos.
   const availability: Record<string, boolean> = {};

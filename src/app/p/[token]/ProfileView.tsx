@@ -4,7 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import type { PersonProfileData } from "@/lib/person-profile";
-import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDate } from "@/lib/format";
+import { MONTH_FULL, WEEKDAY_SHORT, pad2, capitalize, formatDate, isConcertOver } from "@/lib/format";
 import { personPhotoDataUri, bandPhotoDataUri, instrumentIconFor } from "@/lib/tags";
 import { updateProfileInfoAction, uploadProfilePhotoAction, updatePersonAction, updateBandInstrumentsAction } from "../profile-actions";
 import { setMemberPermAction } from "@/app/(app)/grup/actions";
@@ -169,10 +169,12 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
 
   // localPhoto: vista prèvia immediata just després de pujar una foto nova.
   const photoUrl = localPhoto || (data.photoFileId ? `/api/file/${data.photoFileId}?v=${data.photoFileId}` : personPhotoDataUri(data.name));
-  // "A la vista": només bolos de debò, no assajos ni reunions.
-  const upcoming = data.concerts.filter((c) => c.date >= today && c.kind === "bolo");
+  // "A la vista" i "fets": mateix criteri que la pestanya Esdeveniments —
+  // si realment ja ha passat (isConcertOver), no només la data.
+  const upcoming = data.concerts.filter((c) => c.kind === "bolo" && !isConcertOver(c.date, c.time));
   // "Assajos fets": comptats a part dels bolos, no sumats al mateix total.
-  const rehearsalsDone = data.concerts.filter((c) => c.answer === "yes" && c.kind === "assaig" && c.status === "confirmat").length;
+  const rehearsalsDone = data.concerts.filter((c) => c.kind === "assaig" && isConcertOver(c.date, c.time)).length;
+  const rehearsalsUpcoming = data.concerts.filter((c) => c.kind === "assaig" && !isConcertOver(c.date, c.time)).length;
   const canEditInfo = isOwner || (isManager && !data.clerkUserId);
   // El panell de permisos (a la columna dreta, sota Grups) només el veu el
   // gestor.
@@ -191,17 +193,18 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
       if (existing) existing.roleText = `${existing.roleText} · ${crewText}`;
       else byBandId.set(c.bandId, { bandId: c.bandId, name: c.bandName, logo: c.logo, color1: c.color1, roleText: crewText, instruments: null });
     });
-    // Bolos fets i a la vista d'aquest grup en concret (mateix criteri que
-    // les estadístiques de dalt: només bolos de debò).
+    // Bolos i assajos fets/a la vista d'aquest grup en concret (mateix
+    // criteri que la pestanya Esdeveniments: isConcertOver, no l'assistència).
     return Array.from(byBandId.values()).map((g) => {
       const bandConcerts = data.concerts.filter((c) => c.bandId === g.bandId);
       const bandBolos = bandConcerts.filter((c) => c.kind === "bolo");
       const bandAssaigs = bandConcerts.filter((c) => c.kind === "assaig");
       return {
         ...g,
-        doneCount: bandBolos.filter((c) => c.answer === "yes" && c.status === "confirmat").length,
-        upcomingCount: bandBolos.filter((c) => c.date >= today).length,
-        doneRehearsalCount: bandAssaigs.filter((c) => c.answer === "yes" && c.status === "confirmat").length,
+        doneCount: bandBolos.filter((c) => isConcertOver(c.date, c.time)).length,
+        upcomingCount: bandBolos.filter((c) => !isConcertOver(c.date, c.time)).length,
+        doneRehearsalCount: bandAssaigs.filter((c) => isConcertOver(c.date, c.time)).length,
+        upcomingRehearsalCount: bandAssaigs.filter((c) => !isConcertOver(c.date, c.time)).length,
       };
     });
   })();
@@ -352,9 +355,8 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                       <div className="pv-band-role">{g.roleText}</div>
                     </div>
                     <div className="pv-band-counts">
-                      <span><strong>{g.doneCount}</strong> bolos fets</span>
-                      <span><strong>{g.doneRehearsalCount}</strong> assajos fets</span>
-                      <span><strong>{g.upcomingCount}</strong> a la vista</span>
+                      <span><strong>{g.doneCount}</strong> concerts fets · <strong>{g.upcomingCount}</strong> a la vista</span>
+                      <span><strong>{g.doneRehearsalCount}</strong> assajos fets · <strong>{g.upcomingRehearsalCount}</strong> a la vista</span>
                     </div>
                   </>
                 );
