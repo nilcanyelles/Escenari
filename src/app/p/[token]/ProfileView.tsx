@@ -431,9 +431,10 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
               })()}
               {groupEntries.length === 0 && <span className="t-dim" style={{ fontSize: 12.5 }}>Cap grup visible.</span>}
             </div>
-            {groupEntries.length > 1 && (
+            {groupEntries.length > 0 && (
               <div className="pv-bands-total">
-                <strong>{totalConcertsAllBands}</strong> concerts · <strong>{totalRehearsalsAllBands}</strong> assajos fets a tots els grups
+                <span><strong>{totalConcertsAllBands}</strong> concerts fets · <strong>{upcoming.length}</strong> a la vista</span>
+                <span><strong>{totalRehearsalsAllBands}</strong> assajos fets · <strong>{rehearsalsUpcoming}</strong> a la vista</span>
               </div>
             )}
           </div>
