@@ -478,14 +478,16 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                     <div><label className="form-label">Nom d&apos;usuari</label>
                       <UsernameSettingRow username={accountUsername} fullName={data.name} /></div>
                   )}
-                  <div><label className="form-label">Instruments</label>
-                    <InstrumentPicker value={form.instruments} onChange={(next) => setForm({ ...form, instruments: next })} /></div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                     <div><label className="form-label">Telèfon (trucades i WhatsApp)</label>
                       <input className="field-input form-field" placeholder="+34 600 000 000" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></div>
                     <div><label className="form-label">Correu</label>
                       <input className="field-input form-field" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
                   </div>
+                  <div><label className="form-label">Instagram</label>
+                    <input className="field-input form-field" placeholder="@elteuusuari" value={form.igHandle} onChange={(e) => setForm({ ...form, igHandle: e.target.value })} /></div>
+                  <div><label className="form-label">Instruments</label>
+                    <InstrumentPicker value={form.instruments} onChange={(next) => setForm({ ...form, instruments: next })} /></div>
                 </>
               ) : (
                 <div className="t-dim" style={{ fontSize: 12.5 }}>
@@ -496,8 +498,6 @@ export default function ProfileView({ data, isOwner, isManager, today, navApp = 
                 <>
                   <div><label className="form-label">Bio</label>
                     <textarea className="field-input rider-textarea" rows={3} placeholder="Presenta't en dues frases…" value={form.bio} onChange={(e) => setForm({ ...form, bio: e.target.value })} /></div>
-                  <div><label className="form-label">Instagram</label>
-                    <input className="field-input form-field" placeholder="@elteuusuari" value={form.igHandle} onChange={(e) => setForm({ ...form, igHandle: e.target.value })} /></div>
                   {isOwner && (
                     <div>
                       <label className="form-label">App de navegació preferida</label>
