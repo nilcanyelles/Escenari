@@ -70,7 +70,7 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
   const [teamPhotos, concertRows, accountRows, linkedRows] = await Promise.all([
     getTeamPhotosAndIg(b.workspace_id, [b.id]),
     pool.query(
-      `select to_char(date, 'YYYY-MM-DD') as date from concerts
+      `select to_char(date, 'YYYY-MM-DD') as date, status from concerts
        where band_id=$1 and coalesce(kind, 'bolo')='bolo' and status <> 'cancel·lat'`,
       [b.id]
     ),
@@ -83,7 +83,9 @@ export async function getBandPublicData(token: string): Promise<BandPublicData |
 
   const t = today();
   const dates: string[] = concertRows.rows.map((r) => r.date);
-  const done = dates.filter((d) => d < t).length;
+  // "Fets" només compta els bolos que l'agència ha confirmat de debò — un
+  // pendent o reservat que ja ha passat de data no és un bolo fet.
+  const done = concertRows.rows.filter((r) => r.date < t && r.status === "confirmat").length;
   const upcoming = dates.filter((d) => d >= t).length;
   // Si el grup l'ha escrit a mà (activeSince), sempre guanya — el càlcul a
   // partir del primer concert és només per als grups que encara no l'han
