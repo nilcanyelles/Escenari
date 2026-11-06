@@ -68,7 +68,7 @@ function cat(name: string, defIcon: IconKey, items: (string | [string, IconKey])
 }
 
 export const INSTRUMENT_CATEGORIES: InstrumentCategory[] = [
-  cat("Veu", "mic", ["Veu", "Cors"]),
+  cat("Veu", "mic", ["Veu", "Cors", "Soprano", "Mezzosoprano", "Contralt", "Tenor", "Baríton", "Baix (veu)"]),
   cat("Corda", "guitar", [
     "Guitarra", "Guitarra acústica", "Guitarra espanyola", "Guitarra elèctrica", "Baix elèctric",
     ["Violí", "violin"], ["Viola", "violin"], ["Violoncel", "violin"], ["Contrabaix", "violin"],
@@ -125,7 +125,7 @@ export const FORMATION_TYPES: InstrumentCategory[] = [
   formationCat("Pop rock", [
     "Veu", "Cors", "Guitarra elèctrica", "Guitarra acústica", "Baix elèctric", "Bateria", "Piano", "Sintetitzador", "Caixa de ritmes",
   ]),
-  formationCat("Trap", ["Veu", "Cors", "Sintetitzador", "Caixa de ritmes", "Piano"]),
+  formationCat("Urban", ["Veu", "Cors", "Sintetitzador", "Caixa de ritmes", "Piano"]),
   formationCat("Electrònica", ["Veu", "Sintetitzador", "Caixa de ritmes", "Piano"]),
   formationCat("Tradicional", [
     "Veu", "Gralla seca", "Gralla dolça", "Gralla baixa", "Dolçaina", "Tarota", "Tenora", "Tible",
@@ -145,5 +145,5 @@ export const FORMATION_TYPES: InstrumentCategory[] = [
     "Acordió diatònic", "Harmònica", "Flauta", "Contrabaix", "Pandereta",
   ]),
   formationCat("Batucada", ["Surdo", "Contrasurdo", "Caixa de percussió", "Repicador", "Tamborim", "Agogô", "Cuíca", "Chocalho", "Pandero"]),
-  formationCat("Cor", ["Veu", "Cors"]),
+  formationCat("Cor", ["Soprano", "Mezzosoprano", "Contralt", "Tenor", "Baríton", "Baix (veu)", "Veu", "Cors"]),
 ];

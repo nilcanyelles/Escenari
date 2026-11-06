@@ -125,14 +125,14 @@ export default function InstrumentPicker({
             type="button" className={"instr-filter-btn" + (formation ? " active" : "")}
             title="Filtra per tipus de formació" onClick={() => setFilterOpen((v) => !v)}
           >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"></polygon></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
           </button>
           {filterOpen && (
             <>
               <div className="instr-filter-backdrop" onClick={() => setFilterOpen(false)} />
               <div className="instr-filter-menu">
                 <button type="button" className={"instr-filter-item" + (!formation ? " active" : "")} onClick={() => { setFormation(null); setFilterOpen(false); }}>
-                  Per tipus d&apos;instrument
+                  Tots els instruments
                 </button>
                 <div className="instr-filter-sep" />
                 {FORMATION_TYPES.map((f) => (
