@@ -96,7 +96,10 @@ function CopyButton({ text }: { text: string }) {
 
 export default function OnboardingFlow({ defaultName, next }: { defaultName: string; next?: string }) {
   const router = useRouter();
-  const [step, setStep] = useState<Step>("role");
+  // Qui arriba des d'un enllaç d'invitació a un grup (/u/CODE) ja sap que
+  // hi entra com a músic/crew — no té sentit oferir-li triar "agència".
+  const forcedArtist = !!next && next.startsWith("/u/");
+  const [step, setStep] = useState<Step>(forcedArtist ? "artist" : "role");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -181,7 +184,7 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
 
       {step === "artist" && (
         <div className="onboarding-form">
-          <BackLink className="onboarding-back" onClick={() => setStep("role")}>Torna enrere</BackLink>
+          {!forcedArtist && <BackLink className="onboarding-back" onClick={() => setStep("role")}>Torna enrere</BackLink>}
           <h1 className="onboarding-title">El teu perfil d&apos;artista</h1>
           <div className="field-group">
             <label className="field-label">El teu nom<Req /></label>
