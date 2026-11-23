@@ -71,7 +71,7 @@ export async function checkUsernameAction(raw: string, fullName: string, exclude
   return { normalized, valid: true, available: false, suggestions };
 }
 
-export async function completeArtistOnboardingAction(data: { name: string; instruments: string[]; username: string }) {
+export async function completeArtistOnboardingAction(data: { name: string; instruments: string[]; username: string; isCrew?: boolean }) {
   const { userId, email } = await requireClerkUser();
   const pool = db();
   const name = (data.name || "").trim();
@@ -80,7 +80,9 @@ export async function completeArtistOnboardingAction(data: { name: string; instr
   if (!isValidUsername(username)) return { ok: false as const, error: "Tria un nom d'usuari vàlid." };
   if (await isUsernameTaken(pool, username)) return { ok: false as const, error: "Aquest nom d'usuari ja no està disponible." };
   const instruments = (data.instruments || []).map((i) => i.trim()).filter(Boolean);
-  if (instruments.length === 0) return { ok: false as const, error: "Tria com a mínim un instrument." };
+  // Qui s'uneix a un grup com a crew no toca cap instrument — només qui
+  // s'hi uneix com a músic n'ha de triar com a mínim un.
+  if (!data.isCrew && instruments.length === 0) return { ok: false as const, error: "Tria com a mínim un instrument." };
 
   await pool.query(
     `insert into profiles (clerk_user_id, email, role, name, username, instruments)

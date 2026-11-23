@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { SignInButton, SignOutButton, useAuth } from "@clerk/nextjs";
 import { clerkAppearance } from "@/lib/clerk-appearance";
 import InstrumentPicker from "@/components/InstrumentPicker";
+import CrewRolePicker from "@/components/CrewRolePicker";
 import BackLink from "@/components/BackLink";
 import UsernameField from "@/components/UsernameField";
 import { completeArtistOnboardingAction, completeAgencyOnboardingAction } from "./actions";
@@ -108,6 +109,10 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
   const [artistUsername, setArtistUsername] = useState("");
   const [artistUsernameReady, setArtistUsernameReady] = useState(false);
   const [instruments, setInstruments] = useState<string[]>([]);
+  // Només qui ve d'un enllaç de grup tria entre músic i crew — la resta
+  // (alta sense cap grup encara) sempre és músic.
+  const [joinAs, setJoinAs] = useState<"music" | "crew">("music");
+  const [crewFunctions, setCrewFunctions] = useState<string[]>([]);
 
   // Agència
   const [agencyName, setAgencyName] = useState("");
@@ -122,14 +127,20 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
   const agencyLogoRef = useRef<HTMLInputElement>(null);
   const photoRef = useRef<HTMLInputElement>(null);
 
-  const artistCanSubmit = !!artistName.trim() && artistUsernameReady && instruments.length > 0;
+  const isCrewSignup = forcedArtist && joinAs === "crew";
+  const artistCanSubmit = !!artistName.trim() && artistUsernameReady && (isCrewSignup ? crewFunctions.length > 0 : instruments.length > 0);
 
   async function submitArtist() {
     if (busy || !artistCanSubmit) return;
     setBusy(true);
     setError("");
     try {
-      const result = await completeArtistOnboardingAction({ name: artistName, instruments, username: artistUsername });
+      const result = await completeArtistOnboardingAction({
+        name: artistName,
+        instruments: isCrewSignup ? [] : instruments,
+        username: artistUsername,
+        isCrew: isCrewSignup,
+      });
       if (!result.ok) { setError(result.error); return; }
       // Si venia d'un enllaç d'invitació a un grup, hi torna per reclamar-lo.
       router.push(next && next.startsWith("/") ? next : "/artista");
@@ -197,10 +208,28 @@ export default function OnboardingFlow({ defaultName, next }: { defaultName: str
             />
           </div>
           <UsernameField value={artistUsername} onChange={setArtistUsername} fullName={artistName} onReady={setArtistUsernameReady} required />
-          <div className="field-group">
-            <label className="field-label">Instruments que toques<Req /></label>
-            <InstrumentPicker value={instruments} onChange={setInstruments} />
-          </div>
+
+          {forcedArtist && (
+            <div className="field-group">
+              <label className="field-label">Com t&apos;hi uneixes?<Req /></label>
+              <div className="stats-tabs">
+                <button type="button" className={"stats-tab" + (joinAs === "music" ? " active" : "")} onClick={() => setJoinAs("music")}>Músic</button>
+                <button type="button" className={"stats-tab" + (joinAs === "crew" ? " active" : "")} onClick={() => setJoinAs("crew")}>Crew</button>
+              </div>
+            </div>
+          )}
+
+          {isCrewSignup ? (
+            <div className="field-group">
+              <label className="field-label">Quina funció hi faràs?<Req /></label>
+              <CrewRolePicker value={crewFunctions} onChange={setCrewFunctions} />
+            </div>
+          ) : (
+            <div className="field-group">
+              <label className="field-label">Instruments que toques<Req /></label>
+              <InstrumentPicker value={instruments} onChange={setInstruments} />
+            </div>
+          )}
           <div className="onboarding-error">{error}</div>
           <button className="btn-primary" onClick={submitArtist} disabled={busy || !artistCanSubmit}>
             {busy ? "Un moment..." : "Continua"}
